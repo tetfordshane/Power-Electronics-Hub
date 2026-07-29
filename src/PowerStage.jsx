@@ -758,6 +758,42 @@ function layoutLabels(want, minGap, lo, hi) {
   return out;
 }
 
+/* Same idea, but only labels that actually share horizontal space are
+   pushed apart. Separating everything regardless of x is worse than doing
+   nothing: it moves a label away from the thing it names for the sake of a
+   neighbour it was never going to touch — which is how the spectrum's
+   "envelope" caption ended up sitting on the envelope curve. */
+function layoutLabelsX(items, minGap, lo, hi) {
+  const span = (it) => {
+    const w = (it.t ? String(it.t).length : 0) * (it.cw || 5.4);
+    const a = it.a === "end" ? it.x - w : it.a === "middle" ? it.x - w / 2 : it.x;
+    return [a - 3, a + w + 3];
+  };
+  const boxes = items.map(span);
+  /* union-find over horizontal overlap, so a chain of overlapping labels
+     is laid out as one column */
+  const parent = items.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      if (boxes[i][0] < boxes[j][1] && boxes[j][0] < boxes[i][1]) parent[find(i)] = find(j);
+    }
+  }
+  const out = items.map((it) => it.y);
+  const groups = new Map();
+  items.forEach((_, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(i);
+  });
+  groups.forEach((members) => {
+    if (members.length < 2) { out[members[0]] = clamp(items[members[0]].y, lo, hi); return; }
+    const ys = layoutLabels(members.map((i) => items[i].y), minGap, lo, hi);
+    members.forEach((i, k) => { out[i] = ys[k]; });
+  });
+  return out;
+}
+
 function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, pulse = false, band = null }) {
   const x0 = 52, x1 = 640, per = (x1 - x0) / cycles;
   const imax = iavg + dI / 2;
@@ -1005,10 +1041,10 @@ const TA = [
       ].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("t_on at V_in max", eng(Dm / fs, "s"), "minimum on-time limit"),
           R("Inductor ripple ΔI_L", eng(dIn, "A"), pct(dIn / Io) + " of I_out at nominal"),
-          R("I_L peak (worst case) / rms", eng(Ipk, "A") + " / " + eng(ILr, "A"),
+          R("I_L peak (worst case) / rms", eng(Ipk, "A") + " · " + eng(ILr, "A"),
             "peak taken at V_in max, where ripple is largest — size the core here"),
           R("DCM boundary", eng(dI / 2, "A")),
         ]),
@@ -1086,10 +1122,10 @@ const TA = [
       ].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("ΔI_L", eng(dIn, "A"), pct(dIn / Io) + " of I_out"),
-          R("I_L peak / rms", eng(Ipk, "A") + " / " + eng(ILr, "A")),
-          R("HS / LS rms current", eng(Ihs, "A") + " / " + eng(Ils, "A")),
+          R("I_L peak / rms", eng(Ipk, "A") + " · " + eng(ILr, "A")),
+          R("HS / LS rms current", eng(Ihs, "A") + " · " + eng(Ils, "A")),
         ]),
         G("Passives", [
           R("L", eng(L, "H")), R("C_out (charge)", eng(Co, "F")),
@@ -1097,7 +1133,7 @@ const TA = [
           R("C_in rms current", eng(Io * Math.sqrt(Dn * (1 - Dn)), "A")),
         ]),
         G("Loss budget (nominal)", [
-          R("HS conduction / switching", eng(Pc, "W") + " / " + eng(Psw, "W")),
+          R("HS conduction / switching", eng(Pc, "W") + " · " + eng(Psw, "W")),
           R("— of which C_oss", eng(Poss, "W"), "½·C_oss·V_in²·f_sw, lost at every HS turn-on"),
           R("LS conduction", eng(Pls, "W"), "hard-switching loss ≈ 0"),
           R("Body diode (dead time)", eng(Pdt, "W"), "2 × " + s.td + " ns per cycle"),
@@ -1239,7 +1275,7 @@ const TA = [
       ].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("Inductor DC current (nom)", eng(IL, "A"), "= I_out/(1−D)"),
           R("Inductor DC current (worst)", eng(ILx, "A"), "at V_in min"),
           R("ΔI_L", eng(dIn, "A")),
@@ -1258,7 +1294,7 @@ const TA = [
           R("Diode average current", eng(Io, "A")),
         ]),
         G("Loss budget (nominal)", [
-          R("Switch conduction / switching", eng(Pc, "W") + " / " + eng(Psw, "W")),
+          R("Switch conduction / switching", eng(Pc, "W") + " · " + eng(Psw, "W")),
           R("Diode", eng(Pd, "W")), R("Inductor DCR", eng(Pl, "W")),
           R("Total / efficiency", eng(Pt, "W") + " → " + pct(eta)),
         ]),
@@ -1310,7 +1346,7 @@ const TA = [
       warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("Inductor DC current", eng(IL, "A") + " (nom), " + eng(ILx, "A") + " (worst)"),
           R("ΔI_L", eng(dIn, "A")), R("I_L peak", eng(ILx + dI / 2, "A")),
         ]),
@@ -1450,7 +1486,7 @@ const TA = [
       warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom", f3(Dx) + " / " + f3(Dn)),
+          R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
           R("Input DC current", eng(Iin, "A")),
           R("ΔI in each inductor", eng(dI, "A")),
         ]),
@@ -1521,7 +1557,7 @@ const TA = [
       ].filter(Boolean),
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("I_L1 (input, worst)", eng(IL1, "A")), R("I_L2 (output)", eng(Io, "A")),
           R("Switch peak current", eng(Ipk, "A"), "I_L1 + I_L2 + ΔI/2"),
         ]),
@@ -1583,12 +1619,12 @@ const TA = [
       wave: { D: Dn, dI, iavg: Io },
       groups: [
         G("Operating point", [
-          R("D at V_in min / nom", f3(Dx) + " / " + f3(Dn)),
+          R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
           R("I_L1 (input inductor)", eng(IL1, "A")), R("I_L2 (output inductor)", eng(Io, "A")),
         ]),
         G("Passives", [
           R("L1", eng(L1, "H")), R("L2", eng(L2, "H")),
-          R("C1 voltage / rms", eng(s.vinMax, "V") + " / " + eng(Io * Math.sqrt((Vo + s.vf) / s.vinMin), "A")),
+          R("C1 voltage / rms", eng(s.vinMax, "V") + " · " + eng(Io * Math.sqrt((Vo + s.vf) / s.vinMin), "A")),
           R("C_out (charge)", eng(Co, "F"), "small — continuous output current"),
           R("Input cap rms", eng(Io * Math.sqrt(Dn / (1 - Dn)), "A"), "input pulsates"),
         ]),
@@ -1723,9 +1759,9 @@ const TB = [
           R("Turns ratio N_p/N_s", f2(Nt)),
           R("Reflected voltage V_R", eng(Vr, "V")),
           R("Primary inductance L_p", eng(Lp, "H")),
-          R("I_pk / I_valley", eng(Ipk, "A") + " / " + eng(Iv, "A")),
+          R("I_pk / I_valley", eng(Ipk, "A") + " · " + eng(Iv, "A")),
           R("Primary rms", eng(Iprms, "A"), "sets primary wire gauge"),
-          R("Secondary rms / peak", eng(Isrms, "A") + " / " + eng(Ispk, "A")),
+          R("Secondary rms / peak", eng(Isrms, "A") + " · " + eng(Ispk, "A")),
           R("Stored energy", eng(0.5 * Lp * Ipk * Ipk, "J"), "sets the core size and gap"),
         ]),
         G("Semiconductors", [
@@ -1792,7 +1828,7 @@ const TB = [
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p", f3(n), "= 1/" + f2(1 / n)),
-          R("D at V_in min / nom / max", f3(s.dmax) + " / " + f3(Dn) + " / " + f3(Dm)),
+          R("D at V_in min / nom / max", f3(s.dmax) + " · " + f3(Dn) + " · " + f3(Dm)),
           R("Primary current (flat top)", eng(Ipri, "A"), "reflected load only — magnetising current not included"),
           R("Primary rms", eng(Iprms, "A"), "add I_mag once L_m is known"),
           R("Secondary rms", eng(Io * Math.sqrt(Dn), "A")),
@@ -1856,7 +1892,7 @@ const TB = [
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p (per half)", f3(n)),
-          R("D per switch (min/nom/max V_in)", f3(Dm) + " / " + f3(Dn) + " / " + f3(s.dmax)),
+          R("D per switch (min/nom/max V_in)", f3(Dm) + " · " + f3(Dn) + " · " + f3(s.dmax)),
           R("Primary current when on", eng(Ipri / 2, "A")),
           R("Switch rms current", eng((Ipri / 2) * Math.sqrt(Dn), "A")),
         ]),
@@ -2052,9 +2088,15 @@ const TB = [
     const tdmin = 2 * s.coss * 1e-12 * s.vinNom / Math.max(Impk, 1e-9);
     const Icr = Math.sqrt(Math.pow(Math.PI * Io / (2 * Math.sqrt(2) * n), 2) + Math.pow(Impk / Math.sqrt(2), 2));
     const Vcr = s.vinNom / 2 + Icr * Math.sqrt(2) / (2 * Math.PI * fr * Cr);
-    const yTop = Math.max(2.2, Math.ceil(Math.max(peak, Mmax) * 1.12 * 5) / 5);
     const xTop = 2;
-    const series = [0.2, 0.35, 0.5, 0.8, 1.2].map((q, i) => {
+    const QS = [0.2, 0.35, 0.5, 0.8, 1.2];
+    /* The scale has to clear the tallest curve actually drawn, not just the
+       design one — otherwise the lightest-load curve is clipped flat across
+       the top of the frame and reads as a plotting error. */
+    let curveMax = Math.max(peak, Mmax);
+    QS.forEach((q) => { for (let f = 0.35; f <= xTop; f += 0.02) curveMax = Math.max(curveMax, M(f, q)); });
+    const yTop = Math.max(2.2, Math.ceil(curveMax * 1.08 * 5) / 5);
+    const series = QS.map((q, i) => {
       const pts = []; for (let f = 0.35; f <= xTop; f += 0.02) pts.push([f, Math.min(M(f, q), yTop)]);
       return { pts, c: ["#2E5A66", "#3C7C87", "#4AA0AC", "#5AD1DE", "#294A54"][i], o: 0.75, label: "Q=" + q };
     });
@@ -2165,7 +2207,7 @@ const TB = [
           R("Series inductance L", eng(L, "H"), "leakage plus external"),
           R("Rated power", eng(s.pout, "W")),
           R("Maximum power (d = 0.5)", eng(Pmax, "W")),
-          R("Primary / secondary DC current", eng(I1, "A") + " / " + eng(I2, "A")),
+          R("Primary / secondary DC current", eng(I1, "A") + " · " + eng(I2, "A")),
         ]),
         G("Tank current", [
           R("Peak tank current", eng(Ipk, "A"), "sizes the transformer and the turn-off loss"),
@@ -2368,7 +2410,7 @@ const TC = [
         G("Modulation", [
           R("Modulation index m", f3(m)),
           R("Minimum V_dc", eng(Math.SQRT2 * Vac / 0.95, "V"), "for 5 % margin"),
-          R("Output current rms / peak", eng(Io, "A") + " / " + eng(Ipk, "A")),
+          R("Output current rms / peak", eng(Io, "A") + " · " + eng(Ipk, "A")),
           R("Effective filter frequency", eng(2 * fs, "Hz"), "unipolar PWM"),
         ]),
         G("Output filter", [
@@ -2428,7 +2470,7 @@ const TC = [
           R("Frequency ratio f_sw/f_out", f2(Mratio)),
         ]),
         G("Currents", [
-          R("Phase current rms / peak", eng(Iph, "A") + " / " + eng(Ipk, "A")),
+          R("Phase current rms / peak", eng(Iph, "A") + " · " + eng(Ipk, "A")),
           R("Device rms current", eng(Iph / Math.SQRT2, "A"), "roughly, per switch"),
           R("DC link cap rms current", eng(Icdc, "A"), "assumes unity power factor"),
         ]),
@@ -2482,7 +2524,7 @@ const TC = [
           R("Balancing", "redundant vector selection", "or a dedicated NP current controller"),
         ]),
         G("Currents and loss", [
-          R("Phase current rms / peak", eng(Iph, "A") + " / " + eng(Ipk, "A")),
+          R("Phase current rms / peak", eng(Iph, "A") + " · " + eng(Ipk, "A")),
           R("Inner vs outer devices", "uneven", "inner devices conduct longer at high m"),
           R("Effective output frequency", eng(2 * fs, "Hz"), "as seen by the filter"),
         ]),
@@ -3159,7 +3201,7 @@ const SHEETS = [
 ]},
 { cat: "Fundamentals", title: "Choosing f_sw", rows: [
   { e: "size ∝ 1/f_sw,  loss ∝ f_sw", n: "The central trade-off. Magnetics and caps shrink; switching, gate and core losses grow." },
-  { e: "avoid 455 kHz ± and 150 kHz–30 MHz care", n: "AM band and CISPR conducted range start at 150 kHz — a 100 kHz fundamental keeps the first harmonic below it." },
+  { e: "avoid 455 kHz; take care from 150 kHz to 30 MHz", n: "455 kHz is the AM intermediate frequency, and the CISPR conducted range starts at 150 kHz — a 100 kHz fundamental keeps the first harmonic below it." },
   { e: "Si: ≤ 500 kHz · SiC: 100 k–500 kHz · GaN: 500 kHz–5 MHz", n: "Rough comfort zones for hard-switched hundreds of watts." },
   { e: "t_on(min) = D_min/f_sw", n: "Check against the controller's minimum on-time — this kills more high-V_in designs than anything else." },
 ]},
@@ -3173,7 +3215,7 @@ const SHEETS = [
   { e: "δ = 66/√f  mm (copper, 20 °C)", n: "Skin depth. 100 kHz → 0.21 mm, so wire thicker than ~0.4 mm diameter is wasted; use litz or foil." },
 ]},
 { cat: "Magnetics", title: "Core materials", rows: [
-  { e: "MnZn ferrite (N87/3C95): B_sat ≈ 390 mT hot", n: "Default for 20 kHz–1 MHz. Low loss, hard saturation — needs a discrete gap." },
+  { e: "MnZn ferrite (N87, 3C95): B_sat ≈ 390 mT hot", n: "Default for 20 kHz–1 MHz. Low loss, hard saturation — needs a discrete gap." },
   { e: "Powder iron: B_sat ≈ 1.0–1.5 T", n: "Cheap, soft saturation, high core loss. Fine for line filters, poor above ~100 kHz." },
   { e: "Sendust / Kool Mµ: B_sat ≈ 1 T", n: "Distributed gap, soft roll-off, good DC bias behaviour. The usual PFC choke material." },
   { e: "MPP: B_sat ≈ 0.75 T", n: "Lowest loss of the powder cores, most expensive. Filter and output chokes." },
@@ -3886,7 +3928,7 @@ function Results({ res, hideWave }) {
    the phase occupies, used to shade the matching part of the waveform.  */
 const FLOW = {
   classepp: { w: 660, h: 300, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[206, 105, "Q1"], [206, 195, "Q2"]],
+    sw: [[275, 94, "Q1"], [275, 194, "Q2"]],
     emc: { loop: "M 250 60 H 310 V 240 H 250 Z", node: [250, 60] },
     ph: [
     { on: [1,0], t: "Q1 conducting", f: () => [0, 0.5], n: "The upper stage pulls its drain to zero while the lower drain rings up. The two halves are identical circuits running exactly half a cycle apart.",
@@ -3895,7 +3937,7 @@ const FLOW = {
       d: ["M 40 150 H 70 V 240 H 250 V 150 H 282"], dim: ["M 310 60 V 150"] },
   ]},
   classde: { w: 620, h: 270, iShape: (u) => Math.abs(Math.sin(2 * Math.PI * u)),
-    sw: [[234, 92, "Q1"], [234, 182, "Q2"]],
+    sw: [[217, 82, "Q1"], [217, 172, "Q2"]],
     emc: { loop: "M 200 50 H 265 V 225 H 200 Z", node: [200, 137] },
     ph: [
     { on: [1,0], t: "Q1 on", f: () => [0, 0.46], n: "The high-side device connects the tank to the supply. Because the turn-on happened at zero volts during the preceding dead time, the transition cost nothing.",
@@ -3905,7 +3947,7 @@ const FLOW = {
     { on: [0,1], t: "Q2 on", f: () => [0.54, 1], n: "The low-side device takes over and tank current reverses. Each device only ever blocks the supply rail — the principal advantage over single-ended class E, where the device blocks 3.56 times the supply.",
       d: ["M 200 225 V 137 H 520 V 225"] },
   ]},
-  buck: { w: 660, h: 250, sw: [[170, 36, "Q1"], [186, 136, "D1"]],
+  buck: { w: 660, h: 250, sw: [[165, 32, "Q1"], [250, 131, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch connects the input to the inductor. With V_in − V_out across it the current ramps up, and the difference between that current and the load current charges C_out.",
@@ -3913,7 +3955,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor cannot sustain a discontinuity in its current, so it pulls the switch node below ground until D1 conducts. Current now circulates through the diode and decays at a rate set by V_out/L.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  boost: { w: 660, h: 250, sw: [[274, 145, "Q1"], [287, 42, "D1"]],
+  boost: { w: 660, h: 250, sw: [[252, 108, "Q1"], [285, 48, "D1"]],
     emc: { loop: "M 230 70 H 390 V 200 H 230 Z", node: [230, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch shorts the inductor to ground. Current ramps up storing energy, and the output is supplied entirely by C_out — which is why boost output ripple is so much worse than buck.",
@@ -3921,7 +3963,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor flies above the input, forward-biasing D1 and transferring its current to the output. This is also why load steps momentarily go the wrong way — the right-half-plane zero.",
       d: ["M 40 70 H 480 V 200 H 40"] },
   ]},
-  buckboost: { w: 660, h: 250, sw: [[170, 36, "Q1"], [290, 42, "D1"]],
+  buckboost: { w: 660, h: 250, sw: [[165, 32, "Q1"], [285, 48, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The full input voltage sits across the inductor and current ramps up. Nothing reaches the output during this interval — the load lives on C_out.",
@@ -3929,7 +3971,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor reverses its terminal voltage to keep current flowing, pulling the output node below ground through D1. That polarity inversion is inherent, not a wiring choice.",
       d: ["M 215 200 H 480 V 70 H 215"] },
   ]},
-  flyback: { w: 700, h: 275, sw: [[296, 186, "Q1"], [327, 34, "D1"]],
+  flyback: { w: 700, h: 275, sw: [[272, 149, "Q1"], [327, 39, "D1"]],
     emc: { loop: "M 90 55 H 250 V 235 H 90 Z", node: [250, 144] },
     ph: [
     { on: [1,0], t: "Q1 on — store", f: (D) => [0, D], n: "Primary current ramps and energy accumulates in the gap. The secondary diode is reverse-biased, so no power crosses the barrier yet; the output is held up by C_out alone.",
@@ -3937,7 +3979,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off — release", f: (D) => [D, 1], n: "The winding voltages reverse, D1 conducts and the stored energy transfers to the output. The primary now sees V_in plus the reflected V_R — the quantity that sets the primary device rating.",
       d: ["M 274 80 V 60 H 600 V 215 H 274 V 144"] },
   ]},
-  pfcboost: { w: 780, h: 280, sw: [[404, 156, "Q1"], [425, 78, "D"]],
+  pfcboost: { w: 780, h: 280, sw: [[382, 118, "Q1"], [425, 78, "D"]],
     emc: { loop: "M 360 105 H 560 V 195 H 360 Z", node: [360, 105] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The boost switch shorts the inductor across the rectified line. Current rises, following the reference the current loop derives from |v_ac| — this interval is where the sinusoidal input current is shaped.",
@@ -3946,7 +3988,7 @@ const FLOW = {
       d: ["M 130 105 H 660 V 195 H 130"] },
   ]},
   halfwave: { w: 620, h: 230, iShape: (u) => (u < 0.16 ? 0.08 + Math.sin(Math.PI * u / 0.16) : 0.1),
-    sw: [[170, 34, "D1"]],
+    sw: [[165, 40, "D1"]],
     emc: { loop: "M 130 60 H 300 V 190 H 130 Z", node: [210, 60] },
     ph: [
     { on: [1], t: "Peak of the positive half", f: () => [0, 0.16], n: "The diode only conducts while the source exceeds the capacitor voltage — a narrow window near the peak. All the charge the load will draw for the entire cycle is delivered in this brief spike.",
@@ -3955,7 +3997,7 @@ const FLOW = {
       d: ["M 300 60 H 420 V 190 H 300"] },
   ]},
   bridgerect: { w: 620, h: 250, iShape: (u) => 0.06 + Math.pow(Math.abs(Math.sin(2 * Math.PI * u)), 5),
-    sw: [[178, 77, "D1"], [178, 152, "D2"], [344, 107, "D3"], [344, 182, "D4"]],
+    sw: [[227, 70, "D1"], [227, 168, "D2"], [327, 92, "D3"], [327, 182, "D4"]],
     emc: { loop: "M 210 55 H 400 V 205 H 210 Z", node: [310, 55] },
     ph: [
     { on: [1,0,0,1], t: "Positive half-cycle", f: () => [0, 0.5], n: "D1 and D4 conduct as a diagonal pair: current leaves the source, climbs to the positive rail, passes through the load, and returns through the opposite leg.",
@@ -3963,7 +4005,7 @@ const FLOW = {
     { on: [0,1,1,0], t: "Negative half-cycle", f: () => [0.5, 1], n: "The source reverses and the other diagonal takes over. Note what does not change: current through the load still flows top to bottom. That is precisely what the bridge arrangement achieves.",
       d: ["M 100 146 V 160 H 310 V 55 H 490 V 205 H 210 V 100 H 100 V 114"] },
   ]},
-  ctrect: { w: 680, h: 270, sw: [[300, 34, "D1"], [300, 168, "D2"]],
+  ctrect: { w: 680, h: 270, sw: [[293, 40, "D1"], [293, 120, "D2"]],
     emc: { loop: "M 214 60 H 340 V 140 H 214 Z", node: [340, 100] },
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
@@ -3971,7 +4013,7 @@ const FLOW = {
     { on: [0,1], t: "Lower half conducts", f: (D) => [0.5, 0.5 + D], n: "The transformer reverses and the bottom half-winding takes over through D2. Each half-winding works only half the time — which is why this secondary needs roughly twice the copper of a bridge.",
       d: ["M 214 140 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
   ]},
-  doubler: { w: 700, h: 300, sw: [[274, 170, "D1"], [316, 232, "D2"]],
+  doubler: { w: 700, h: 300, sw: [[265, 165, "D1"], [305, 233, "D2"]],
     emc: { loop: "M 214 80 H 250 V 260 H 290 V 200 H 214 Z", node: [250, 80] },
     ph: [
     { on: [0,1], t: "Winding positive", f: (D) => [0, D], n: "D2 clamps the lower terminal to the return, so L1 sees the winding voltage and charges while L2 freewheels. Both inductors feed the output continuously.",
@@ -3980,7 +4022,7 @@ const FLOW = {
       d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214"] },
   ]},
   classe: { w: 660, h: 250, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[268, 130, "Q1"]],
+    sw: [[255, 118, "Q1"]],
     emc: { loop: "M 230 60 H 310 V 205 H 230 Z", node: [230, 60] },
     ph: [
     { on: [1], t: "Switch on", f: () => [0, 0.5], n: "The drain is held at zero volts. The choke current ramps up and the tank current flows through the switch — but the device turned on at zero voltage, so nothing was dissipated in the transition.",
@@ -4003,7 +4045,7 @@ const FLOW = {
     { on: [0,1], t: "Low side on", f: (D) => [D, 1], n: "This is the whole point of the topology. Instead of a diode dropping a fixed 0.4 V, a FET channel carries the same current at I·R_DS(on) — which at low output voltages is the single largest efficiency lever available.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  sepic: { w: 660, h: 260, sw: [[250, 40, "Q1"], [420, 46, "D1"]],
+  sepic: { w: 660, h: 260, sw: [[182, 109, "Q1"], [339, 49, "D1"]],
     emc: { loop: "M 100 70 H 250 V 210 H 100 Z", node: [250, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "Both inductors charge: L1 straight from the input, L2 from the coupling capacitor, which is why C_s carries the full load current in rms terms. The diode is reverse biased and the output runs on C_out alone.",
@@ -4011,7 +4053,7 @@ const FLOW = {
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "Both inductor currents commutate into the diode and feed the output together. Because C_s blocks DC, a short on the output cannot drag the input down — the advantage a boost does not have.",
       d: ["M 40 70 H 560 V 210 H 40"] },
   ]},
-  cuk: { w: 660, h: 260, sw: [[250, 40, "Q1"], [330, 150, "D1"]],
+  cuk: { w: 660, h: 260, sw: [[182, 109, "Q1"], [300, 132, "D1"]],
     emc: { loop: "M 100 70 H 330 V 210 H 100 Z", node: [250, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The transfer capacitor discharges through the switch into the output side. Energy crosses this converter through C1's electric field rather than through a magnetic field — which is exactly why C1 sees the full load current and is the reliability limit.",
@@ -4019,7 +4061,7 @@ const FLOW = {
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "The diode takes over and C1 recharges from the input inductor. Both inductors keep conducting throughout, so the input and output currents are continuous — the property that makes a Ćuk quiet at both ports.",
       d: ["M 40 70 H 330 V 210 H 40"] },
   ]},
-  halfbridge: { w: 660, h: 280, sw: [[214, 66, "Q1"], [214, 176, "Q2"], [430, 46, "D1"], [430, 206, "D2"]],
+  halfbridge: { w: 660, h: 280, sw: [[247, 92, "Q1"], [247, 182, "Q2"], [463, 58, "D1"], [463, 183, "D2"]],
     emc: { loop: "M 130 50 H 214 V 225 H 130 Z", node: [214, 137] },
     ph: [
     { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "The primary sees +V_in/2, because the capacitor divider holds the return at half the bus. That halving is the reason each device blocks only V_in, against 2·V_in for a push-pull.",
@@ -4032,7 +4074,7 @@ const FLOW = {
       d: ["M 430 60 H 560 V 220 H 430"], dim: ["M 130 50 H 300 V 225 H 130"] },
   ]},
   chargepump: { w: 660, h: 240, iShape: (u) => (u < 0.5 ? 0.25 + 0.75 * Math.exp(-12 * u) : 0.25 + 0.75 * Math.exp(-12 * (u - 0.5))),
-    sw: [[300, 40, "D1"], [430, 40, "D2"]],
+    sw: [[97, 49, "D1"], [222, 49, "D2"]],
     emc: { loop: "M 200 60 H 430 V 180 H 200 Z", node: [300, 60] },
     ph: [
     { on: [1,0], t: "Clock low — charge", f: () => [0, 0.5], n: "The flying capacitor is connected across the input and charges through the first rectifier. Charge moves as a spike whose size is set by how far the two capacitor voltages have drifted apart, not by any resistor.",
@@ -4391,7 +4433,7 @@ function Spectrum({ fsw, D, tr, amp }) {
   const anns = [];
   anns.push({ x: clamp(lx(1.1e6), x0 + 4, x1 - 92), y: ly(56) - 8,
     t: "CISPR 32 class B", c: "#F0796C", a: "start" });
-  anns.push({ x: x0 + 6, y: clamp(ly(dB(2 * amp * D)) - 8, y0 + 9, y1 - 6),
+  anns.push({ x: x0 + 6, y: clamp(ly(dB(2 * amp * D)) - 9, y0 + 9, y1 - 6),
     t: "envelope", c: "#E0A458", a: "start" });
   [[f1, "1/(πD·T)", "#E0A458"], [f2, "1/(π·t_r)", "#A88BF0"]].forEach((m, i) => {
     if (!(m[0] > fmin && m[0] < fmax)) return;
@@ -4401,7 +4443,7 @@ function Spectrum({ fsw, D, tr, amp }) {
     anns.push({ x: right ? at + 6 : at - 6, y: y0 + 11 + i * 13, t: m[1], c: m[2],
       a: right ? "start" : "end", rule: at });
   });
-  const ys = layoutLabels(anns.map((a) => a.y), 12, y0 + 9, y1 - 4);
+  const ys = layoutLabelsX(anns, 12, y0 + 9, y1 - 4);
 
   return (
     <div className="sch">
@@ -4682,6 +4724,23 @@ function FlowCard({ topo, res }) {
 
 const TABS = [["bench", "Bench"], ["cheat", "Cheat sheet"], ["select", "Selector"]];
 
+/* Move the entered values from one topology to another. Only what the user
+   actually changed travels: a switching frequency or an output current
+   means the same thing on the next page and re-typing it is pure friction,
+   but each topology's own defaults exist because its sensible operating
+   point differs, so an untouched field takes the new page's default rather
+   than dragging a 3.3 V buck output onto a boost that cannot produce it. */
+function carryOver(fromId, toId, prev) {
+  const fromDefaults = mkRaw(fromId);
+  const next = mkRaw(toId);
+  Object.keys(next).forEach((k) => {
+    const edited = prev[k] !== undefined && fromDefaults[k] !== undefined
+      && prev[k] !== fromDefaults[k];
+    if (edited) next[k] = prev[k];
+  });
+  return next;
+}
+
 /* The tab and the topology live in the URL hash, so the back button works,
    a reload lands where you left off, and a specific converter can be sent
    to someone as a link. */
@@ -4710,11 +4769,18 @@ export default function App() {
     const want = "#/" + tab + (tab === "bench" ? "/" + tid : "");
     if (window.location.hash !== want) window.history.replaceState(null, "", want);
   }, [tab, tid]);
+  /* A hash change — the back button, a pasted link, an in-page jump — moves
+     to a different topology without reloading, so the inputs have to be
+     rebuilt for it. Setting tid alone left the panel showing the previous
+     topology's values, and blanks wherever the two field lists differed. */
   useEffect(() => {
     const on = () => {
       const h = readHash();
       if (h.tab) setTab(h.tab);
-      if (h.tid) setTid(h.tid);
+      if (h.tid) setTid((prevId) => {
+        if (h.tid !== prevId) setRaw((prev) => carryOver(prevId, h.tid, prev));
+        return h.tid;
+      });
     };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
@@ -4748,23 +4814,8 @@ export default function App() {
     }
   }, [topo, spec]);
 
-  /* Carry across only the values the user actually changed. A switching
-     frequency or an output current means the same thing on the next page
-     and re-typing it is pure friction — but each topology's own defaults
-     exist because its sensible operating point is different, so an
-     untouched field must keep the new page's default rather than dragging
-     a 3.3 V buck output onto a boost that cannot produce it. */
   const pick = useCallback((id) => {
-    const prevDefaults = mkRaw(tid);
-    setRaw((prev) => {
-      const next = mkRaw(id);
-      Object.keys(next).forEach((k) => {
-        const edited = prev[k] !== undefined && prevDefaults[k] !== undefined
-          && prev[k] !== prevDefaults[k];
-        if (edited) next[k] = prev[k];
-      });
-      return next;
-    });
+    setRaw((prev) => carryOver(tid, id, prev));
     setTid(id);
     setTab("bench");
   }, [tid]);

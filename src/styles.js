@@ -339,7 +339,7 @@ export const CSS = `
 /* device state legend under the figure */
 .ps .devleg{display:flex; flex-wrap:wrap; gap:6px 18px; margin:11px 0 0;
   font-size:var(--t-fine); color:var(--faint)}
-.ps .devleg span{display:inline-flex; align-items:center; gap:7px}
+.ps .devleg > span{display:inline-flex; align-items:center; gap:7px}
 .ps .devleg i{width:7px; height:7px; border-radius:99px; display:inline-block; flex:none;
   background:var(--ghost)}
 .ps .devleg b{font-family:var(--num); font-weight:600; color:var(--dim); font-size:var(--t-fine)}
@@ -358,9 +358,16 @@ export const CSS = `
 .ps .lbar{display:flex; height:16px; border-radius:3px; overflow:hidden;
   border:1px solid var(--line); background:var(--surf2)}
 .ps .lseg{height:100%; transition:width .3s ease}
-.ps .lleg{display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:10px;
+/* One legend entry per grid cell rather than a wrapping flex row: each
+   entry carries a formula, and formulas do not line-break, so they need a
+   column wide enough to sit in instead of a scrollbar. */
+.ps .lleg{display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+  gap:7px 24px; margin-top:10px;
   font-family:var(--ui); font-size:var(--t-fine); color:var(--dim)}
-.ps .lleg span{display:inline-flex; align-items:baseline; gap:7px}
+/* Direct children only. KaTeX builds its output from deeply nested spans,
+   so a descendant selector here would turn every piece of every formula
+   into a flex item and scatter the sub- and superscripts. */
+.ps .lleg > span{display:inline-flex; align-items:baseline; gap:7px}
 .ps .lleg i{width:8px; height:8px; border-radius:2px; display:inline-block; flex:none;
   transform:translateY(1px)}
 .ps .lit{display:inline-flex; align-items:baseline; gap:7px; flex-wrap:wrap;
@@ -370,9 +377,15 @@ export const CSS = `
    push the whole page wider than the viewport. Give it its own scroll. */
 .ps .lit em{font-style:normal; color:var(--faint); font-size:var(--t-micro);
   min-width:0; max-width:100%; overflow-x:auto}
-.ps .lleg{min-width:0}
-.ps td .tex,.ps .lit em .tex{max-width:100%; display:inline-block;
-  overflow-x:auto; vertical-align:bottom}
+/* Overflow is handled on the CONTAINER, never on the .tex span itself:
+   giving a KaTeX span its own scroll context breaks the strut-based
+   baseline alignment and scatters the sub- and superscripts. The scroll is
+   a safety net for a formula wider than its column; the scrollbar chrome is
+   hidden, because a row of scrollbars through a results table reads as
+   broken layout. */
+.ps .lit em,.ps td.n,.ps td.v{scrollbar-width:none; -ms-overflow-style:none}
+.ps .lit em::-webkit-scrollbar,.ps td.n::-webkit-scrollbar,
+.ps td.v::-webkit-scrollbar{width:0; height:0}
 
 /* ---------------------------------------------------------------- lists */
 .ps ul{margin:0; padding-left:18px; color:var(--dim)}

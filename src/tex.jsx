@@ -378,6 +378,23 @@ export function splitRuns(src) {
     const b = trimUnbalanced(m[2]);
     const pre = m[1] + b.pre, post = b.post + m[3] + m[4];
     if (!b.body || OPS_ONLY.test(b.body)) { out.push({ t: "w", text: r.text }); return; }
+    /* A slash with spaces around it inside a run that states no relation is
+       an "or", not a division: "HS / LS rms", "GaN / SiC", "N87 / C95".
+       Setting those as fractions is both wrong and unreadable. Where the run
+       IS an equation — "L = V_out·(1 − D) / (f_sw·ΔI_L)" — the slash keeps
+       its arithmetic meaning. */
+    if (!/[=≈≤≥∝≡]/.test(b.body) && /\s\/\s/.test(b.body)) {
+      const parts = b.body.split(/\s\/\s/);
+      parts.forEach((piece, i) => {
+        if (i) out.push({ t: "w", text: " / " });
+        const inner = trimUnbalanced(piece.trim());
+        if (!inner.body || OPS_ONLY.test(inner.body)) out.push({ t: "w", text: piece });
+        else out.push({ t: "m", text: inner.body,
+          pre: (i === 0 ? pre : "") + inner.pre,
+          post: inner.post + (i === parts.length - 1 ? post : "") });
+      });
+      return;
+    }
     out.push({ t: "m", text: b.body, pre, post });
   });
   /* fold neighbouring prose runs back together */
