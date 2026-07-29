@@ -201,6 +201,11 @@ export const CSS = `
 .ps .fig .cold path[fill]{fill:#31435A}
 .ps .fig .cold text{fill:#4C5F73 !important}
 .ps .fig .lever{transition:all .22s cubic-bezier(.34,1.56,.64,1)}
+/* The flow paths are redrawn every frame — their dash offset and width are
+   the animation. Easing them would make the current lag the waveform and
+   smear the wrap at the end of the cycle. */
+.ps .fig .flow,.ps .fig .flowp,.ps .fig .flowglow,.ps .fig .flowdim,
+.ps .fig .dflow,.ps .hmgrid rect{transition:none !important}
 .ps .flow{
   fill:none; stroke:var(--cu); stroke-width:2.8; stroke-linecap:round;
   stroke-dasharray:3 15; opacity:.95; pointer-events:none;
@@ -258,6 +263,11 @@ export const CSS = `
 .ps .katex .frac-line{border-bottom-color:var(--dim); border-bottom-width:.05em}
 .ps .katex .sqrt > .root{color:var(--dim)}
 .ps td .katex,.ps .fld .katex,.ps .warn .katex,.ps .lleg .katex,.ps .ird .katex{font-size:1em}
+/* An eyebrow is uppercased and tracked out. Neither may reach the maths:
+   uppercasing a variable turns v_out into V_OUT, which is a different
+   quantity, and tracking pulls symbols away from their subscripts. */
+.ps .eyebrow .katex{text-transform:none; letter-spacing:normal; font-size:1.12em}
+.ps .eyebrow{overflow-wrap:break-word}
 .ps td.k .katex,.ps .fld .katex{color:var(--dim)}
 .ps td.k .katex .mrel,.ps .fld .katex .mrel{color:var(--dim)}
 .ps .lleg .katex .mrel,.ps .lleg .katex .mbin{color:inherit}
@@ -353,9 +363,16 @@ export const CSS = `
 .ps .lleg span{display:inline-flex; align-items:baseline; gap:7px}
 .ps .lleg i{width:8px; height:8px; border-radius:2px; display:inline-block; flex:none;
   transform:translateY(1px)}
-.ps .lit{display:inline-flex; align-items:baseline; gap:7px}
+.ps .lit{display:inline-flex; align-items:baseline; gap:7px; flex-wrap:wrap;
+  min-width:0; max-width:100%}
 .ps .lit b{color:var(--txt); font-weight:600}
-.ps .lit em{font-style:normal; color:var(--faint); font-size:var(--t-micro)}
+/* KaTeX output does not line-break, so a long expression would otherwise
+   push the whole page wider than the viewport. Give it its own scroll. */
+.ps .lit em{font-style:normal; color:var(--faint); font-size:var(--t-micro);
+  min-width:0; max-width:100%; overflow-x:auto}
+.ps .lleg{min-width:0}
+.ps td .tex,.ps .lit em .tex{max-width:100%; display:inline-block;
+  overflow-x:auto; vertical-align:bottom}
 
 /* ---------------------------------------------------------------- lists */
 .ps ul{margin:0; padding-left:18px; color:var(--dim)}
@@ -429,18 +446,36 @@ export const CSS = `
 .ps .foot{color:var(--faint); font-size:var(--t-small); padding:0 22px;
   max-width:1440px; margin:0 auto; line-height:1.6}
 
-/* ------------------------------------------------------------ responsive */
+/* ------------------------------------------------------------ responsive
+   Every grid track is minmax(0,1fr), never plain 1fr. A bare 1fr keeps an
+   automatic minimum equal to the track's max-content width, so one wide
+   table or one 300px card minimum silently pushes the whole page wider
+   than the viewport and the document scrolls sideways. */
+.ps main{min-width:0}
+.ps .layout,.ps .grid2,.ps .grid3,.ps .fields{min-width:0}
+.ps .grid2 > *,.ps .grid3 > *,.ps .layout > *{min-width:0}
 @media (max-width:960px){
-  .ps .layout{grid-template-columns:1fr}
+  .ps .layout{grid-template-columns:minmax(0,1fr)}
   .ps .rail{position:static; max-height:none}
-  .ps .railbody{max-height:300px; overflow:auto}
+  .ps .railbody{max-height:320px; overflow:auto}
   .ps .wrap{padding:16px 14px}
   .ps .hdr{padding:16px 14px 0}
   .ps .card{padding:15px 14px}
   .ps h2{font-size:19px}
   .ps .big{font-size:25px}
+  .ps .grid2,.ps .grid3{grid-template-columns:minmax(0,1fr)}
+  /* let long values wrap rather than widen the page */
+  .ps td.v{white-space:normal; word-break:break-word}
+  .ps td.k{width:48%}
+  .ps .tab{padding:8px 10px}
+  .ps .devleg{gap:5px 12px}
+}
+@media (max-width:520px){
+  .ps .fields{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
+  .ps .foot{padding:0 14px}
 }
 .ps .scrollx{overflow-x:auto; max-width:100%; -webkit-overflow-scrolling:touch}
+.ps .scrollx table{min-width:640px}
 @media (prefers-reduced-motion:reduce){
   .ps *{transition:none !important; animation:none !important}
 }

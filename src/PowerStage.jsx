@@ -302,7 +302,7 @@ ctrect: () => <SV w={680} h={270}>
   {XfCT(190, 60, 80)}{ISO(207, 28, 245)}{P(150, 46, "n : 1 : 1", { a: "middle", s: 10.5 })}
   {W("M 214 60 H 260")}{Dh(260, 340, 60)}{P(286, 48, "D1")}
   {W("M 214 140 H 260")}{Dh(260, 340, 140)}{P(286, 128, "D2")}
-  {W("M 340 60 V 140")}{Dot(340, 100)}{N(350, 88, "V_rect")}
+  {W("M 340 60 V 140")}{Dot(340, 100)}{N(348, 116, "V_rect")}
   {W("M 214 100 H 240")}{VW(240, 100, 220, [140])}{W("M 240 220 H 560")}
   {Lh(340, 100)}{P(364, 84, "L_f")}
   {W("M 412 100 H 620")}{Dot(470, 100)}{Dot(560, 100)}
@@ -445,7 +445,7 @@ buckboost: () => <SV h={250}>
   {W("M 215 70 V 92")}{Lv(215, 92, 4, 9, 1)}{P(232, 132, "L")}{W("M 215 164 V 200")}
   {Dh(330, 250, 70)}{P(278, 56, "D1")}
   {W("M 330 70 H 500")}{Dot(400, 70)}{Cv(400, 70, 200)}{P(414, 139, "C_out")}
-  {Rv(480, 70, 200)}{P(494, 139, "R_L")}{N(420, 56, "−V_out")}
+  {Rv(480, 70, 200)}{P(494, 139, "R_L")}{N(412, 56, "−V_out")}
   {W("M 40 200 H 480")}{Gnd(310, 200)}
   {Tx(150, 232, "output is negative with respect to the input return", { c: "#5C6E82", s: 10.5 })}
 </SV>,
@@ -527,7 +527,7 @@ chargepump: () => <SV w={700} h={250}>
 flyback: () => <SV w={700} h={275}>
   {Port(40, 55, "V_in")}{W("M 40 55 H 250")}{Cv(90, 55, 235)}{P(104, 149, "C_in")}
   {W("M 250 55 V 80")}{Xf(250, 80, 64, 1)}{P(248, 44, "T1", { a: "middle" })}
-  {N(292, 44, "N_p : N_s")}
+  {N(292, 62, "N_p : N_s")}
   {W("M 250 144 V 160")}{Q(250, 185, 0, 25)}{P(265, 156, "Q1")}{W("M 250 210 V 235")}
   {W("M 40 235 H 250")}{Gnd(150, 235)}
   {ISO(262, 30, 258)}
@@ -580,7 +580,7 @@ pushpull: () => <SV w={740} h={300}>
 
 halfbridge: () => <SV w={780} h={295}>
   {Port(40, 45, "V_in")}{W("M 40 45 H 230")}{W("M 40 250 H 400")}
-  {Cv(110, 45, 147)}{P(124, 92, "C_a")}{Cv(110, 147, 250)}{P(124, 205, "C_b")}{Dot(110, 147)}
+  {Cv(110, 45, 147)}{P(124, 92, "C_a")}{Cv(110, 147, 250)}{P(124, 232, "C_b")}{Dot(110, 147)}
   {Leg(230, 45, 250, 147, "Q1", "Q2")}
   {W("M 230 147 H 290")}{W("M 290 147 V 105 H 340")}
   {W("M 110 147 V 200")}{Ch(110, 175, 200)}{P(132, 192, "C_blk")}
@@ -776,8 +776,10 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, p
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
   /* The series name sits at the ripple peak and the mean value at the mean.
      At low ripple those are only a few pixels apart, so lay them out. */
+  /* 15 px, not 12: these labels carry rendered subscripts, whose descenders
+     make the real bounding box noticeably taller than the font size. */
   const [yName, yMean, yZero] = layoutLabels(
-    [yI(imax) + 4, yI(iavg) + 4, bot + 4], 11.5, top - 2, bot + 5
+    [yI(imax) + 4, yI(iavg) + 4, bot + 4], 15, top - 2, bot + 5
   );
   return (
     <div className="sch"><svg viewBox="0 0 660 190" style={{ width: "100%", height: "auto", display: "block" }}>
@@ -807,7 +809,9 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, p
 }
 
 function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vmarks = [] }) {
-  const x0 = 54, x1 = 604, y0 = 176, y1 = 34;
+  /* The plot stops well short of the frame so end-of-curve labels have
+     somewhere to live without running off the right-hand edge. */
+  const x0 = 54, x1 = 556, y0 = 176, y1 = 34;
   /* A degenerate range would make every coordinate Infinity and wipe the
      plot out silently, so fall back to a unit span. */
   const xs = xmax - xmin || 1, yspan = ymax - ymin || 1;
@@ -824,22 +828,29 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vma
      same point. Collect all of them, plus the horizontal marks, and lay the
      whole column out in one pass. Off-scale marks are pinned to the edge
      and flagged rather than drawn outside the frame, where they vanish. */
-  const labs = [];
+  /* Series labels live in the gutter to the right of the plot; mark labels
+     sit inside it, against the right edge. They are two separate columns,
+     so each gets its own layout pass — sharing one would over-constrain
+     both and push labels away from the thing they name for no reason. */
+  const sLabs = [], mLabs = [];
   live.forEach((s) => {
     if (!s.label) return;
     const last = s.pts[s.pts.length - 1];
-    labs.push({ kind: "s", want: Y(last[1]) - 5, x: X(last[0]) + 6, t: s.label, c: s.c });
+    sLabs.push({ want: Y(last[1]) - 5, x: X(last[0]) + 7, t: s.label, c: s.c, a: "start" });
   });
   (marks || []).forEach((m) => {
     const off = m.y > ymax ? " (above scale)" : m.y < ymin ? " (below scale)" : "";
-    labs.push({ kind: "m", want: Y(clamp(m.y, ymin, ymax)) - 5, x: x1 - 4,
+    mLabs.push({ want: Y(clamp(m.y, ymin, ymax)) - 5, x: x1 - 5,
       t: m.t + off, c: m.c || "#6FD39B", a: "end",
       rule: clamp(m.y, ymin, ymax), off: !!off });
   });
-  const ys = layoutLabels(labs.map((l) => l.want), 12.5, y1 + 2, y0 - 2);
+  const sy = layoutLabels(sLabs.map((l) => l.want), 15, y1 + 2, y0 - 2);
+  const my = layoutLabels(mLabs.map((l) => l.want), 15, y1 + 2, y0 - 2);
+  const labs = [...mLabs.map((l, i) => ({ ...l, y: my[i] })),
+    ...sLabs.map((l, i) => ({ ...l, y: sy[i], kind: "s" }))];
 
   return (
-    <div className="sch"><svg viewBox="0 0 660 210" style={{ width: "100%", height: "auto", display: "block" }}>
+    <div className="sch"><svg viewBox="0 0 660 218" style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("lc", () => (<>
         {/* the y-axis caption sits above the plot, clear of the top tick */}
         {Tx(x0 - 7, y1 - 13, ylab, { a: "start", c: "#8DA0B4", s: 11 })}
@@ -865,18 +876,18 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vma
         {labs.map((l, i) => (
           <g key={"lb" + i}>
             {/* a leader line, because a nudged label no longer touches its curve */}
-            {l.kind === "s" && Math.abs(ys[i] - l.want) > 3 ? (
-              <path d={`M ${l.x - 3} ${l.want + 2} L ${l.x - 1} ${ys[i] - 3}`}
+            {l.kind === "s" && Math.abs(l.y - l.want) > 3 ? (
+              <path d={`M ${l.x - 4} ${l.want + 2} L ${l.x - 1} ${l.y - 3}`}
                 stroke={l.c} strokeWidth={0.9} fill="none" opacity={0.55} />
             ) : null}
-            {Tx(l.x, ys[i], l.t, { a: l.a || "start", c: l.c, s: 10 })}
+            {Tx(l.x, l.y, l.t, { a: l.a || "start", c: l.c, s: 10 })}
           </g>
         ))}
         {xt.map((v, i) => Tx(X(v), y0 + 16, v.toFixed(Math.abs(v) >= 10 ? 0 : 2),
           { a: "middle", c: "#5C6E82", s: 10 }))}
         {yt.map((v, i) => Tx(x0 - 7, Y(v) + 3.5, v.toFixed(Math.abs(v) >= 10 ? 0 : 2),
           { a: "end", c: "#5C6E82", s: 10 }))}
-        {Tx((x0 + x1) / 2, y0 + 32, xlab, { a: "middle", c: "#8DA0B4", s: 11 })}
+        {Tx((x0 + x1) / 2, y0 + 33, xlab, { a: "middle", c: "#8DA0B4", s: 11 })}
       </>))}
     </svg></div>
   );
@@ -939,6 +950,10 @@ const FIELDS = {
 };
 const G = (t, rows) => ({ t, rows });
 const R = (k, v, n) => [k, v, n || ""];
+/* A conversion ratio the topology cannot reach is a design error, not a set
+   of numbers. Returning this says so, instead of printing a duty above 1
+   and a negative inductance as though they meant something. */
+const infeasible = (msg) => ({ hi: [], warn: [msg], groups: [], infeasible: true });
 /* alias, for design functions that need R as a resistance */
 const R2 = R;
 
@@ -964,6 +979,9 @@ const TA = [
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => Vo / (v * s.eff);
     const Dn = du(s.vinNom), Dx = du(s.vinMin), Dm = du(s.vinMax);
+    if (Dx >= 1) return infeasible("A buck can only step down, and reaching " + eng(Vo, "V")
+      + " from " + eng(s.vinMin, "V") + " at " + pct(s.eff) + " efficiency would need a duty of "
+      + f2(Dx) + ". Lower V_out, raise V_in min, or use a boost or buck-boost stage.");
     const dI = s.r * Io, L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
     /* L is sized so the ripple hits its target at V_in max, which is also
@@ -1040,6 +1058,9 @@ const TA = [
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => Vo / (v * s.eff);
     const Dn = du(s.vinNom), Dx = du(s.vinMin), Dm = du(s.vinMax);
+    if (Dx >= 1) return infeasible("A buck can only step down, and reaching " + eng(Vo, "V")
+      + " from " + eng(s.vinMin, "V") + " at " + pct(s.eff) + " efficiency would need a duty of "
+      + f2(Dx) + ". Lower V_out, raise V_in min, or use a four-switch buck-boost.");
     const dI = s.r * Io, L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
     const Ipk = Io + dI / 2, ILr = Math.sqrt(Io * Io + dIn * dIn / 12);
@@ -1110,6 +1131,8 @@ const TA = [
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, N = Math.max(1, Math.round(s.nph));
     const Dn = Vo / (s.vinNom * s.eff), Dm = Vo / (s.vinMax * s.eff);
+    if (Dn >= 1) return infeasible("Each phase is a buck, so it can only step down. Reaching "
+      + eng(Vo, "V") + " from " + eng(s.vinNom, "V") + " would need a duty of " + f2(Dn) + ".");
     const Iph = Io / N, dI = s.r * Iph;
     const L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
@@ -2036,9 +2059,9 @@ const TB = [
       return { pts, c: ["#2E5A66", "#3C7C87", "#4AA0AC", "#5AD1DE", "#294A54"][i], o: 0.75, label: "Q=" + q };
     });
     const opPts = []; for (let f = 0.35; f <= xTop; f += 0.02) opPts.push([f, Math.min(M(f, Qd), yTop)]);
-    series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd + " (design)" });
+    series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd + " ←" });
     return {
-      hi: [["turns ratio", f2(n) + " : 1"], ["L_r / C_r", eng(Lr, "H") + " / " + eng(Cr, "F")], ["L_m", eng(Lm, "H")]],
+      hi: [["turns ratio", f2(n) + " : 1"], ["L_r and C_r", eng(Lr, "H") + " · " + eng(Cr, "F")], ["L_m", eng(Lm, "H")]],
       loss: [["Primary conduction", Icr * Icr * s.rds * 1e-3, "I_Cr(rms)²·R_DS(on) — one device conducts at a time"],
         ["Output rectifiers", s.vf * Io, "V_F·I_out; ZCS means no reverse-recovery term"]],
       chart: {
@@ -2124,7 +2147,7 @@ const TB = [
     const Ereq = (4 / 3) * s.coss * 1e-12 * V1 * V1;
     const E1 = 0.5 * L * i0 * i0, E2 = 0.5 * L * id * id;
     return {
-      hi: [["series inductance", eng(L, "H")], ["peak tank current", eng(Ipk, "A")], ["voltage match n·V2/V1", f2(ratio)]],
+      hi: [["series inductance", eng(L, "H")], ["peak tank current", eng(Ipk, "A")], ["voltage match n·V2 : V1", f2(ratio)]],
       loss: [["Bridge 1 conduction", 2 * Irms * Irms * s.rds * 1e-3, "2·I_tank(rms)²·R_DS(on)"],
         ["Bridge 2 conduction", 2 * Math.pow(Irms * n, 2) * s.rds * 1e-3, "referred through the turns ratio"],
         ["Turn-off (hard side)", (E1 < Ereq ? 0.5 * V1 * Math.abs(i0) * 50e-9 * fs : 0)
@@ -3405,8 +3428,8 @@ const FIGS = {
       {W("M 256 50 V 68")}{Lv(256, 68, 4, 9)}{W("M 256 140 V 160")}
       {Hot(i === 1, Dh(372, 300, 50))}
       {W("M 372 50 H 434")}{Dot(434, 50)}{Cv(434, 50, 160)}{Dot(434, 160)}
-      {W("M 434 50 H 512")}{Rv(512, 50, 160)}{W("M 512 50 H 586")}
-      {Port(586, 50, "−V_out", "r")}
+      {W("M 434 50 H 512")}{Rv(512, 50, 160)}{W("M 512 50 H 566")}
+      {Port(566, 50, "−V_out", "r")}
       {W("M 60 160 H 512")}{Gnd(180, 160)}
       {Tx(181, 32, "S", { c: "#C0894B", a: "middle", b: 1 })}
       {Tx(246, 108, "L", { c: "#C0894B", a: "end", b: 1 })}
@@ -3683,7 +3706,7 @@ function FigPanel({ id, duty }) {
       </div>
 
       <div className="sch" style={{ marginTop: 8, padding: "8px 6px" }}>
-        <svg viewBox="0 0 620 92" style={{ width: "100%", height: "auto", display: "block" }}>
+        <svg viewBox="0 0 620 100" style={{ width: "100%", height: "auto", display: "block" }}>
           {drawScope("st", () => (<>
             {segs.map((sg, k) => {
               let a = 0; for (let m = 0; m < k; m++) a += segs[m][1];
@@ -3795,16 +3818,24 @@ function Results({ res, hideWave }) {
       </div>
     );
   }
-  /* A result made entirely of em-dashes means the arithmetic went non-finite
-     somewhere. That used to render as a confident-looking table of blanks. */
+  /* A result made entirely of em-dashes, or one carrying negative component
+     values, means the operating point is outside what the topology can do.
+     Either used to render as a confident-looking table. */
   const hi = res.hi || [];
   const allBlank = hi.length > 0 && hi.every(([, v]) => String(v).trim() === "—");
+  const negative = hi.some(([, v]) => /^−/.test(String(v).trim()));
   return (
     <div>
-      {allBlank ? (
+      {res.infeasible ? (
+        <div className="warn">
+          <b>This operating point is outside the topology.</b> There is nothing to size, because
+          no set of components produces this conversion ratio. The reason is below.
+        </div>
+      ) : null}
+      {allBlank || negative ? (
         <div className="warn">
           <b>No usable numbers at this operating point.</b> The inputs are self-consistent enough
-          to run, but the result is not finite — usually a conversion ratio this topology cannot
+          to run, but the result is not physical — usually a conversion ratio this topology cannot
           reach. Check the warnings below and the voltages you entered.
         </div>
       ) : null}
@@ -4376,20 +4407,24 @@ function Spectrum({ fsw, D, tr, amp }) {
     <div className="sch">
       <svg viewBox="0 0 660 202" style={{ width: "100%", height: "auto", display: "block" }} role="img">
         {drawScope("sp", () => (<>
-          {/* the unit sits above the axis, clear of the topmost tick value */}
-          {Tx(x0 - 7, y0 - 4, "dBµV", { c: "#5C6E82", s: 9.5, a: "end" })}
+          {/* The unit rides on the topmost tick rather than sitting in its
+              own caption — a separate "dBµV" label has nowhere to go that
+              is not already occupied by the 160 tick. */}
           {[0, 40, 80, 120, 160].map((d) => (
             <g key={"h" + d}>
               <path d={`M ${x0} ${ly(d)} H ${x1}`} {...gl} />
-              {Tx(x0 - 7, ly(d) + 3.5, String(d), { c: "#5C6E82", s: 9.5, a: "end" })}
+              {Tx(x0 - 7, ly(d) + 3.5, d === 160 ? "160 dBµV" : String(d),
+                { c: "#5C6E82", s: 9.5, a: "end" })}
             </g>
           ))}
           {dec.map((f, i) => (
             <g key={"v" + f}>
               <path d={`M ${lx(f)} ${y0} V ${y1}`} {...gl} />
-              {/* the last decade would collide with the axis caption below */}
+              {/* the first label is pushed right of the y-axis numbers, and
+                  the last is dropped so it cannot run past the frame */}
               {i < dec.length - 1
-                ? Tx(lx(f), y1 + 14, eng(f, "Hz"), { c: "#5C6E82", s: 9.5, a: "middle" })
+                ? Tx(lx(f) + (i === 0 ? 2 : 0), y1 + 16, eng(f, "Hz"),
+                  { c: "#5C6E82", s: 9.5, a: i === 0 ? "start" : "middle" })
                 : null}
             </g>
           ))}
@@ -4783,7 +4818,7 @@ export default function App() {
             </div>
             {q ? (
               <span className="railcount" role="status" aria-live="polite">
-                {hits.length} of {TOPOS.length} {hits.length === 1 ? "topology" : "topologies"}
+                {hits.length} of {TOPOS.length} topologies
               </span>
             ) : null}
             <div className="railbody">
