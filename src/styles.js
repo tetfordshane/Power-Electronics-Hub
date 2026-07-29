@@ -312,7 +312,7 @@ export const CSS = `
    across it. They therefore get deliberately different vocabularies, so
    the two can never be mistaken for the same widget in two colours.      */
 .ps .devr .halo{fill:none; stroke:none}
-.ps .devr .ring{fill:none; stroke:var(--ghost); stroke-width:1.3; opacity:.7}
+.ps .devr .ring{fill:none; stroke:var(--ghost); stroke-width:1.3; opacity:.55}
 .ps .devr .bar{stroke:var(--rd); stroke-width:1.9; stroke-linecap:round; fill:none; opacity:.8}
 
 /* conducting: the ring closes into a bright loop with a soft halo */
@@ -326,6 +326,11 @@ export const CSS = `
 .ps .devr.di .ring{stroke-dasharray:3.2 3.2}
 .ps .devr.di.on .ring{stroke-dasharray:5 3.4; animation:psdring 1.1s linear infinite}
 @keyframes psdring{to{stroke-dashoffset:-16.8}}
+
+/* the current trace carries the same charge-driven dashes as the circuit,
+   so the two animations read as one quantity rather than two speeds */
+.ps .wflow{fill:none; stroke:var(--gn); stroke-width:2.6; stroke-linecap:round;
+  stroke-linejoin:round; stroke-dasharray:7 13; opacity:.9}
 
 /* device state legend under the figure */
 .ps .devleg{display:flex; flex-wrap:wrap; gap:6px 18px; margin:11px 0 0;

@@ -801,7 +801,7 @@ function layoutLabelsX(items, minGap, lo, hi) {
 const WAVE_CYCLES = 3;
 
 function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_CYCLES,
-  pulse = false, band = null, playhead = null }) {
+  pulse = false, band = null, playhead = null, flowOffset = null, fadeEdges = false }) {
   const x0 = 52, x1 = 640, per = (x1 - x0) / cycles;
   const imax = iavg + dI / 2;
   const imin = Math.max(iavg - dI / 2, 0);
@@ -821,6 +821,19 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
      guaranteed to sit exactly on the edge it is pointing at. */
   const uPhase = playhead === null ? 0 : (playhead * cycles) % 1;
   const mx = playhead === null ? null : x0 + playhead * (x1 - x0);
+  /* The cursor is the only thing in the figure that is not periodic: the
+     waveform, the shaded band and the circuit all look identical either
+     side of the wrap, but the cursor has to travel back across the plot.
+     Dissolving it over the last few percent and bringing it back in over
+     the first few turns that jump into a hand-off.
+
+     Only while it is running: parked at the start of the sweep the cursor
+     must stay fully visible, or stepping through the phases would hand you
+     a figure with no cursor in it at all. */
+  const EDGE = 0.06;
+  const t = (playhead === null || !fadeEdges) ? 1
+    : clamp(Math.min(playhead, 1 - playhead) / EDGE, 0, 1);
+  const fade = t * t * (3 - 2 * t);
   const iNow = pulse
     ? (uPhase < D ? imin + (imax - imin) * (uPhase / D) : 0)
     : (uPhase < D ? imin + (imax - imin) * (uPhase / D)
@@ -848,6 +861,14 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
         <path d={`M ${x0} ${yI(iavg)} H ${x1}`} stroke="#3E5266" strokeWidth={1} strokeDasharray="3 4" fill="none" />
         <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
         <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+        {/* The same charge-driven dashes that run round the circuit, laid
+            along the current trace. The schematic's flow accelerates and
+            eases with the instantaneous current; without this the trace
+            beside it appeared to run at a flat, unrelated speed. Both are
+            driven by one offset, so they move together. */}
+        {flowOffset !== null ? (
+          <path className="wflow" d={di} style={{ strokeDashoffset: flowOffset }} />
+        ) : null}
         {Tx(x0 - 6, 34, vlabel, { a: "end", c: "#5AD1DE", s: 10.5 })}
         {Tx(x0 - 6, 66, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
         {Tx(x0 - 6, yName, ilabel, { a: "end", c: "#E0A458", s: 10.5 })}
@@ -857,7 +878,7 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
         {Tx(x0 + per, 184, "T = 1/f_sw", { a: "middle", c: "#5C6E82", s: 10.5 })}
         <path d={`M ${x0} 172 V 176 M ${x0 + per} 172 V 176`} {...gl} />
         {mx !== null ? (
-          <g>
+          <g style={{ opacity: fade }}>
             <path d={`M ${mx} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
               fill="none" opacity={0.6} />
             <circle cx={mx} cy={vHigh ? 28 : 62} r={3.2} fill="#5AD1DE" />
@@ -4185,9 +4206,14 @@ const DevRing = (x, y, label, on) => {
     <g key={nk()} className={"devr" + (on ? " on" : "") + (diode ? " di" : " sw")}>
       <circle className="halo" cx={x} cy={y} r={r + 3} />
       <circle className="ring" cx={x} cy={y} r={r} />
-      {on
-        ? null
-        : <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />}
+      {/* The bar belongs to the diode only. Across a diode it reads as the
+          barrier the device is holding up against reverse voltage. Across a
+          switch the same mark reads as "crossed out" — as though the part
+          were deleted rather than simply open — so an off switch is left to
+          its dim ring and the schematic's own open contacts. */}
+      {diode && !on
+        ? <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />
+        : null}
     </g>
   );
 };
@@ -4750,7 +4776,7 @@ function FlowCard({ topo, res }) {
       </p>
       {wv ? (
         <div style={{ marginTop: 12 }}>
-          <Wave {...wv} band={band} playhead={p} />
+          <Wave {...wv} band={band} playhead={p} flowOffset={flowOff} fadeEdges={play} />
         </div>
       ) : null}
     </div>
