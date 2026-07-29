@@ -1,261 +1,11 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 
 /* =====================================================================
    POWER STAGE — interactive designer + cheat sheet
    ===================================================================== */
 
-const CSS = `
-.ps *{box-sizing:border-box}
-.ps{
-  --bg:#0C1017; --surf:#121A24; --surf2:#16202C; --line:#22303F; --line2:#2C3D50;
-  --txt:#E4ECF4; --dim:#8DA0B4; --faint:#5C6E82;
-  --cu:#E0A458; --cy:#5AD1DE; --gn:#6FD39B; --rd:#F0796C; --vi:#A88BF0;
-  background:var(--bg); color:var(--txt); min-height:100vh;
-  font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
-  font-size:14px; line-height:1.5; padding:0 0 60px;
-}
-.ps .mono{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
-.ps .eyebrow{
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10px; letter-spacing:.18em;
-  text-transform:uppercase; color:var(--faint);
-}
-.ps .hdr{
-  border-bottom:1px solid var(--line); padding:18px 20px 0;
-  position:sticky; top:0; background:linear-gradient(180deg,#0C1017 76%,rgba(12,16,23,.9));
-  z-index:20; backdrop-filter:blur(6px);
-}
-.ps .brand{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
-.ps .brand h1{
-  margin:0; font-size:19px; font-weight:600; letter-spacing:-.01em;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-}
-.ps .brand h1 b{color:var(--cu); font-weight:600}
-.ps .brand span{color:var(--faint); font-size:12px}
-.ps .tabs{display:flex; gap:2px; margin-top:14px; flex-wrap:wrap}
-.ps .tab{
-  background:none; border:0; border-bottom:2px solid transparent; color:var(--dim);
-  padding:8px 13px; cursor:pointer; font-size:12px; letter-spacing:.09em;
-  text-transform:uppercase; font-family:ui-monospace,Menlo,monospace;
-}
-.ps .tab:hover{color:var(--txt)}
-.ps .tab.on{color:var(--cu); border-bottom-color:var(--cu)}
-.ps .wrap{padding:18px 20px; max-width:1400px; margin:0 auto}
-.ps .layout{display:grid; grid-template-columns:236px minmax(0,1fr); gap:18px; align-items:start}
-.ps .rail{
-  border:1px solid var(--line); background:var(--surf); border-radius:3px;
-  position:sticky; top:118px; max-height:calc(100vh - 140px); overflow:auto;
-}
-.ps .rail input{
-  width:100%; background:var(--surf2); border:0; border-bottom:1px solid var(--line);
-  color:var(--txt); padding:10px 12px; font-size:12px; outline:none;
-  font-family:ui-monospace,Menlo,monospace;
-}
-.ps .rail input:focus{border-bottom-color:var(--cu)}
-.ps .rgrp{padding:12px 12px 4px}
-.ps .ritem{
-  display:block; width:100%; text-align:left; background:none; border:0; cursor:pointer;
-  color:var(--dim); padding:5px 8px; font-size:12.5px; border-left:2px solid transparent;
-  border-radius:0 2px 2px 0;
-}
-.ps .ritem:hover{color:var(--txt); background:var(--surf2)}
-.ps .ritem.on{color:var(--txt); background:var(--surf2); border-left-color:var(--cu); font-weight:500}
-.ps .card{
-  border:1px solid var(--line); background:var(--surf); border-radius:3px;
-  padding:16px 18px; margin-bottom:14px;
-}
-.ps .card > .eyebrow{display:block; margin-bottom:12px}
-.ps h2{margin:0 0 4px; font-size:22px; font-weight:600; letter-spacing:-.02em}
-.ps h3{margin:0 0 10px; font-size:13px; font-weight:600; letter-spacing:.02em; color:var(--txt)}
-.ps p{margin:0 0 10px; color:var(--dim)}
-.ps .chips{display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 0}
-.ps .chip{
-  font-family:ui-monospace,Menlo,monospace; font-size:10.5px; letter-spacing:.06em;
-  border:1px solid var(--line2); color:var(--dim); padding:3px 8px; border-radius:2px;
-}
-.ps .chip.cu{border-color:#5A431F; color:var(--cu); background:#1B140A}
-.ps .chip.cy{border-color:#1E4B52; color:var(--cy); background:#0B1E21}
-.ps .chip.vi{border-color:#3B2E5E; color:var(--vi); background:#150F24}
-.ps .sch{
-  background:var(--surf2); border:1px solid var(--line); border-radius:2px; padding:6px;
-  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
-  background-size:22px 22px;
-}
-.ps .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:14px}
-.ps .grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px}
-.ps .fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:9px}
-.ps .fld label{display:block; margin-bottom:3px}
-.ps .fld input{
-  width:100%; background:var(--bg); border:1px solid var(--line); color:var(--txt);
-  padding:7px 8px; font-size:13px; border-radius:2px; outline:none;
-  font-family:ui-monospace,Menlo,monospace;
-}
-.ps .fld input:focus{border-color:var(--cu); background:#141B24}
-.ps .fld .u{color:var(--faint)}
-.ps table{width:100%; border-collapse:collapse; font-size:12.5px}
-.ps td,.ps th{padding:6px 8px; text-align:left; border-bottom:1px solid var(--line)}
-.ps th{color:var(--faint); font-weight:500; font-size:10px; letter-spacing:.14em;
-  text-transform:uppercase; font-family:ui-monospace,Menlo,monospace}
-.ps tr:last-child td{border-bottom:0}
-.ps td.k{color:var(--dim); width:44%}
-.ps td.v{
-  font-family:ui-monospace,Menlo,monospace; color:var(--txt); white-space:nowrap; font-weight:500;
-}
-.ps td.n{color:var(--faint); font-size:11px}
-/* ---------------------- animated operation figure ---------------------- */
-.ps .fig{position:relative}
-.ps .fig svg path,.ps .fig svg line,.ps .fig svg circle{transition:stroke .18s linear,fill .18s linear,opacity .18s linear}
-.ps .fig .hot path,.ps .fig .hot line{stroke:var(--cu) !important}
-.ps .fig .hot path[fill]{fill:var(--cu)}
-.ps .fig .hot text{fill:var(--cu) !important}
-.ps .fig .cold path,.ps .fig .cold line{stroke:#31435A !important; opacity:.85}
-.ps .fig .cold path[fill]{fill:#31435A}
-.ps .fig .cold text{fill:#4C5F73 !important}
-.ps .fig .lever{transition:all .16s cubic-bezier(.4,1.4,.6,1)}
-.ps .flow{
-  fill:none; stroke:var(--cu); stroke-width:2.8; stroke-linecap:round;
-  stroke-dasharray:3 15; opacity:.95; pointer-events:none;
-}
-.ps .flow.b{stroke:var(--cy)}
-.ps .cap{
-  font-size:12.5px; line-height:1.55; color:var(--dim); margin:10px 0 0;
-  min-height:38px; border-left:2px solid var(--line2); padding-left:11px;
-}
-.ps .cap b{color:var(--cu); font-family:ui-monospace,Menlo,monospace; font-size:11.5px; letter-spacing:.04em}
-.ps .ctl{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0 0}
-.ps .ctl button{
-  font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:11px; letter-spacing:.06em;
-  text-transform:uppercase; background:var(--surf2); color:var(--dim); border:1px solid var(--line);
-  border-radius:3px; padding:6px 11px; cursor:pointer; transition:all .15s;
-}
-.ps .ctl button:hover{color:var(--txt); border-color:var(--line2)}
-.ps .ctl button.on{background:var(--cu); border-color:var(--cu); color:#0C1017; font-weight:600}
-.ps .ctl .sp{flex:1}
-.ps .eq{
-  border-left:2px solid var(--cu); padding:1px 0 3px 14px; margin:0 0 15px;
-  color:var(--txt); overflow-x:auto; overflow-y:hidden;
-}
-.ps .eq:last-child{margin-bottom:0}
-.ps .eq .src{display:block; font-family:ui-monospace,Menlo,Consolas,monospace; font-style:normal;
-  font-size:10px; letter-spacing:.05em; color:var(--faint); margin-top:4px; text-transform:uppercase}
-.ps .eq small{display:block; font-family:"Inter",system-ui,sans-serif; color:var(--dim);
-  font-size:11.5px; line-height:1.5; margin-top:4px; letter-spacing:0; white-space:normal}
-/* the formula line */
-.ps .ef{
-  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",ui-serif,serif;
-  font-size:16px; line-height:1.65; color:var(--txt); white-space:nowrap; letter-spacing:.005em;
-}
-.ps .ef.ep{ /* prose entries keep the instrument voice */
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.55;
-  white-space:normal; letter-spacing:-.01em;
-}
-.ps .mv{font-style:italic}
-.ps .mu,.ps .mn{font-style:normal}
-.ps .mn{font-variant-numeric:tabular-nums}
-.ps .mr{color:var(--cu); padding:0 .3em; font-style:normal}
-.ps .mo{color:var(--dim); padding:0 .07em; font-style:normal}
-.ps .ef sub{
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-style:normal; font-size:.58em;
-  vertical-align:-.32em; color:var(--dim); letter-spacing:0; padding-left:.05em;
-}
-.ps .ef sup{font-style:normal; font-size:.62em; vertical-align:.5em; padding-left:.02em}
-.ps .ef.ep sub{font-size:.72em; vertical-align:-.22em}
-.ps .mx sub{font-size:.74em; vertical-align:-.22em; letter-spacing:0; opacity:.82}
-.ps .mx sup{font-size:.7em; vertical-align:.45em}
-.ps .mx .mr{padding:0 .18em; color:inherit; opacity:.75}
-.ps .mx .mo{padding:0; color:inherit}
-.ps td.k .mx sub,.ps .fld .mx sub{color:var(--faint)}
-
-/* ---- current-flow overlay ---- */
-.ps .flowwrap{position:relative}
-.ps .flowov{position:absolute; left:7px; right:7px; top:7px; bottom:7px; pointer-events:none}
-.ps .flowglow{fill:none; stroke:var(--gn); stroke-width:8; opacity:.12;
-  stroke-linecap:round; stroke-linejoin:round}
-.ps .flowp{fill:none; stroke:var(--gn); stroke-linecap:round; stroke-linejoin:round;
-  stroke-dasharray:7 13}
-.ps .ird{display:inline-flex; align-items:center; gap:7px; margin-left:auto;
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; color:var(--dim)}
-.ps .ird b{color:var(--cu); font-weight:600}
-.ps .ird em{font-style:normal; font-size:10px; letter-spacing:.04em}
-.ps .ird em.up{color:var(--gn)} .ps .ird em.dn{color:var(--rd)}
-.ps .flowctl .sp{flex:0 0 8px}
-.ps .swb rect{fill:#0C1017; stroke:var(--line); stroke-width:1; opacity:.95}
-.ps .swb text{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:8.5px;
-  fill:var(--faint); letter-spacing:.04em}
-.ps .swb circle{fill:var(--faint)}
-.ps .swb path{stroke:var(--faint); stroke-width:1.8; fill:none; stroke-linecap:round}
-.ps .swb.on rect{stroke:#2E5B45; fill:#0E1A14}
-.ps .swb.on text{fill:var(--gn)}
-.ps .swb.on circle{fill:var(--gn)}
-.ps .swb.on path{stroke:var(--gn); stroke-width:2.2}
-.ps .emcloop{fill:rgba(240,121,108,.07); stroke:var(--rd); stroke-width:2;
-  stroke-dasharray:6 5; animation:psemc 2.4s ease-in-out infinite}
-.ps .emcn{fill:rgba(168,139,240,.28); stroke:var(--vi); stroke-width:1.6}
-.ps .emcn2{fill:rgba(168,139,240,.1); stroke:none; animation:psemc 2.4s ease-in-out infinite}
-@keyframes psemc{0%,100%{opacity:.55}50%{opacity:1}}
-.ps .lit{display:inline-flex; align-items:baseline; gap:6px}
-.ps .lit b{color:var(--txt); font-weight:500}
-.ps .lit em{font-style:normal; color:var(--faint); font-size:10px}
-.ps .wcur{position:absolute; top:7px; bottom:7px; width:1px; background:var(--txt);
-  opacity:.55; pointer-events:none}
-.ps .flowdim{fill:none; stroke:var(--faint); stroke-width:2; opacity:.45; stroke-dasharray:2 8}
-.ps .flowctl{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:10px 0 12px}
-.ps .flowctl button{
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; letter-spacing:.04em;
-  color:var(--dim); background:var(--surf2); border:1px solid var(--line); border-radius:3px;
-  padding:5px 11px; cursor:pointer; transition:border-color .12s, color .12s;
-}
-.ps .flowctl button:hover{color:var(--txt); border-color:var(--line2)}
-.ps .flowctl button.on{color:var(--gn); border-color:#2E5B45; background:#12211A}
-.ps .flowctl button.pl{color:var(--cu); min-width:38px; font-size:10px}
-.ps .flownote{margin:12px 0 0; font-size:13px; color:var(--dim); line-height:1.62}
-/* ---- loss breakdown bar ---- */
-.ps .lbar{display:flex; height:15px; border-radius:2px; overflow:hidden;
-  border:1px solid var(--line); background:var(--surf2)}
-.ps .lseg{height:100%; transition:width .25s ease}
-.ps .lleg{display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:8px;
-  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:var(--dim)}
-.ps .lleg span{display:inline-flex; align-items:center; gap:6px}
-.ps .lleg i{width:8px; height:8px; border-radius:1px; display:inline-block; flex:none}
-.ps ul{margin:0; padding-left:16px; color:var(--dim)}
-.ps li{margin-bottom:5px}
-.ps li::marker{color:var(--faint)}
-.ps .warn{
-  border:1px solid #5A3126; background:#1E1210; color:#F0A99E; padding:9px 12px;
-  border-radius:2px; font-size:12px; margin-bottom:8px;
-}
-.ps .warn b{color:var(--rd)}
-.ps .flt{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px}
-.ps .flt button{
-  background:var(--surf); border:1px solid var(--line); color:var(--dim); cursor:pointer;
-  padding:5px 11px; font-size:11px; border-radius:2px; letter-spacing:.06em;
-  font-family:ui-monospace,Menlo,monospace; text-transform:uppercase;
-}
-.ps .flt button:hover{color:var(--txt); border-color:var(--line2)}
-.ps .flt button.on{color:var(--cu); border-color:#5A431F; background:#1B140A}
-.ps .sub{display:flex; gap:2px; border-bottom:1px solid var(--line); margin:0 0 14px}
-.ps .sub button{
-  background:none; border:0; border-bottom:2px solid transparent; color:var(--faint);
-  padding:7px 12px; cursor:pointer; font-size:11px; letter-spacing:.1em;
-  text-transform:uppercase; font-family:ui-monospace,Menlo,monospace;
-}
-.ps .sub button.on{color:var(--cy); border-bottom-color:var(--cy)}
-.ps .sub button:hover{color:var(--txt)}
-.ps .num{font-family:ui-monospace,Menlo,monospace}
-.ps .big{font-size:26px; font-weight:600; letter-spacing:-.02em}
-.ps .big.cu{color:var(--cu)} .ps .big.cy{color:var(--cy)} .ps .big.gn{color:var(--gn)}
-.ps .stat{border:1px solid var(--line); background:var(--surf2); padding:11px 13px; border-radius:2px}
-.ps .stat .eyebrow{display:block; margin-bottom:5px}
-.ps a{color:var(--cy)}
-.ps .foot{color:var(--faint); font-size:11.5px; padding:0 20px; max-width:1400px; margin:0 auto}
-@media (max-width:900px){
-  .ps .layout{grid-template-columns:1fr}
-  .ps .rail{position:static; max-height:260px}
-  .ps .wrap{padding:14px 12px}
-  .ps .hdr{padding:14px 12px 0}
-}
-@media (prefers-reduced-motion:reduce){.ps *{transition:none !important; animation:none !important}}
-`;
+import { CSS } from "./styles.js";
+import { Eq, Mx, Sub, Mixed } from "./tex.jsx";
 
 /* ---------------------------- numbers ---------------------------- */
 function eng(v, unit) {
@@ -274,107 +24,90 @@ const f2 = (x) => (isFinite(x) ? x.toFixed(2) : "—");
 const f3 = (x) => (isFinite(x) ? x.toFixed(3) : "—");
 const clamp = (x, lo, hi) => (isFinite(x) ? Math.min(Math.max(x, lo), hi) : lo);
 
-/* ------------------------- typesetting maths -------------------------
-   Turns a plain string such as "C_out = ΔI_L/(8·f_sw·ΔV)" into properly
-   set maths: italic serif variables, real subscripts and superscripts,
-   spaced relations. No LaTeX, no dependency.
-   - one- and two-letter runs are variables; longer runs (ESR, MOSFET,
-     kHz) are acronyms, words or units and stay upright
-   - a trailing qualifier in brackets joins the subscript: R_DS(on)
-   - `plain` mode keeps prose prose and only fixes the subscripts       */
-const QUAL = /^(on|off|max|min|rms|avg|pk|nom|sat|eff|hot|cold|peak|p-p|dc|ac|th|max\.|min\.)$/i;
-const RELS = "=≈≤≥<>∝≡";
-const OPRS = "+−±×·∓";
-const UNIT = new Set(["H", "m", "s", "V", "A", "W", "F", "T", "J", "K", "N", "C", "Hz", "mm", "µm", "nm", "mT", "nH", "µH", "mH", "pF", "nF", "µF", "mΩ", "Ω", "dB", "oz"]);
-const isV = (c) => /[A-Za-zΑ-Ωα-ωµ]/.test(c);
-const SUBC = /[A-Za-zΑ-Ωα-ω0-9]/;
-
-function TeX(str, italic, plain) {
-  const s = String(str == null ? "" : str);
-  const out = []; let i = 0, key = 0, lastUnit = false;
-  const add = (n) => out.push(<React.Fragment key={key++}>{n}</React.Fragment>);
-  while (i < s.length) {
-    const c = s[i], prev = i > 0 ? s[i - 1] : "", i0 = i;
-    if (isV(c)) {
-      let j = i; while (j < s.length && isV(s[j])) j++;
-      const base = s.slice(i, j); i = j;
-      let sub = "";
-      if (s[i] === "_") {
-        const k = i + 1;
-        if (s[k] === "{") {
-          const e = s.indexOf("}", k);
-          if (e > 0) { sub = s.slice(k + 1, e); i = e + 1; }
-        } else {
-          let m = k; while (m < s.length && SUBC.test(s[m])) m++;
-          if (m > k) {
-            sub = s.slice(k, m); i = m;
-            if (s[i] === "(") {
-              const e = s.indexOf(")", i);
-              if (e > 0 && QUAL.test(s.slice(i + 1, e))) { sub += "(" + s.slice(i + 1, e) + ")"; i = e + 1; }
-            }
-          }
-        }
-      }
-      /* a token is a unit, not a variable, when it follows a number ("250 V"),
-         a degree sign ("20 °C"), or another unit across a solidus ("H/m").
-         Anything carrying a subscript is always a variable.               */
-      let b = i0 - 1; while (b >= 0 && s[b] === " ") b--;
-      const backNum = b >= 0 && /[0-9⁰¹²³⁴⁵⁶⁷⁸⁹%]/.test(s[b]);
-      const unitish = !sub && UNIT.has(base) && (
-        ((prev === " " || prev === "\u00a0") && (backNum || base.length > 1)) ||
-        prev === "°" || (lastUnit && prev === "/")
-      );
-      lastUnit = unitish;
-      const ital = italic && !unitish && (base.length <= 2 || !!sub);
-      add(<span className={ital ? "mv" : "mu"}>{base}{sub ? <sub>{sub}</sub> : null}</span>);
-      continue;
-    }
-    if (c === "^") {
-      const k = i + 1; let sup = "";
-      if (s[k] === "{") { const e = s.indexOf("}", k); if (e > 0) { sup = s.slice(k + 1, e); i = e + 1; } }
-      else { let m = k; while (m < s.length && /[A-Za-zΑ-Ωα-ω0-9−-]/.test(s[m])) m++; sup = s.slice(k, m); i = m; }
-      if (sup) { add(<sup>{sup}</sup>); continue; }
-      add(c); i++; continue;
-    }
-    if (!plain && /[0-9]/.test(c)) {
-      let j = i; while (j < s.length && /[0-9.]/.test(s[j])) j++;
-      add(<span className="mn">{s.slice(i, j)}</span>); i = j; continue;
-    }
-    if (!plain && RELS.includes(c)) { add(<span className="mr">{c}</span>); i++; continue; }
-    if (!plain && OPRS.includes(c)) { add(<span className="mo">{c}</span>); i++; continue; }
-    add(c); i++;
-  }
-  return out;
+/* Reads the OS motion preference and keeps listening, so toggling it in
+   system settings takes effect without a reload. */
+function usePrefersReducedMotion() {
+  const query = "(prefers-reduced-motion: reduce)";
+  const [reduce, setReduce] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(query).matches
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(query);
+    const on = (e) => setReduce(e.matches);
+    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on));
+  }, []);
+  return reduce;
 }
 
-/* a display equation with its footnote */
-const Eq = ({ e, n, src }) => {
-  const math = /[=≈∝≡]/.test(String(e));
-  return (
-    <div className="eq">
-      <div className={"ef" + (math ? "" : " ep")}>{TeX(e, math)}</div>
-      {n ? <small className="mx">{TeX(n, false)}</small> : null}
-      {src ? <em className="src">{src}</em> : null}
-    </div>
-  );
-};
-/* inline maths for labels, table cells and warnings */
-const Mx = ({ t }) => <span className="mx">{TeX(t, false)}</span>;
-/* prose: subscripts only, nothing else touched */
-const Sub = ({ t }) => <span className="mx">{TeX(t, false, true)}</span>;
+/* Maths typesetting lives in tex.jsx: it parses the linear notation used
+   throughout the topology data and hands real LaTeX to KaTeX.          */
 
 /* ------------------------ schematic primitives ------------------------ */
 const WS = { stroke:"#8296AB", strokeWidth:1.7, fill:"none", strokeLinecap:"round", strokeLinejoin:"round" };
 const FILL = "#8296AB";
-let _k = 0; const nk = () => "k" + (_k++);
+/* ---------------------------------------------------------------------
+   Element keys.
+
+   Every figure re-runs its draw functions on each animation frame. When
+   the keys changed from frame to frame, React could not match the old
+   nodes to the new ones, so it tore the whole SVG down and rebuilt it
+   sixty times a second. Two things followed: the CSS transitions on
+   .hot/.cold and .lever never fired (a freshly mounted element has no
+   previous value to animate from, so state changes snapped instead of
+   easing), and the constant DOM churn is what made the loop feel jerky.
+
+   drawScope gives each drawing surface its own key namespace, restarting
+   at zero. Because a surface issues the same calls in the same order every
+   frame, each element keeps its key for the life of the figure and React
+   can diff instead of remount.                                          */
+let _k = 0, _kp = "k";
+const nk = () => _kp + (_k++);
+const drawScope = (prefix, fn) => {
+  const pp = _kp, pv = _k;
+  _kp = prefix; _k = 0;
+  try { return fn(); } finally { _kp = pp; _k = pv; }
+};
 
 const W  = (d) => <path key={nk()} d={d} style={WS} />;
 const Dot = (x, y) => <circle key={nk()} cx={x} cy={y} r={3} fill={FILL} />;
-const Tx = (x, y, t, o = {}) => (
-  <text key={nk()} x={x} y={y} fill={o.c || "#8DA0B4"} fontSize={o.s || 11.5}
-    fontFamily='ui-monospace,Menlo,Consolas,monospace' textAnchor={o.a || "start"}
-    fontWeight={o.b ? 600 : 400}>{t}</text>
-);
+/* SVG cannot host KaTeX, so labels inside figures are set here instead:
+   the "X_sub" notation is split into a baseline run and a real <tspan>
+   subscript, which is the difference between "V_out" and V₍ₒᵤₜ₎ on a
+   drawing that is meant to look like a schematic, not like source code. */
+const SUBTX = /([A-Za-zΑ-Ωα-ωΔµ]+)_([A-Za-z0-9]+(?:\([a-z]+\))?)/g;
+const subParts = (t) => {
+  const s = String(t);
+  if (s.indexOf("_") < 0) return s;
+  const out = []; let last = 0, m;
+  SUBTX.lastIndex = 0;
+  while ((m = SUBTX.exec(s)) !== null) {
+    if (m.index > last) out.push(s.slice(last, m.index));
+    out.push(m[1]);
+    out.push({ sub: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) out.push(s.slice(last));
+  return out;
+};
+const Tx = (x, y, t, o = {}) => {
+  const parts = subParts(t);
+  const size = o.s || 11.5;
+  return (
+    <text key={nk()} x={x} y={y} fill={o.c || "#8DA0B4"} fontSize={size}
+      fontFamily='"JetBrains Mono Variable","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace'
+      textAnchor={o.a || "start"} fontWeight={o.b ? 600 : 400}
+      style={{ fontVariantNumeric: "tabular-nums" }}>
+      {typeof parts === "string" ? parts : parts.map((p, i) => (
+        typeof p === "string"
+          ? <React.Fragment key={i}>{p}</React.Fragment>
+          : <tspan key={i} fontSize={size * 0.72} dy={size * 0.22}
+              >{p.sub}<tspan dy={-size * 0.22} fontSize={size}>{"​"}</tspan></tspan>
+      ))}
+    </text>
+  );
+};
 
 /* inductor: horizontal (n arcs of radius r) */
 const Lh = (x, y, n = 4, r = 9, b = 1) => {
@@ -996,10 +729,39 @@ npc3: () => <SV w={700} h={300}>
 };
 
 /* ------------------------------ plots ------------------------------ */
+/* ---------------------------------------------------------------------
+   Label placement.
+
+   Every plot here puts its labels at the point they describe, which is
+   right until two of them want the same spot — and then they print on top
+   of one another. Two cases were guaranteed rather than unlucky: in the
+   class-E chart both series end at exactly (628, 162), and the spectrum
+   drew the "160" tick and the "dBµV" caption at identical coordinates.
+
+   Given the y each label would like, this returns a y each label can
+   actually have: sorted, pushed apart by at least minGap, and kept inside
+   [lo, hi]. Order is preserved, so a label never crosses its neighbour. */
+function layoutLabels(want, minGap, lo, hi) {
+  const n = want.length;
+  if (!n) return [];
+  const idx = want.map((y, i) => i).sort((a, b) => want[a] - want[b]);
+  const y = idx.map((i) => clamp(want[i], lo, hi));
+  for (let i = 1; i < n; i++) if (y[i] - y[i - 1] < minGap) y[i] = y[i - 1] + minGap;
+  /* if the stack overran the bottom, walk it back up */
+  for (let i = n - 1; i >= 0; i--) {
+    if (y[i] > hi) y[i] = hi - (n - 1 - i) * minGap;
+    if (i > 0 && y[i] - y[i - 1] < minGap) y[i - 1] = y[i] - minGap;
+  }
+  for (let i = 0; i < n; i++) if (y[i] < lo) y[i] = lo + i * minGap;
+  const out = new Array(n);
+  idx.forEach((orig, k) => { out[orig] = y[k]; });
+  return out;
+}
+
 function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, pulse = false, band = null }) {
   const x0 = 52, x1 = 640, per = (x1 - x0) / cycles;
-  const imax = pulse ? iavg + dI / 2 : iavg + dI / 2;
-  const imin = Math.max(pulse ? iavg - dI / 2 : iavg - dI / 2, 0);
+  const imax = iavg + dI / 2;
+  const imin = Math.max(iavg - dI / 2, 0);
   const top = 92, bot = 168, span = Math.max(imax * 1.18, 1e-9);
   const yI = (i) => bot - (i / span) * (bot - top);
   let dv = `M ${x0} 62`, di = `M ${x0} ${yI(imin)}`;
@@ -1012,60 +774,110 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, p
       : ` L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(e, x1)} ${yI(imin)}`;
   }
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
+  /* The series name sits at the ripple peak and the mean value at the mean.
+     At low ripple those are only a few pixels apart, so lay them out. */
+  const [yName, yMean, yZero] = layoutLabels(
+    [yI(imax) + 4, yI(iavg) + 4, bot + 4], 11.5, top - 2, bot + 5
+  );
   return (
     <div className="sch"><svg viewBox="0 0 660 190" style={{ width: "100%", height: "auto", display: "block" }}>
-      {band ? Array.from({ length: Math.ceil(cycles) + 1 }, (_, c) => {
-        const ba = x0 + (c + band[0]) * per, bb = x0 + (c + band[1]) * per;
-        if (ba > x1) return null;
-        return <rect key={"bd" + c} x={ba} y={18} width={Math.max(Math.min(bb, x1) - ba, 0)}
-          height={bot - 18} fill="#6FD39B" opacity=".08" />;
-      }) : null}
-      <path d={`M ${x0} 20 H ${x1}`} {...gl} /><path d={`M ${x0} 62 H ${x1}`} {...gl} />
-      <path d={`M ${x0} ${bot} H ${x1}`} {...gl} />
-      <path d={`M ${x0} ${yI(iavg)} H ${x1}`} stroke="#3E5266" strokeWidth={1} strokeDasharray="3 4" fill="none" />
-      <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-      <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-      {Tx(x0 - 6, 34, vlabel, { a: "end", c: "#5AD1DE", s: 10.5 })}
-      {Tx(x0 - 6, 66, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
-      {Tx(x0 - 6, yI(imax) + 4, ilabel, { a: "end", c: "#E0A458", s: 10.5 })}
-      {Tx(x0 - 6, yI(iavg) + 4, eng(iavg, "A"), { a: "end", c: "#5C6E82", s: 10 })}
-      {Tx(x0 - 6, bot + 4, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
-      {Tx(x0 + per * D / 2, 184, "D·T", { a: "middle", c: "#5C6E82", s: 10.5 })}
-      {Tx(x0 + per, 184, "T = 1/f_sw", { a: "middle", c: "#5C6E82", s: 10.5 })}
-      <path d={`M ${x0} 172 V 176 M ${x0 + per} 172 V 176`} {...gl} />
+      {drawScope("wv", () => (<>
+        {band ? Array.from({ length: Math.ceil(cycles) + 1 }, (_, c) => {
+          const ba = x0 + (c + band[0]) * per, bb = x0 + (c + band[1]) * per;
+          if (ba > x1) return null;
+          return <rect key={"bd" + c} x={ba} y={18} width={Math.max(Math.min(bb, x1) - ba, 0)}
+            height={bot - 18} fill="#6FD39B" opacity=".08" />;
+        }) : null}
+        <path d={`M ${x0} 20 H ${x1}`} {...gl} /><path d={`M ${x0} 62 H ${x1}`} {...gl} />
+        <path d={`M ${x0} ${bot} H ${x1}`} {...gl} />
+        <path d={`M ${x0} ${yI(iavg)} H ${x1}`} stroke="#3E5266" strokeWidth={1} strokeDasharray="3 4" fill="none" />
+        <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+        <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+        {Tx(x0 - 6, 34, vlabel, { a: "end", c: "#5AD1DE", s: 10.5 })}
+        {Tx(x0 - 6, 66, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
+        {Tx(x0 - 6, yName, ilabel, { a: "end", c: "#E0A458", s: 10.5 })}
+        {Tx(x0 - 6, yMean, eng(iavg, "A"), { a: "end", c: "#5C6E82", s: 10 })}
+        {Tx(x0 - 6, yZero, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
+        {Tx(x0 + per * D / 2, 184, "D·T", { a: "middle", c: "#5C6E82", s: 10.5 })}
+        {Tx(x0 + per, 184, "T = 1/f_sw", { a: "middle", c: "#5C6E82", s: 10.5 })}
+        <path d={`M ${x0} 172 V 176 M ${x0 + per} 172 V 176`} {...gl} />
+      </>))}
     </svg></div>
   );
 }
 
-function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [] }) {
-  const x0 = 54, x1 = 630, y0 = 168, y1 = 20;
-  const X = (v) => x0 + ((v - xmin) / (xmax - xmin)) * (x1 - x0);
-  const Y = (v) => y0 - ((v - ymin) / (ymax - ymin)) * (y0 - y1);
+function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vmarks = [] }) {
+  const x0 = 54, x1 = 604, y0 = 176, y1 = 34;
+  /* A degenerate range would make every coordinate Infinity and wipe the
+     plot out silently, so fall back to a unit span. */
+  const xs = xmax - xmin || 1, yspan = ymax - ymin || 1;
+  const X = (v) => x0 + ((v - xmin) / xs) * (x1 - x0);
+  const Y = (v) => y0 - ((v - ymin) / yspan) * (y0 - y1);
   const gl = { stroke: "#1D2938", strokeWidth: 1, fill: "none" };
   const xt = [], yt = [];
-  for (let i = 0; i <= 4; i++) { xt.push(xmin + (i * (xmax - xmin)) / 4); yt.push(ymin + (i * (ymax - ymin)) / 4); }
+  for (let i = 0; i <= 4; i++) { xt.push(xmin + (i * xs) / 4); yt.push(ymin + (i * yspan) / 4); }
+  const live = (series || []).filter((s) => s && s.pts && s.pts.length);
+
+  /* Every label wants to sit at the right-hand end of its own curve, and
+     several curves converge there — six LLC gain curves land within three
+     pixels of one another, and the two class-E traces end at exactly the
+     same point. Collect all of them, plus the horizontal marks, and lay the
+     whole column out in one pass. Off-scale marks are pinned to the edge
+     and flagged rather than drawn outside the frame, where they vanish. */
+  const labs = [];
+  live.forEach((s) => {
+    if (!s.label) return;
+    const last = s.pts[s.pts.length - 1];
+    labs.push({ kind: "s", want: Y(last[1]) - 5, x: X(last[0]) + 6, t: s.label, c: s.c });
+  });
+  (marks || []).forEach((m) => {
+    const off = m.y > ymax ? " (above scale)" : m.y < ymin ? " (below scale)" : "";
+    labs.push({ kind: "m", want: Y(clamp(m.y, ymin, ymax)) - 5, x: x1 - 4,
+      t: m.t + off, c: m.c || "#6FD39B", a: "end",
+      rule: clamp(m.y, ymin, ymax), off: !!off });
+  });
+  const ys = layoutLabels(labs.map((l) => l.want), 12.5, y1 + 2, y0 - 2);
+
   return (
-    <div className="sch"><svg viewBox="0 0 660 200" style={{ width: "100%", height: "auto", display: "block" }}>
-      {xt.map((v, i) => <path key={"gx" + i} d={`M ${X(v)} ${y0} V ${y1}`} {...gl} />)}
-      {yt.map((v, i) => <path key={"gy" + i} d={`M ${x0} ${Y(v)} H ${x1}`} {...gl} />)}
-      {marks.map((m, i) => (
-        <g key={"m" + i}>
-          <path d={`M ${x0} ${Y(m.y)} H ${x1}`} stroke={m.c || "#6FD39B"} strokeWidth={1.1} strokeDasharray="4 4" fill="none" />
-          {Tx(x1 - 4, Y(m.y) - 5, m.t, { a: "end", c: m.c || "#6FD39B", s: 10.5 })}
-        </g>
-      ))}
-      {series.map((s, i) => (
-        <g key={"s" + i}>
-          <path d={s.pts.map((p, j) => `${j ? "L" : "M"} ${X(p[0])} ${Y(p[1])}`).join(" ")}
+    <div className="sch"><svg viewBox="0 0 660 210" style={{ width: "100%", height: "auto", display: "block" }}>
+      {drawScope("lc", () => (<>
+        {/* the y-axis caption sits above the plot, clear of the top tick */}
+        {Tx(x0 - 7, y1 - 13, ylab, { a: "start", c: "#8DA0B4", s: 11 })}
+        {xt.map((v, i) => <path key={"gx" + i} d={`M ${X(v)} ${y0} V ${y1}`} {...gl} />)}
+        {yt.map((v, i) => <path key={"gy" + i} d={`M ${x0} ${Y(v)} H ${x1}`} {...gl} />)}
+        {(vmarks || []).map((m, i) => (
+          m.x > xmin && m.x < xmax ? (
+            <g key={"vm" + i}>
+              <path d={`M ${X(m.x)} ${y0} V ${y1}`} stroke={m.c || "#F0796C"} strokeWidth={1.1}
+                strokeDasharray="4 4" fill="none" opacity={0.85} />
+              {Tx(X(m.x) + 4, y0 - 6, m.t, { a: "start", c: m.c || "#F0796C", s: 9.5 })}
+            </g>
+          ) : null
+        ))}
+        {labs.map((l, i) => (l.rule !== undefined ? (
+          <path key={"mr" + i} d={`M ${x0} ${Y(l.rule)} H ${x1}`} stroke={l.c}
+            strokeWidth={1.1} strokeDasharray="4 4" fill="none" opacity={l.off ? 0.45 : 1} />
+        ) : null))}
+        {live.map((s, i) => (
+          <path key={"s" + i} d={s.pts.map((p, j) => `${j ? "L" : "M"} ${X(p[0])} ${Y(p[1])}`).join(" ")}
             stroke={s.c} strokeWidth={s.w || 1.6} fill="none" opacity={s.o || 1} strokeLinejoin="round" />
-          {s.label ? Tx(X(s.pts[s.pts.length - 1][0]) - 2, Y(s.pts[s.pts.length - 1][1]) - 6, s.label,
-            { a: "end", c: s.c, s: 10.5 }) : null}
-        </g>
-      ))}
-      {xt.map((v, i) => Tx(X(v), y0 + 16, v.toFixed(v >= 10 ? 0 : 2), { a: "middle", c: "#5C6E82", s: 10.5 }))}
-      {yt.map((v, i) => Tx(x0 - 7, Y(v) + 4, v.toFixed(v >= 10 ? 0 : 2), { a: "end", c: "#5C6E82", s: 10.5 }))}
-      {Tx((x0 + x1) / 2, 196, xlab, { a: "middle", c: "#8DA0B4", s: 11 })}
-      {Tx(x0 - 44, 16, ylab, { c: "#8DA0B4", s: 11 })}
+        ))}
+        {labs.map((l, i) => (
+          <g key={"lb" + i}>
+            {/* a leader line, because a nudged label no longer touches its curve */}
+            {l.kind === "s" && Math.abs(ys[i] - l.want) > 3 ? (
+              <path d={`M ${l.x - 3} ${l.want + 2} L ${l.x - 1} ${ys[i] - 3}`}
+                stroke={l.c} strokeWidth={0.9} fill="none" opacity={0.55} />
+            ) : null}
+            {Tx(l.x, ys[i], l.t, { a: l.a || "start", c: l.c, s: 10 })}
+          </g>
+        ))}
+        {xt.map((v, i) => Tx(X(v), y0 + 16, v.toFixed(Math.abs(v) >= 10 ? 0 : 2),
+          { a: "middle", c: "#5C6E82", s: 10 }))}
+        {yt.map((v, i) => Tx(x0 - 7, Y(v) + 3.5, v.toFixed(Math.abs(v) >= 10 ? 0 : 2),
+          { a: "end", c: "#5C6E82", s: 10 }))}
+        {Tx((x0 + x1) / 2, y0 + 32, xlab, { a: "middle", c: "#8DA0B4", s: 11 })}
+      </>))}
     </svg></div>
   );
 }
@@ -1468,6 +1280,9 @@ const TA = [
     const Rl = Vo / Io, frhp = (1 - Dx) * (1 - Dx) * Rl / (2 * Math.PI * Dx * L);
     return {
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["device stress", eng(Vst, "V")]],
+      loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
+        ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
+        ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       wave: { D: Dn, dI: dIn, iavg: IL },
       warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
       groups: [
@@ -1723,7 +1538,7 @@ const TA = [
   pros: ["Low output ripple — good for noise-sensitive loads", "Non-inverting", "No RHP zero in the output-side path"],
   cons: ["Pulsating input current needs a good input filter", "High-side switch drive", "Same C1 rms burden as the SEPIC"],
   use: ["Precision analog rails from a varying input", "LED drivers where flicker matters"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => (Vo + s.vf) / (v + Vo + s.vf);
@@ -1733,8 +1548,15 @@ const TA = [
     const L2 = Vo * (1 - Dn) / (fs * dI);
     const L1 = s.vinMin * Dx / (fs * s.r * Math.max(IL1, 0.1));
     const Co = dI / (8 * fs * s.dvout * 1e-3);
+    /* The switch carries both inductor currents while it is on; the diode
+       carries them both while it is off. */
+    const Isum = IL1 + Io;
+    const Pq = Isum * Isum * Dx * s.rds * 1e-3;
+    const Pd = s.vf * Isum * (1 - Dx);
     return {
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
+      loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
+        ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
       wave: { D: Dn, dI, iavg: Io },
       groups: [
         G("Operating point", [
@@ -1783,6 +1605,10 @@ const TA = [
     const eta = Vl > 0 ? Vl / Videal : 0;
     return {
       hi: [["ideal V_out", eng(Vi, "V")], ["loaded V_out", eng(Math.max(Vl, 0), "V")], ["R_out", eng(Ro, "Ω")]],
+      pout: Math.max(Vl, 0) * s.iout,
+      loss: [["Charge redistribution", s.iout * s.iout * Rssl, "I_out²·R_SSL — irreducible, set by f_sw·C"],
+        ["Switch resistance", s.iout * s.iout * Rfsl, "I_out²·R_FSL"],
+        ["Rectifiers", (N + 1) * s.vf * s.iout, "(N+1)·V_F·I_out — zero with synchronous FETs"]],
       warn: [
         Vl <= 0 && "R_out is large enough that the pump collapses under this load — it cannot deliver "
           + eng(s.iout, "A") + " at all. Raise f_sw or C_pump, or accept far less current.",
@@ -1832,7 +1658,7 @@ const TB = [
   pros: ["Cheapest isolated topology: one switch, one magnetic", "Multiple isolated outputs almost free", "Very wide input range (universal mains)"],
   cons: ["Large rms currents; output cap works hard", "Leakage energy must be dissipated or recovered", "RHP zero in CCM makes the loop slow"],
   use: ["Phone and laptop adapters", "Auxiliary/bias supplies", "Isolated industrial rails"],
-  fields: ["vinMin", "vinMax", "vout", "iout", "fsw", "dmax", "krp", "vf", "dvout", "esr", "eff", "llk", "vclamp"],
+  fields: ["vinMin", "vinMax", "vout", "iout", "fsw", "dmax", "krp", "vf", "dvout", "esr", "eff", "llk", "vclamp", "rds"],
   defs: { vinMin: 120, vinMax: 375, vout: 19, iout: 3.5, fsw: 65, dvout: 200, vf: 0.5, esr: 20, eff: 0.87 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, D = s.dmax, K = Math.min(Math.max(s.krp, 0.05), 1);
@@ -1854,8 +1680,15 @@ const TB = [
     const Pcl = 0.5 * s.llk * 1e-6 * Ipk * Ipk * fs * s.vclamp / Math.max(s.vclamp - Vr, 1);
     const Rcl = s.vclamp * s.vclamp / Math.max(Pcl, 1e-6);
     const frhp = (1 - D) * (1 - D) * (Vo / Io) / (2 * Math.PI * D * (Lp / (Nt * Nt)));
+    const Pq = Iprms * Iprms * s.rds * 1e-3;
+    const Pdo = s.vf * Io;
+    const Pesr = Ico * Ico * s.esr * 1e-3;
     return {
       hi: [["turns ratio N_p:N_s", f2(Nt) + " : 1"], ["primary L_p", eng(Lp, "H")], ["V_DS stress", eng(Vds, "V")]],
+      loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)"],
+        ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],
+        ["Output rectifier", Pdo, "V_F·I_out"],
+        ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
       wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "i_pri" },
       warn: [
         s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R.",
@@ -1908,7 +1741,7 @@ const TB = [
   pros: ["Devices clamped to V_in — 500 V FETs run off 400 V bus", "Low output ripple (inductor + buck-style filter)", "No dissipative snubber needed"],
   cons: ["Duty limited below 0.5 → poor transformer utilisation", "Two switches with one high-side drive", "Needs an output inductor"],
   use: ["Telecom bricks", "Industrial 200–500 W supplies", "Server auxiliary rails"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff", "rds", "tsw"],
   defs: { vinMin: 330, vinNom: 390, vinMax: 420, vout: 12, iout: 25, fsw: 150, dvout: 100, dmax: 0.45 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -1918,8 +1751,16 @@ const TB = [
     const Co = dI / (8 * fs * s.dvout * 1e-3);
     const Ipri = n * Io;
     const Iprms = Ipri * Math.sqrt(Dn);
+    /* Two FETs sit in series in the primary path, so the reflected current
+       passes through two channels rather than one. */
+    const Pq = 2 * Iprms * Iprms * s.rds * 1e-3;
+    const Pdo = s.vf * Io;
+    const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["D at V_in nom", f3(Dn)]],
+      loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series"],
+        ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw"],
+        ["Output rectifiers", Pdo, "V_F·I_out"]],
       wave: { D: Dn, dI, iavg: Io },
       warn: [
         s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time.",
@@ -1963,7 +1804,7 @@ const TB = [
   pros: ["Both gate drives ground-referenced", "Transformer driven in both quadrants — small core", "Output ripple at 2·f_sw"],
   cons: ["2·V_in switch stress plus spike", "Flux imbalance can saturate the core", "Centre-tapped primary wastes copper"],
   use: ["12/24/48 V isolated bricks", "Inverter front ends", "Automotive DC–DC"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff", "rds", "tsw"],
   defs: { vinMin: 20, vinNom: 24, vinMax: 32, vout: 48, iout: 6, fsw: 100, dvout: 150, dmax: 0.42 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -1973,8 +1814,17 @@ const TB = [
     const L = Vo * (1 - 2 * Dm) / (2 * fs * dI);
     const Co = dI / (8 * 2 * fs * s.dvout * 1e-3);
     const Ipri = n * Io * 2;
+    /* Each switch carries I_pri/2 for its own duty D, so the pair
+       dissipates 2·((I_pri/2)·√D)²·R_DS. */
+    const Iqrms = (Ipri / 2) * Math.sqrt(Dn);
+    const Pq = 2 * Iqrms * Iqrms * s.rds * 1e-3;
+    const Pdo = s.vf * Io;
+    const Psw = 2 * 0.5 * (2 * s.vinNom) * (Ipri / 2) * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(2 * s.vinMax, "V")]],
+      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
+        ["Primary switching", Psw, "hard switched against 2·V_in"],
+        ["Output rectifiers", Pdo, "V_F·I_out"]],
       wave: { D: Dn, dI, iavg: Io },
       warn: [
         s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
@@ -2014,7 +1864,7 @@ const TB = [
   pros: ["Switch stress equals V_in", "Series blocking cap prevents flux walking", "Good transformer utilisation"],
   cons: ["Primary current is twice the full bridge for the same power", "High-side drive required", "Divider caps carry large ripple current"],
   use: ["Off-line 200 W–1 kW supplies", "Welding and industrial supplies", "LLC precursor"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff", "rds", "tsw"],
   defs: { vinMin: 330, vinNom: 390, vinMax: 420, vout: 48, iout: 12, fsw: 100, dvout: 150, dmax: 0.45 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -2029,8 +1879,14 @@ const TB = [
     const Iqrms = Ipri * Math.sqrt(Dn);
     const Iprms = Ipri * Math.sqrt(2 * Dn);
     const Icdiv = Iprms / 2;
+    const Pq = 2 * Iqrms * Iqrms * s.rds * 1e-3;
+    const Pdo = s.vf * Io;
+    const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(s.vinMax, "V")]],
+      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
+        ["Primary switching", Psw, "hard switched against V_in"],
+        ["Output rectifiers", Pdo, "V_F·I_out"]],
       wave: { D: Dn, dI, iavg: Io },
       warn: [
         s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
@@ -2070,7 +1926,7 @@ const TB = [
   pros: ["ZVS on all four switches over most of the load range", "Fixed frequency — easy filtering and control", "Scales well to kilowatts"],
   cons: ["Lagging leg loses ZVS at light load", "Duty loss and secondary ringing need attention", "Four switches plus a current-sensing scheme"],
   use: ["Server and telecom rectifiers", "EV on-board chargers", "Industrial 1–5 kW supplies"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "lr", "coss"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "lr", "coss", "rds"],
   defs: { vinMin: 350, vinNom: 400, vinMax: 420, vout: 48, iout: 40, fsw: 100, dvout: 150, dmax: 0.45, lr: 12, coss: 400 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, Lr = s.lr * 1e-6, Co_ss = s.coss * 1e-12;
@@ -2084,8 +1940,15 @@ const TB = [
     const Izvs = s.vinNom * Math.sqrt((8 / 3) * Co_ss / Lr);
     const td = 2 * Co_ss * s.vinNom / Math.max(Ipri, 1e-6);
     const zvsLoad = Izvs / n;
+    /* In a PSFB the primary current keeps circulating through two devices
+       for the whole period, including the freewheel intervals — that
+       circulating conduction is the topology's characteristic loss. */
+    const Pq = 2 * Ipri * Ipri * s.rds * 1e-3;
+    const Pdo = s.vf * Io;
     return {
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
+      loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
+        ["Output rectifiers", Pdo, "V_F·I_out"]],
       wave: { D: Dn, dI, iavg: Io },
       warn: [
         dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
@@ -2129,7 +1992,7 @@ const TB = [
   pros: ["ZVS from full load to no load; ZCS on the secondary diodes", "Very low EMI — no hard edges", "Excellent efficiency at the resonant point"],
   cons: ["Variable frequency complicates filtering and control", "Gain collapses if you fall below the peak-gain frequency", "Needs an integrated-magnetics transformer or a real L_r"],
   use: ["Server and LED PSUs downstream of PFC", "EV chargers", "TV and monitor supplies"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fr", "ln", "qf", "vf", "coss", "td"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fr", "ln", "qf", "vf", "coss", "td", "rds"],
   defs: { vinMin: 330, vinNom: 390, vinMax: 410, vout: 12, iout: 20, fr: 100, ln: 5, qf: 0.4, coss: 300, td: 200 },
   design(s) {
     const fr = s.fr * 1e3, Vo = s.vout, Io = s.iout, Ln = s.ln, Qd = s.qf;
@@ -2176,6 +2039,8 @@ const TB = [
     series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd + " (design)" });
     return {
       hi: [["turns ratio", f2(n) + " : 1"], ["L_r / C_r", eng(Lr, "H") + " / " + eng(Cr, "F")], ["L_m", eng(Lm, "H")]],
+      loss: [["Primary conduction", Icr * Icr * s.rds * 1e-3, "I_Cr(rms)²·R_DS(on) — one device conducts at a time"],
+        ["Output rectifiers", s.vf * Io, "V_F·I_out; ZCS means no reverse-recovery term"]],
       chart: {
         title: "Tank gain vs normalised frequency",
         series, xmin: 0.35, xmax: xTop, ymin: 0, ymax: yTop, xlab: "f_n = f_sw / f_r", ylab: "gain M",
@@ -2239,7 +2104,7 @@ const TB = [
   pros: ["Truly bidirectional with one control variable", "Soft switching over a useful range", "Galvanic isolation with symmetric structure"],
   cons: ["Eight switches", "ZVS range collapses when V1 ≠ n·V2", "Large circulating current at low load"],
   use: ["EV on-board chargers with V2G", "Battery energy storage interfaces", "Solid-state transformers"],
-  fields: ["vinNom", "v2", "pout", "fsw", "phi", "ncell", "coss"],
+  fields: ["vinNom", "v2", "pout", "fsw", "phi", "ncell", "coss", "rds"],
   defs: { vinNom: 400, v2: 48, pout: 3300, fsw: 100, phi: 40, ncell: 8 },
   design(s) {
     const fs = s.fsw * 1e3, V1 = s.vinNom, V2 = s.v2, n = s.ncell;
@@ -2260,6 +2125,10 @@ const TB = [
     const E1 = 0.5 * L * i0 * i0, E2 = 0.5 * L * id * id;
     return {
       hi: [["series inductance", eng(L, "H")], ["peak tank current", eng(Ipk, "A")], ["voltage match n·V2/V1", f2(ratio)]],
+      loss: [["Bridge 1 conduction", 2 * Irms * Irms * s.rds * 1e-3, "2·I_tank(rms)²·R_DS(on)"],
+        ["Bridge 2 conduction", 2 * Math.pow(Irms * n, 2) * s.rds * 1e-3, "referred through the turns ratio"],
+        ["Turn-off (hard side)", (E1 < Ereq ? 0.5 * V1 * Math.abs(i0) * 50e-9 * fs : 0)
+          + (E2 < Ereq ? 0.5 * V1 * Math.abs(id) * 50e-9 * fs : 0), "only the bridge that lost ZVS"]],
       warn: [
         Math.abs(ratio - 1) > 0.15 && "n·V2/V1 = " + f2(ratio) + ". Away from 1.0 the ZVS range shrinks quickly — retune the turns ratio or use an extended modulation scheme.",
         d > 0.45 && "You are operating close to the power limit (d = " + f2(d) + "). Circulating current and turn-off loss are near their worst here.",
@@ -2317,7 +2186,7 @@ const TC = [
   pros: ["Meets IEC 61000-3-2 with PF > 0.99 and low THD", "Well-understood, huge controller ecosystem", "Gives downstream converters a stable 390 V bus"],
   cons: ["Bridge diodes cost 1–2 % efficiency", "Bulk cap is large and lifetime-limited", "Voltage loop must be slow, so transients are poor"],
   use: ["Anything above 75 W on mains", "Server and telecom rectifiers", "LED and appliance supplies"],
-  fields: ["vacMin", "vacMax", "fline", "pout", "vbus", "fsw", "r", "thold", "vbusMin", "eff", "vf"],
+  fields: ["vacMin", "vacMax", "fline", "pout", "vbus", "fsw", "r", "thold", "vbusMin", "eff", "vf", "rds"],
   defs: { pout: 300, fsw: 65, r: 0.35, eff: 0.94, vf: 0.9 },
   design(s) {
     const fs = s.fsw * 1e3, Po = s.pout, Vb = s.vbus;
@@ -2338,8 +2207,13 @@ const TC = [
     const Isw = Ipk * Math.sqrt(Math.max(rad, 0));
     const Pbr = 2 * s.vf * (2 * Ipk / Math.PI);
     const dImax = Vb / (4 * fs * L);
+    const Psw = Isw * Isw * s.rds * 1e-3;
+    const Pbd = s.vf * Id;
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["peak line current", eng(Ipk, "A")]],
+      loss: [["Bridge diodes", Pbr, "2·V_F·I_in(avg) — deleted by a totem-pole"],
+        ["Boost switch conduction", Psw, "I_sw(rms)²·R_DS(on)"],
+        ["Boost diode", Pbd, "V_F·I_out(avg)"]],
       warn: [
         Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak.",
         Vpp > 20 && "Bus ripple is " + eng(Vpp, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference.",
@@ -2400,6 +2274,8 @@ const TC = [
     const Plf = Iin * Iin * s.rds * 1e-3;
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["bridge loss removed", eng(Pbr, "W")]],
+      loss: [["Fast-leg conduction", Iin * Iin * s.rds * 1e-3, "I_in(rms)²·R_DS(on)"],
+        ["Line-frequency leg", Plf, "one device conducts per half cycle"]],
       warn: ["This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."],
       groups: [
         G("Power stage", [
@@ -2436,7 +2312,7 @@ const TC = [
   pros: ["Three output levels with only four switches", "Filter sees 2·f_sw", "Simple, well-understood control"],
   cons: ["DC link must absorb 2·f_out ripple power", "Dead time distorts the output near the zero crossing", "Common-mode voltage jumps unless you use a special modulation"],
   use: ["Solar string and micro-inverters", "UPS output stages", "Motor drives for single-phase machines"],
-  fields: ["vdc", "vac", "fo", "fsw", "pout", "r", "td"],
+  fields: ["vdc", "vac", "fo", "fsw", "pout", "r", "td", "rds", "tsw"],
   defs: { vdc: 400, vac: 230, fo: 50, fsw: 20, pout: 3000, r: 0.2, td: 500 },
   design(s) {
     const fs = s.fsw * 1e3, Vdc = s.vdc, Vac = s.vac;
@@ -2457,6 +2333,10 @@ const TC = [
     const Vdt = s.td * 1e-9 * fs * Vdc;
     return {
       hi: [["modulation index", f3(m)], ["filter inductor", eng(Lf, "H")], ["filter cap", eng(Cf, "F")]],
+      loss: [["Conduction", 2 * Io * Io * s.rds * 1e-3, "2·I_out(rms)²·R_DS(on) — two devices in the path"],
+        ["Switching", 4 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
+          "four devices, averaged over the output sine"],
+        ["Dead-time distortion", Vdt * Io, "energy the output never receives"]],
       warn: [
         m > 1 && "m = " + f2(m) + " exceeds 1: the bridge cannot make " + Vac + " V rms from " + Vdc + " V DC without overmodulation. Raise V_dc above " + eng(Math.SQRT2 * Vac, "V") + ".",
         Iq > 0.05 * Io && "Filter cap draws " + eng(Iq, "A") + " of reactive current, over 5 % of rated. Shrink C_f and raise L_f.",
@@ -2498,7 +2378,7 @@ const TC = [
   pros: ["Minimum device count for three phases", "Mature modulation and control (FOC, DTC)", "No DC-link low-frequency ripple with balanced loads"],
   cons: ["Devices block the full V_dc", "dv/dt reflections stress motor insulation", "Common-mode current through motor bearings"],
   use: ["Industrial motor drives", "Grid-tied solar and storage inverters", "Traction inverters"],
-  fields: ["vdc", "vac", "fo", "fsw", "pout", "td"],
+  fields: ["vdc", "vac", "fo", "fsw", "pout", "td", "rds", "tsw"],
   defs: { vdc: 650, vac: 400, fo: 50, fsw: 8, pout: 15000, td: 2000 },
   design(s) {
     const fs = s.fsw * 1e3, Vdc = s.vdc;
@@ -2509,6 +2389,9 @@ const TC = [
     const Mratio = fs / s.fo;
     return {
       hi: [["m (SVPWM)", f3(mV)], ["phase current", eng(Iph, "A")], ["DC link ripple", eng(Icdc, "A")]],
+      loss: [["Conduction", 6 * 0.5 * Iph * Iph * s.rds * 1e-3, "six devices, each conducting half the time"],
+        ["Switching", 6 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
+          "six devices, averaged over the output sine"]],
       warn: [
         mV > 1 && "SVPWM needs m = " + f2(mV) + " — beyond the linear range. Minimum V_dc for " + s.vac + " V is " + eng(s.vac / 0.707, "V") + ".",
         Mratio < 15 && "f_sw/f_out = " + f2(Mratio) + ". Below ~15 use synchronous modulation or the low-order harmonics become significant.",
@@ -2549,7 +2432,7 @@ const TC = [
   pros: ["Half the device voltage — cheaper, faster silicon", "Much lower output THD and dv/dt", "Higher efficiency at high switching frequency"],
   cons: ["Twice the devices (plus clamp diodes)", "Neutral-point balancing is mandatory", "Uneven loss distribution between inner and outer devices"],
   use: ["Solar inverters above 1 kV", "Medium-voltage drives", "Grid-tied storage"],
-  fields: ["vdc", "vac", "fo", "fsw", "pout"],
+  fields: ["vdc", "vac", "fo", "fsw", "pout", "rds", "tsw"],
   defs: { vdc: 800, vac: 400, fo: 50, fsw: 16, pout: 30000 },
   design(s) {
     const fs = s.fsw * 1e3, Vdc = s.vdc;
@@ -2558,6 +2441,9 @@ const TC = [
     const Cnp = Ipk / (2 * Math.PI * 3 * s.fo * (0.02 * Vdc / 2));
     return {
       hi: [["device blocking V", eng(Vdc / 2, "V")], ["m (SVPWM)", f3(mV)], ["phase current", eng(Iph, "A")]],
+      loss: [["Conduction", 12 * 0.5 * Iph * Iph * s.rds * 1e-3, "twelve devices share the phase current"],
+        ["Switching", 12 * (2 / Math.PI) * Ipk * (Vdc / 2) * s.tsw * 1e-9 * fs / 2,
+          "each transition only steps half the link — the point of the topology"]],
       warn: [mV > 1 && "m = " + f2(mV) + " is beyond the linear range; raise V_dc above " + eng(s.vac / 0.707, "V") + "."].filter(Boolean),
       groups: [
         G("Voltage structure", [
@@ -2618,6 +2504,7 @@ const TD = [
     const PF = (Vdc * Idc) / (s.vacIn * Irms);
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["diode peak", eng(Ipk, "A")]],
+      loss: [["Diode conduction", s.vf * Idc, "V_F·I_dc"]],
       warn: [
         Vpk <= 0 && "V_F is larger than the peak of the AC input — no current can flow at all. Lower the diode drop or raise V_ac.",
         Vpk > 0 && dV >= Vpk && "The capacitor fully discharges between peaks: this is not a DC rail, and the conduction-angle model below does not apply. Increase C_bulk or reduce the load.",
@@ -2679,6 +2566,7 @@ const TD = [
     const Pd = 2 * s.vf * Idc;
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["power factor", f2(PF)]],
+      loss: [["Diode conduction", Pd, "2·V_F·I_dc — two diodes in series each half-cycle"]],
       warn: [
         PF < 0.7 && "Power factor is " + f2(PF) + " with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front.",
         Ipk / Idc > 8 && "Crest factor " + f2(Ipk / Idc) + ": the bridge and the source both see " + eng(Ipk, "A") + " peaks. Size the diode's I_FSM accordingly.",
@@ -2738,6 +2626,8 @@ const TD = [
     const Pesr = dI * dI / 12 * s.esr * 1e-3;
     return {
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
+      loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
+        ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
       wave: { D: D, dI: dI, iavg: Io, vlabel: "V_rect", ilabel: "i_Lf" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " exceeds 0.5. Each half-cycle can occupy at most half the period or the two halves overlap and short the secondary.",
@@ -2797,6 +2687,9 @@ const TD = [
     const Po = s.vout * Io;
     return {
       hi: [["diode loss", eng(Pdio, "W")], ["synchronous loss", eng(Psync, "W")], ["efficiency gained", pct((Pdio - Psync) / Po)]],
+      loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"],
+        ["Body diode (dead time)", Pbody, "2·V_F·I_out·t_dead·f_sw"],
+        ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
       loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"], ["Body diode", Pbody, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
       warn: [
@@ -2862,6 +2755,7 @@ const TD = [
     const Pd = s.vf * Io;
     return {
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
+      loss: [["Rectifiers", Pd, "V_F·I_out"]],
       wave: { D: D, dI: dI, iavg: IL, vlabel: "winding", ilabel: "i_L1" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period.",
@@ -2962,6 +2856,9 @@ const TE = [
     const Vc2 = isFinite(C2) ? Itank / (w * C2) : NaN;
     return {
       hi: [["load resistance", eng(R, "Ω")], ["shunt C", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
+      loss: [["Switch conduction", Pc, "I_SW(rms)²·R_DS(on); ZVS makes the switching term ≈ 0"],
+        ["C_oss shortfall", Coss > Csh ? 0.5 * (Coss - Csh) * s.vdc * s.vdc * f : 0,
+          "charge the tuning cannot absorb is dumped at turn-on"]],
       chart: {
         title: "Drain voltage and switch current over one RF cycle",
         series: [
@@ -3036,6 +2933,9 @@ const TE = [
     const fmax = 0.18359 / (2 * Math.PI * R * Coss);
     return {
       hi: [["load (differential)", eng(2 * R, "Ω")], ["shunt C per side", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
+      loss: [["Switch conduction", Pc, "2·I_SW(rms)²·R_DS(on), both halves"],
+        ["C_oss shortfall", Coss > Csh ? 2 * 0.5 * (Coss - Csh) * s.vdc * s.vdc * f : 0,
+          "per side, when C_oss exceeds the tuning"]],
       chart: {
         title: "Drain voltage of both halves over one RF cycle",
         series: [
@@ -3092,7 +2992,7 @@ const TE = [
   pros: ["Device stress is the supply rail, not 3.56× it", "ZVS like class E without the voltage penalty", "Both devices share the same tank — good utilisation"],
   cons: ["Needs a high-side drive", "ZVS only holds over a limited load range", "Dead time must track frequency and load"],
   use: ["High-frequency DC–DC and wireless power", "Induction heating above a few hundred watts", "Anywhere class E's voltage stress is unaffordable"],
-  fields: ["vdc", "pout", "fsw", "ql", "coss", "td"],
+  fields: ["vdc", "pout", "fsw", "ql", "coss", "td", "rds"],
   defs: { vdc: 400, pout: 500, fsw: 500, ql: 5, coss: 200, td: 60 },
   design(s) {
     const f = s.fsw * 1e3, w = 2 * Math.PI * f;
@@ -3112,6 +3012,9 @@ const TE = [
     const VAe = 3.562 * 2.862;
     return {
       hi: [["duty per device", f3(D)], ["load resistance", eng(R, "Ω")], ["device blocking V", eng(s.vdc, "V")]],
+      loss: [["Switch conduction", 2 * Irms * Irms * D * s.rds * 1e-3, "2·I_rms²·D·R_DS(on)"],
+        ["Lost ZVS", tdMin > td ? 2 * 0.5 * Coss * s.vdc * s.vdc * f : 0,
+          "C_oss dumped at turn-on when the dead time is too short"]],
       warn: [
         Draw <= 0 && "A " + s.td + " ns dead time at " + s.fsw + " kHz consumes the entire half-period: there is no on-time left and this operating point does not exist. The numbers below are clamped to a nominal duty and mean nothing until you shorten the dead time or lower the frequency.",
         Draw > 0 && Draw <= 0.02 && "Dead time of " + s.td + " ns at " + s.fsw + " kHz leaves essentially no on-time. Shorten the dead time or drop the frequency.",
@@ -3351,6 +3254,22 @@ const SHEETS = [
 ];
 
 /* ========================== selector table ========================== */
+/* Maps a comparison row to the bench page it describes, so the Selector
+   can actually select something instead of being a static table. */
+const SELECT_ID = {
+  "Buck": "buck", "Sync buck": "syncbuck", "Multiphase buck": "multiphase",
+  "Boost": "boost", "Buck-boost": "buckboost", "Four-switch BB": "fsbb",
+  "Ćuk": "cuk", "SEPIC": "sepic", "Zeta": "zeta", "Charge pump": "chargepump",
+  "Flyback": "flyback", "Two-switch forward": "forward2", "Push-pull": "pushpull",
+  "Half-bridge": "halfbridge", "Phase-shifted FB": "psfb", "LLC resonant": "llc",
+  "Dual active bridge": "dab", "Half-wave rectifier": "halfwave",
+  "Full-bridge rectifier": "bridgerect", "Centre-tapped rectifier": "ctrect",
+  "Synchronous rectifier": "syncrect", "Current doubler": "doubler",
+  "Boost PFC": "pfcboost", "Totem-pole PFC": "totempole",
+  "H-bridge inverter": "hbridge", "Three-phase VSI": "vsi3", "Three-level NPC": "npc3",
+  "Class E": "classe", "Class E push-pull": "classepp", "Class DE": "classde",
+};
+
 const SELECT = [
   ["Buck", "D", "no", "1 W – 1 kW", "V_in", "Simplest. Continuous output current."],
   ["Sync buck", "D", "no", "1 W – 5 kW", "V_in", "Default above ~3 A or below ~5 V out."],
@@ -3654,21 +3573,27 @@ const FIGNOTE = {
   npc3: "Shown as a two-level bridge. The NPC version splits each switch into two with a clamp to the midpoint, giving a third level.",
 };
 
-function FigPanel({ id }) {
+function FigPanel({ id, duty }) {
   const map = FIGMAP[id];
   const F = map ? FIGS[map[0]] : null;
   const mode = map && map[1] ? map[1] : "";
-  const reduce = typeof window !== "undefined" && window.matchMedia
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduce = usePrefersReducedMotion();
   const [p, setP] = useState(0);
-  const [play, setPlay] = useState(!reduce);
+  const [play, setPlay] = useState(true);
   const [spd, setSpd] = useState(1);
+  useEffect(() => { if (reduce) setPlay(false); }, [reduce]);
 
+  /* One continuous accumulator, wrapped with a modulo. Nothing is ever
+     reset to zero at the boundary, so the phase runs straight through the
+     seam and the loop has no visible restart.                           */
   useEffect(() => {
     if (!play || !F) return;
     let raf, last = 0;
     const step = (now) => {
-      if (last) setP((v) => (v + ((now - last) / 1000) * 0.34 * spd) % 1);
+      if (last) {
+        const dt = Math.min((now - last) / 1000, 0.1);   // swallow tab-switch gaps
+        setP((v) => (v + dt * 0.34 * spd) % 1);
+      }
       last = now;
       raf = requestAnimationFrame(step);
     };
@@ -3677,7 +3602,8 @@ function FigPanel({ id }) {
   }, [play, spd, F]);
 
   if (!F) return null;
-  const segs = F.segs(0.45, mode);
+  const D = clamp(duty === undefined || duty === null ? 0.45 : duty, 0.06, 0.94);
+  const segs = F.segs(D, mode);
   const caps = mode === "inv" && F.capInv ? F.capInv : F.cap;
   const loops = mode === "inv" && F.loopsInv ? F.loopsInv : F.loops;
 
@@ -3750,7 +3676,7 @@ function FigPanel({ id }) {
     <div className="fig">
       <div className="sch">
         <svg viewBox={`0 0 ${F.w} ${F.h}`} style={{ width: "100%", height: "auto", display: "block" }} role="img">
-          {F.draw(idx, mode)}
+          {drawScope("fg", () => F.draw(idx, mode))}
           <path d={loops[idx]} className={"flow" + (mode === "inv" && (idx === 1 || idx === 3) ? " b" : "")}
             style={{ strokeDashoffset: flowOff, strokeWidth: 2.1 + 1.5 * iNow }} />
         </svg>
@@ -3758,41 +3684,62 @@ function FigPanel({ id }) {
 
       <div className="sch" style={{ marginTop: 8, padding: "8px 6px" }}>
         <svg viewBox="0 0 620 92" style={{ width: "100%", height: "auto", display: "block" }}>
-          {segs.map((sg, k) => {
-            let a = 0; for (let m = 0; m < k; m++) a += segs[m][1];
-            return (
-              <g key={k} onClick={() => jump(k)} style={{ cursor: "pointer" }}>
-                <rect x={a * SW} y={0} width={sg[1] * SW} height={92}
-                  fill={k === idx ? "rgba(224,164,88,.09)" : "transparent"} />
-                <path d={`M ${a * SW} 0 V 92`} stroke="#22303F" strokeWidth={1} fill="none" />
-                {Tx(a * SW + sg[1] * SW / 2, 89, sg[0], { a: "middle", s: 10.5, c: k === idx ? "#E0A458" : "#5C6E82" })}
-              </g>
-            );
-          })}
-          <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-          <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-          <path d={`M ${p * SW} 0 V 80`} stroke="#E4ECF4" strokeWidth={1.2} fill="none" opacity={0.75} />
-          <circle cx={p * SW} cy={4} r={3} fill="#E4ECF4" />
-          <circle cx={p * SW} cy={y3 - iNow * (y3 - y2)} r={3.4} fill="#E0A458" />
-          {Tx(p * SW + (p > 0.8 ? -8 : 8), y3 - iNow * (y3 - y2) - 7,
-            rising ? "i rising" : "i falling", { c: "#E0A458", s: 10, a: p > 0.8 ? "end" : "start" })}
+          {drawScope("st", () => (<>
+            {segs.map((sg, k) => {
+              let a = 0; for (let m = 0; m < k; m++) a += segs[m][1];
+              return (
+                <g key={k} onClick={() => jump(k)} style={{ cursor: "pointer" }}>
+                  <rect x={a * SW} y={0} width={sg[1] * SW} height={92}
+                    fill={k === idx ? "rgba(224,164,88,.09)" : "transparent"} />
+                  <path d={`M ${a * SW} 0 V 92`} stroke="#22303F" strokeWidth={1} fill="none" />
+                  {Tx(a * SW + sg[1] * SW / 2, 89, sg[0], { a: "middle", s: 10.5, c: k === idx ? "#E0A458" : "#5C6E82" })}
+                </g>
+              );
+            })}
+            <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+            <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+            <path d={`M ${p * SW} 0 V 80`} stroke="#E4ECF4" strokeWidth={1.2} fill="none" opacity={0.75} />
+            <circle cx={p * SW} cy={4} r={3} fill="#E4ECF4" />
+            <circle cx={p * SW} cy={y3 - iNow * (y3 - y2)} r={3.4} fill="#E0A458" />
+            {Tx(p * SW + (p > 0.8 ? -8 : 8), y3 - iNow * (y3 - y2) - 7,
+              rising ? "i rising" : "i falling", { c: "#E0A458", s: 10, a: p > 0.8 ? "end" : "start" })}
+          </>))}
         </svg>
       </div>
 
       <p className="cap"><b>{caps[idx][0]}</b> · <Sub t={caps[idx][1]} /></p>
 
-      <div className="ctl">
-        <button className={play ? "on" : ""} onClick={() => setPlay(!play)}>{play ? "▮▮ pause" : "▶ play"}</button>
-        {[0.5, 1, 2].map((v) => (
-          <button key={v} className={spd === v && play ? "on" : ""} onClick={() => { setSpd(v); setPlay(true); }}>{v}×</button>
-        ))}
-        <span className="sp" />
-        {segs.map((sg, k) => (
-          <button key={k} className={idx === k && !play ? "on" : ""} onClick={() => jump(k)}>{sg[0]}</button>
-        ))}
-      </div>
+      <PlayBar
+        play={play} onPlay={() => setPlay(!play)}
+        spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
+        phases={segs.map((sg) => sg[0])} phase={play ? -1 : idx} onPhase={jump}
+      />
       {FIGNOTE[id] ? <p className="cap" style={{ borderLeftColor: "var(--line)", marginTop: 10, minHeight: 0 }}>
         <Sub t={FIGNOTE[id]} /></p> : null}
+    </div>
+  );
+}
+
+/* One transport bar, shared by the static figure and the current-flow card,
+   so the same controls look and behave the same on every topology. */
+function PlayBar({ play, onPlay, spd, onSpd, phases, phase, onPhase, extra }) {
+  return (
+    <div className="ctl" role="group" aria-label="Animation controls">
+      <button className={play ? "on" : ""} onClick={onPlay} aria-pressed={play}
+        aria-label={play ? "Pause animation" : "Play animation"}>
+        <span aria-hidden="true">{play ? "❚❚" : "▶"}</span> {play ? "pause" : "play"}
+      </button>
+      {[0.5, 1, 2].map((v) => (
+        <button key={v} className={spd === v && play ? "on" : ""} onClick={() => onSpd(v)}
+          aria-pressed={spd === v && play} aria-label={"Speed " + v + " times"}>{v}×</button>
+      ))}
+      <span className="sp" />
+      {phases.map((name, k) => (
+        <button key={k} className={phase === k ? "on" : ""} onClick={() => onPhase(k)} aria-pressed={phase === k}>
+          {name}
+        </button>
+      ))}
+      {extra}
     </div>
   );
 }
@@ -3811,25 +3758,58 @@ function mkRaw(id) {
 function Fields({ topo, raw, set }) {
   return (
     <div className="fields">
-      {(topo.fields || []).map((k) => (
-        <div className="fld" key={k}>
-          <label className="eyebrow" htmlFor={"f_" + k}>
-            <Mx t={FIELDS[k].l} />{FIELDS[k].u ? <span className="u"> · {FIELDS[k].u}</span> : null}
-          </label>
-          <input id={"f_" + k} type="number" inputMode="decimal" step={FIELDS[k].s || "any"}
-            value={raw[k] ?? ""} onChange={(e) => set(k, e.target.value)} />
-        </div>
-      ))}
+      {(topo.fields || []).map((k) => {
+        const F = FIELDS[k];
+        if (!F) return null;
+        const txt = raw[k];
+        const num = parseFloat(txt);
+        /* flag anything the clamp would have to rewrite, so the user can
+           see that the number in the box is not the number being used */
+        const bad = txt !== "" && txt !== undefined
+          && (!isFinite(num) || (F.mn !== undefined && num < F.mn) || (F.mx !== undefined && num > F.mx));
+        return (
+          <div className="fld" key={k}>
+            <label htmlFor={"f_" + k}>
+              <Mx t={F.l} />{F.u ? <span className="u"> {F.u}</span> : null}
+            </label>
+            <input id={"f_" + k} type="number" inputMode="decimal" step={F.s || "any"}
+              min={F.mn} max={F.mx} className={bad ? "bad" : ""}
+              aria-invalid={bad || undefined}
+              title={bad ? "Outside the usable range " + F.mn + " to " + F.mx + " — the design uses the nearest valid value." : undefined}
+              value={txt ?? ""} onChange={(e) => set(k, e.target.value)} />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function Results({ res, hideWave }) {
-  if (!res) return <p>Enter a full set of numbers to see the design.</p>;
+  if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
+  if (res.error) {
+    return (
+      <div className="warn">
+        <b>The design equations failed for these inputs.</b> This is a bug rather than a bad
+        entry: <span className="mono">{res.error}</span>. Try stepping the numbers back toward the
+        defaults, and the rest of the page is unaffected.
+      </div>
+    );
+  }
+  /* A result made entirely of em-dashes means the arithmetic went non-finite
+     somewhere. That used to render as a confident-looking table of blanks. */
+  const hi = res.hi || [];
+  const allBlank = hi.length > 0 && hi.every(([, v]) => String(v).trim() === "—");
   return (
     <div>
+      {allBlank ? (
+        <div className="warn">
+          <b>No usable numbers at this operating point.</b> The inputs are self-consistent enough
+          to run, but the result is not finite — usually a conversion ratio this topology cannot
+          reach. Check the warnings below and the voltages you entered.
+        </div>
+      ) : null}
       <div className="grid3" style={{ marginBottom: 14 }}>
-        {(res.hi || []).map(([k, v], i) => (
+        {hi.map(([k, v], i) => (
           <div className="stat" key={i}>
             <span className="eyebrow"><Mx t={k} /></span>
             <div className={"big " + ["cu", "cy", "gn"][i % 3]}>{v}</div>
@@ -3845,7 +3825,9 @@ function Results({ res, hideWave }) {
         <Wave {...res.wave} />
       </div> : null}
       {res.chart ? <div style={{ margin: "14px 0" }}>
-        <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>Tank gain vs normalised frequency</span>
+        <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
+          {res.chart.title || "Characteristic"}
+        </span>
         <LineChart {...res.chart} />
       </div> : null}
       <div className="grid2">
@@ -3975,6 +3957,58 @@ const FLOW = {
     { on: [0], t: "Switch off", f: () => [0.5, 1], n: "Choke and tank current now flow into C_sh, and the drain rings up to 3.56 times the supply and back. The tuning makes it arrive at exactly zero, with zero slope, as the switch closes again.",
       d: ["M 162 60 H 310 V 205 H 430"], dim: ["M 310 60 H 590 V 205 H 430"] },
   ]},
+
+  /* ---- extended coverage --------------------------------------------
+     The lens used to exist on only twelve of the thirty pages, which made
+     it look broken rather than absent. These add the families where the
+     current path is the whole lesson: a synchronous buck (where the point
+     is that a FET replaces the diode), the coupled-cap converters, and
+     the bridge-fed isolated stages.                                    */
+  syncbuck: { w: 660, h: 250, sw: [[170, 36, "Q_HS"], [232, 116, "Q_LS"]],
+    emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    ph: [
+    { on: [1,0], t: "High side on", f: (D) => [0, D], n: "Identical to a plain buck: the input feeds the inductor and its current ramps up. The low-side FET is held off, and the dead time before this instant was covered by its body diode.",
+      d: ["M 40 70 H 480 V 200 H 40"] },
+    { on: [0,1], t: "Low side on", f: (D) => [D, 1], n: "This is the whole point of the topology. Instead of a diode dropping a fixed 0.4 V, a FET channel carries the same current at I·R_DS(on) — which at low output voltages is the single largest efficiency lever available.",
+      d: ["M 215 200 V 70 H 480 V 200 H 215"] },
+  ]},
+  sepic: { w: 660, h: 260, sw: [[250, 40, "Q1"], [420, 46, "D1"]],
+    emc: { loop: "M 100 70 H 250 V 210 H 100 Z", node: [250, 70] },
+    ph: [
+    { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "Both inductors charge: L1 straight from the input, L2 from the coupling capacitor, which is why C_s carries the full load current in rms terms. The diode is reverse biased and the output runs on C_out alone.",
+      d: ["M 40 70 H 250 V 210 H 40"], dim: ["M 470 70 H 560 V 210 H 470"] },
+    { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "Both inductor currents commutate into the diode and feed the output together. Because C_s blocks DC, a short on the output cannot drag the input down — the advantage a boost does not have.",
+      d: ["M 40 70 H 560 V 210 H 40"] },
+  ]},
+  cuk: { w: 660, h: 260, sw: [[250, 40, "Q1"], [330, 150, "D1"]],
+    emc: { loop: "M 100 70 H 330 V 210 H 100 Z", node: [250, 70] },
+    ph: [
+    { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The transfer capacitor discharges through the switch into the output side. Energy crosses this converter through C1's electric field rather than through a magnetic field — which is exactly why C1 sees the full load current and is the reliability limit.",
+      d: ["M 40 70 H 250 V 210 H 40"] },
+    { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "The diode takes over and C1 recharges from the input inductor. Both inductors keep conducting throughout, so the input and output currents are continuous — the property that makes a Ćuk quiet at both ports.",
+      d: ["M 40 70 H 330 V 210 H 40"] },
+  ]},
+  halfbridge: { w: 660, h: 280, sw: [[214, 66, "Q1"], [214, 176, "Q2"], [430, 46, "D1"], [430, 206, "D2"]],
+    emc: { loop: "M 130 50 H 214 V 225 H 130 Z", node: [214, 137] },
+    ph: [
+    { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "The primary sees +V_in/2, because the capacitor divider holds the return at half the bus. That halving is the reason each device blocks only V_in, against 2·V_in for a push-pull.",
+      d: ["M 130 50 H 300 V 225 H 130"] },
+    { on: [0,0,0,0], t: "Both off", f: (D) => [D, 0.5], n: "Neither switch conducts. The primary is undriven and the output inductor freewheels through both rectifiers at once — this interval is what the series blocking capacitor uses to keep the volt-seconds balanced.",
+      d: ["M 430 60 H 560 V 220 H 430"], dim: ["M 130 50 H 300 V 225 H 130"] },
+    { on: [0,1,0,1], t: "Q2 on", f: (D) => [0.5, 0.5 + D], n: "The primary reverses and sees −V_in/2. Driving the core in both quadrants is what makes the transformer small compared with a single-ended forward of the same power.",
+      d: ["M 130 225 H 300 V 50 H 130"] },
+    { on: [0,0,0,0], t: "Both off", f: (D) => [0.5 + D, 1], n: "The second freewheel interval. Note the output ripple frequency is twice the switching frequency, so the filter is smaller than the switch timing alone would suggest.",
+      d: ["M 430 60 H 560 V 220 H 430"], dim: ["M 130 50 H 300 V 225 H 130"] },
+  ]},
+  chargepump: { w: 660, h: 240, iShape: (u) => (u < 0.5 ? 0.25 + 0.75 * Math.exp(-12 * u) : 0.25 + 0.75 * Math.exp(-12 * (u - 0.5))),
+    sw: [[300, 40, "D1"], [430, 40, "D2"]],
+    emc: { loop: "M 200 60 H 430 V 180 H 200 Z", node: [300, 60] },
+    ph: [
+    { on: [1,0], t: "Clock low — charge", f: () => [0, 0.5], n: "The flying capacitor is connected across the input and charges through the first rectifier. Charge moves as a spike whose size is set by how far the two capacitor voltages have drifted apart, not by any resistor.",
+      d: ["M 60 60 H 300 V 180 H 60"], dim: ["M 430 60 H 600 V 180 H 430"] },
+    { on: [0,1], t: "Clock high — pump", f: () => [0.5, 1], n: "The flying capacitor's bottom plate is lifted to the input, so its top plate now sits a full V_in above it and pours charge into the next stage. That redistribution is lossy no matter how good the switches are — which is what the equivalent R_out is really describing.",
+      d: ["M 200 60 H 600 V 180 H 200"] },
+  ]},
 };
 
 /* stacked bar showing where the watts actually go */
@@ -4006,16 +4040,282 @@ function LossBar({ items }) {
   );
 }
 
-/* a switch that visibly opens and closes, laid over the real device */
+/* ---------------------------------------------------------------------
+   Device badges.
+
+   A switch and a diode are not the same kind of thing, and the figure has
+   to say so. A switch is COMMANDED: something else decides, and its lever
+   swings shut. A diode is a valve that decides for itself, purely from the
+   voltage across it — nothing drives it.
+
+   Previously both were the same glyph recoloured, which is why a diode
+   read as "a switch that happens to be on". They now have deliberately
+   different vocabularies: the switch keeps its moving lever, the diode
+   gets a valve that fills and passes visible current when forward biased,
+   and empties behind a barrier when it is holding voltage off. Each also
+   states its condition in words — "closed"/"open" against "conducting"/
+   "blocking" — because those are different physical situations.        */
+const isDiode = (label) => /^(D|SR|BD)/.test(String(label));
+
 const SwBadge = (x, y, label, on) => (
   <g key={nk()} className={"swb" + (on ? " on" : "")}>
-    <rect x={x - 17} y={y - 12} width={34} height={24} rx={3} />
-    <text x={x} y={y - 3} textAnchor="middle">{label}</text>
-    <circle cx={x - 8} cy={y + 6} r={1.7} />
-    <circle cx={x + 8} cy={y + 6} r={1.7} />
-    <path d={on ? `M ${x - 8} ${y + 6} H ${x + 8}` : `M ${x - 8} ${y + 6} L ${x + 6} ${y - 2}`} />
+    <rect x={x - 23} y={y - 14} width={46} height={35} rx={3} />
+    <text x={x} y={y - 4} textAnchor="middle">{label}</text>
+    <circle cx={x - 9} cy={y + 6} r={1.8} />
+    <circle cx={x + 9} cy={y + 6} r={1.8} />
+    <path className="lever"
+      d={on ? `M ${x - 9} ${y + 6} H ${x + 9}` : `M ${x - 9} ${y + 6} L ${x + 7} ${y - 2}`} />
+    <text className="st" x={x} y={y + 17} textAnchor="middle">{on ? "driven on" : "driven off"}</text>
   </g>
 );
+
+const DiodeBadge = (x, y, label, on) => {
+  const ty = y + 6;                       /* the valve sits below the name */
+  const tri = `M ${x - 11} ${ty - 5} L ${x - 11} ${ty + 5} L ${x - 2} ${ty} Z`;
+  return (
+    <g key={nk()} className={"dib" + (on ? " on" : "")}>
+      <rect x={x - 25} y={y - 14} width={50} height={35} rx={3} />
+      <text x={x} y={y - 4} textAnchor="middle">{label}</text>
+      {on
+        /* forward biased: current visibly runs straight through the valve */
+        ? <path className="dflow" d={`M ${x - 20} ${ty} H ${x + 20}`} />
+        /* reverse biased: a barrier stands behind the cathode bar */
+        : <path className="dblock" d={`M ${x + 3} ${ty - 7} V ${ty + 7} M ${x + 7} ${ty - 7} V ${ty + 7}`} />}
+      <path className="dtri" d={tri} />
+      <path className="dbar" d={`M ${x - 2} ${ty - 6} V ${ty + 6}`} />
+      <text className="st" x={x} y={y + 17} textAnchor="middle">{on ? "conducting" : "blocking"}</text>
+    </g>
+  );
+};
+
+const DevBadge = (x, y, label, on) =>
+  (isDiode(label) ? DiodeBadge : SwBadge)(x, y, label, on);
+
+/* =====================================================================
+   Design-space map.
+
+   Every card on this page answers "what happens at the operating point I
+   typed in". This one answers the question a designer actually has next:
+   how much of the surrounding space is any good, and which way is uphill.
+
+   It re-runs the topology's own design() across a grid of input voltage
+   against load — so the map can never drift away from the numbers in the
+   panel above, because it is the same code — and colours each cell by
+   efficiency or by total loss.
+
+   Colour is a single-hue sequential ramp, light-to-dark inverted for a
+   dark surface: near-surface = worst, brightest = best. Both ramps were
+   checked with the palette validator against this card's surface
+   (#16202C) — monotone lightness, visible step gaps, and the near-surface
+   end still clearing 2:1 so no cell disappears into the background.    */
+const HM_GOOD = ["#2A5C48", "#2F7057", "#358566", "#3D9B78", "#4EB289", "#69C99F", "#8FDEB8"];
+const HM_BAD = ["#684A25", "#815B2F", "#9A6E3B", "#B4854A", "#CB9E5F", "#DFB87E", "#F0D2A6"];
+const rampAt = (ramp, t) => ramp[clamp(Math.floor(t * ramp.length), 0, ramp.length - 1)];
+
+/* Which spec keys a topology sweeps. Voltage axis first, load axis second. */
+function sweepAxes(topo, spec) {
+  const f = new Set(topo.fields || []);
+  let vKey = null, vLo = 0, vHi = 0, vLabel = "";
+  if (f.has("vinMin") && f.has("vinMax") && spec.vinMax > spec.vinMin) {
+    vKey = "vinNom"; vLo = spec.vinMin; vHi = spec.vinMax; vLabel = "input voltage · V";
+  } else if (f.has("vacMin") && f.has("vacMax") && spec.vacMax > spec.vacMin) {
+    vKey = "vacMin"; vLo = spec.vacMin; vHi = spec.vacMax; vLabel = "line voltage · Vrms";
+  } else if (f.has("vacIn")) {
+    vKey = "vacIn"; vLo = spec.vacIn * 0.85; vHi = spec.vacIn * 1.15; vLabel = "line voltage · Vrms";
+  } else if (f.has("vinNom")) {
+    vKey = "vinNom"; vLo = spec.vinNom * 0.8; vHi = spec.vinNom * 1.2; vLabel = "input voltage · V";
+  } else if (f.has("vdc")) {
+    vKey = "vdc"; vLo = spec.vdc * 0.8; vHi = spec.vdc * 1.2; vLabel = "DC link · V";
+  } else if (f.has("vsec")) {
+    vKey = "vsec"; vLo = spec.vsec * 0.8; vHi = spec.vsec * 1.2; vLabel = "secondary square · V";
+  } else if (f.has("vout")) {
+    vKey = "vout"; vLo = spec.vout * 0.6; vHi = spec.vout * 1.6; vLabel = "output voltage · V";
+  }
+  let lKey = null, lLabel = "";
+  if (f.has("iout")) { lKey = "iout"; lLabel = "load · A"; }
+  else if (f.has("pout")) { lKey = "pout"; lLabel = "load · W"; }
+  else if (f.has("idc")) { lKey = "idc"; lLabel = "load · A"; }
+  if (!vKey || !lKey || !(vHi > vLo)) return null;
+  return { vKey, vLo, vHi, vLabel, lKey, lFull: spec[lKey], lLabel };
+}
+
+/* Pull an efficiency out of whatever the topology reports. Prefers a real
+   loss budget; falls back to a stated efficiency in the highlights. */
+function readEta(res, pout) {
+  if (!res) return null;
+  const loss = (res.loss || []).reduce((a, b) => a + (isFinite(b[1]) && b[1] > 0 ? b[1] : 0), 0);
+  if (loss > 0 && pout > 0) return { eta: pout / (pout + loss), loss };
+  const hi = (res.hi || []).find((h) => /efficiency|η/i.test(h[0]));
+  if (hi) {
+    const v = parseFloat(String(hi[1]).replace("%", ""));
+    if (isFinite(v) && v > 0 && pout > 0) {
+      const e = v > 1 ? v / 100 : v;
+      return { eta: e, loss: pout * (1 / e - 1) };
+    }
+  }
+  return null;
+}
+
+function outPower(topo, spec, res) {
+  /* a design may know its own output power better than the inputs do —
+     a charge pump's output voltage is a result, not a specification */
+  if (res && isFinite(res.pout) && res.pout > 0) return res.pout;
+  if (spec.pout) return spec.pout;
+  if (spec.vout && spec.iout) return Math.abs(spec.vout) * spec.iout;
+  /* rectifier secondaries state a square-wave amplitude and a duty rather
+     than an output voltage */
+  if (spec.vsec && spec.dnom && spec.iout) return spec.vsec * spec.dnom * spec.iout;
+  if (spec.vacIn && spec.idc) return spec.vacIn * Math.SQRT2 * spec.idc;
+  return 0;
+}
+
+function HeatCard({ topo, spec }) {
+  const [mode, setMode] = useState("eta");
+  const [hover, setHover] = useState(null);
+  const axes = useMemo(() => sweepAxes(topo, spec), [topo, spec]);
+
+  const grid = useMemo(() => {
+    if (!axes || !topo.design) return null;
+    const NX = 22, NY = 14, cells = [];
+    let lo = Infinity, hi = -Infinity, any = false;
+    for (let j = 0; j < NY; j++) {
+      /* load from 10 % to 105 % of the design point, bottom row heaviest */
+      const lf = 0.1 + (0.95 * (NY - 1 - j)) / (NY - 1);
+      for (let i = 0; i < NX; i++) {
+        const v = axes.vLo + ((axes.vHi - axes.vLo) * i) / (NX - 1);
+        const s = { ...spec, [axes.vKey]: v, [axes.lKey]: axes.lFull * lf };
+        let r = null;
+        try { r = topo.design(s); } catch (e) { r = null; }
+        const po = outPower(topo, s, r);
+        const m = readEta(r, po);
+        const val = m ? (mode === "eta" ? m.eta : m.loss) : null;
+        const ok = m && isFinite(val) && val > 0 && (mode !== "eta" || val <= 1);
+        if (ok) { any = true; lo = Math.min(lo, val); hi = Math.max(hi, val); }
+        cells.push({ i, j, v, load: axes.lFull * lf, val: ok ? val : null,
+          eta: m ? m.eta : null, loss: m ? m.loss : null,
+          warn: r && r.warn && r.warn.length ? r.warn.length : 0 });
+      }
+    }
+    if (!any) return null;
+    if (hi - lo < 1e-9) { hi = lo * 1.0001 + 1e-9; }
+    return { cells, NX, NY, lo, hi };
+  }, [axes, topo, spec, mode]);
+
+  /* The card is always present, even when it cannot draw. An absent
+     feature that simply vanishes is indistinguishable from a broken one —
+     which is exactly how the EMC lens used to behave on 18 of 30 pages. */
+  if (!axes || !grid) {
+    return (
+      <div className="card">
+        <span className="eyebrow">Design space · how the operating point behaves when it moves</span>
+        <p style={{ marginBottom: 0 }}>
+          {!axes
+            ? "This topology does not expose an input-voltage range and a load together, so there is no two-dimensional space to sweep."
+            : "This topology has no loss model yet, so there is nothing to colour the map with. The equations and stresses below are unaffected — only the efficiency surface is missing."}
+        </p>
+      </div>
+    );
+  }
+
+  const x0 = 60, x1 = 620, y0 = 26, y1 = 168;
+  const cw = (x1 - x0) / grid.NX, ch = (y1 - y0) / grid.NY;
+  /* efficiency: high is good. loss: high is bad, so invert the ramp so
+     "bright" always means "the direction you want to move". */
+  const ramp = mode === "eta" ? HM_GOOD : HM_BAD;
+  const colorOf = (val) => {
+    if (val === null) return "#1A2430";
+    const t = (val - grid.lo) / (grid.hi - grid.lo);
+    return rampAt(ramp, mode === "eta" ? t : 1 - t);
+  };
+  const fmt = (v) => (mode === "eta" ? pct(v) : eng(v, "W"));
+
+  /* mark where the panel above is actually sitting */
+  const opX = x0 + ((clamp(spec[axes.vKey], axes.vLo, axes.vHi) - axes.vLo)
+    / (axes.vHi - axes.vLo)) * (x1 - x0);
+  const opY = y0 + ch * 0.5;                      /* full load = top-ish row */
+  const opRow = grid.NY - 1 - Math.round(((1 - 0.1) / 0.95) * (grid.NY - 1));
+  const opYc = y0 + (clamp(opRow, 0, grid.NY - 1) + 0.5) * ch;
+
+  return (
+    <div className="card">
+      <span className="eyebrow">Design space · how the operating point behaves when it moves</span>
+      <div className="ctl" style={{ margin: "0 0 12px" }} role="group" aria-label="Map quantity">
+        <button className={mode === "eta" ? "on" : ""} onClick={() => setMode("eta")}
+          aria-pressed={mode === "eta"}>efficiency</button>
+        <button className={mode === "loss" ? "on" : ""} onClick={() => setMode("loss")}
+          aria-pressed={mode === "loss"}>total loss</button>
+      </div>
+      <div className="hmwrap">
+        <div className="sch">
+          <svg viewBox="0 0 660 200" style={{ width: "100%", height: "auto", display: "block" }} role="img"
+            onMouseLeave={() => setHover(null)}>
+            {drawScope("hm", () => (<>
+              <g className="hmgrid">
+                {grid.cells.map((c) => (
+                  <rect key={c.j * grid.NX + c.i} className="hmcell"
+                    x={x0 + c.i * cw} y={y0 + c.j * ch}
+                    width={cw + 0.6} height={ch + 0.6}
+                    fill={colorOf(c.val)}
+                    onMouseEnter={() => setHover(c)}
+                    style={{ cursor: "crosshair" }} />
+                ))}
+              </g>
+              {/* the point the panel above describes */}
+              <circle className="hmop" cx={opX} cy={opYc} r={5.5} />
+              <circle className="hmop2" cx={opX} cy={opYc} r={5.5} />
+              {Tx(clamp(opX, x0 + 4, x1 - 76), opYc - 11, "your design",
+                { c: "#E6EDF5", s: 9.5, a: "start" })}
+              {[0, 0.25, 0.5, 0.75, 1].map((t, i) => (
+                <g key={"xt" + i}>
+                  {Tx(x0 + t * (x1 - x0), y1 + 15,
+                    eng(axes.vLo + t * (axes.vHi - axes.vLo), ""), { c: "#5C6E82", s: 9.5, a: "middle" })}
+                </g>
+              ))}
+              {[1, 0.55, 0.1].map((lf, i) => (
+                <g key={"yt" + i}>
+                  {Tx(x0 - 8, y0 + ((1 - (lf - 0.1) / 0.95) * (y1 - y0)) + 3.5,
+                    eng(axes.lFull * lf, ""), { c: "#5C6E82", s: 9.5, a: "end" })}
+                </g>
+              ))}
+              {Tx((x0 + x1) / 2, 196, axes.vLabel, { c: "#8DA0B4", s: 10.5, a: "middle" })}
+              {Tx(x0 - 8, y0 - 10, axes.lLabel, { c: "#8DA0B4", s: 10.5, a: "start" })}
+            </>))}
+          </svg>
+        </div>
+        {hover ? (
+          <div className="hmtip" style={{
+            left: `calc(${((x0 + hover.i * cw + cw / 2) / 660) * 100}% + ${hover.i > grid.NX / 2 ? -170 : 12}px)`,
+            top: `${((y0 + hover.j * ch) / 200) * 100}%`,
+          }}>
+            <div><b>{hover.val === null ? "no solution" : fmt(hover.val)}</b></div>
+            <em>
+              {eng(hover.v, "")} in · {eng(hover.load, "")} load
+              {hover.eta !== null && mode === "loss" ? " · η " + pct(hover.eta) : ""}
+              {hover.loss !== null && mode === "eta" ? " · " + eng(hover.loss, "W") + " lost" : ""}
+              {hover.warn ? " · " + hover.warn + " warning" + (hover.warn > 1 ? "s" : "") : ""}
+            </em>
+          </div>
+        ) : null}
+      </div>
+      <div className="hmscale">
+        <span>{fmt(mode === "eta" ? grid.lo : grid.hi)}</span>
+        <div className="hmbar" style={{
+          background: "linear-gradient(90deg," + (mode === "eta" ? ramp : [...ramp].reverse()).join(",") + ")",
+        }} />
+        <span>{fmt(mode === "eta" ? grid.hi : grid.lo)}</span>
+        <span style={{ fontFamily: "var(--ui)", marginLeft: 4 }}>
+          brighter is better in both views
+        </span>
+      </div>
+      <p className="flownote">
+        Each cell re-runs this topology's own design equations at that input voltage and load, so
+        the map and the panel above can never disagree. Read the gradient, not the absolute number:
+        it shows you which way efficiency improves as the operating point drifts, and where the
+        design falls off a cliff. Cells with no fill are operating points this topology cannot reach.
+      </p>
+    </div>
+  );
+}
 
 /* ---- harmonic envelope of a trapezoidal switching waveform ---- */
 function Spectrum({ fsw, D, tr, amp }) {
@@ -4052,39 +4352,64 @@ function Spectrum({ fsw, D, tr, amp }) {
   const limD = lim.map((q, i) => (i ? "L " : "M ") + lx(q[0]).toFixed(1) + " " + ly(q[1]).toFixed(1)).join(" ");
   const dec = [1e4, 1e5, 1e6, 1e7, 1e8];
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
+
+  /* --- annotations, placed so they cannot land on top of each other ---
+     The corner markers, the envelope label and the limit label all want
+     the same upper-left region. Each is given a preferred anchor, then the
+     set is pushed apart vertically and clamped inside the plot.        */
+  const anns = [];
+  anns.push({ x: clamp(lx(1.1e6), x0 + 4, x1 - 92), y: ly(56) - 8,
+    t: "CISPR 32 class B", c: "#F0796C", a: "start" });
+  anns.push({ x: x0 + 6, y: clamp(ly(dB(2 * amp * D)) - 8, y0 + 9, y1 - 6),
+    t: "envelope", c: "#E0A458", a: "start" });
+  [[f1, "1/(πD·T)", "#E0A458"], [f2, "1/(π·t_r)", "#A88BF0"]].forEach((m, i) => {
+    if (!(m[0] > fmin && m[0] < fmax)) return;
+    /* flip the label to the left of its rule when it would run off the edge */
+    const at = lx(m[0]);
+    const right = at + 6 + 62 < x1;
+    anns.push({ x: right ? at + 6 : at - 6, y: y0 + 11 + i * 13, t: m[1], c: m[2],
+      a: right ? "start" : "end", rule: at });
+  });
+  const ys = layoutLabels(anns.map((a) => a.y), 12, y0 + 9, y1 - 4);
+
   return (
     <div className="sch">
-      <svg viewBox="0 0 660 196" style={{ width: "100%", height: "auto", display: "block" }} role="img">
-        {[0, 40, 80, 120, 160].map((d) => (
-          <g key={d}>
-            <path d={`M ${x0} ${ly(d)} H ${x1}`} {...gl} />
-            {Tx(x0 - 7, ly(d) + 3.5, String(d), { c: "#5C6E82", s: 9.5, a: "end" })}
-          </g>
-        ))}
-        {dec.map((f) => (
-          <g key={f}>
-            <path d={`M ${lx(f)} ${y0} V ${y1}`} {...gl} />
-            {Tx(lx(f), y1 + 13, eng(f, "Hz"), { c: "#5C6E82", s: 9.5, a: "middle" })}
-          </g>
-        ))}
-        {bars.map((b, i) => (
-          <path key={i} d={`M ${b[0].toFixed(1)} ${y1} V ${b[1].toFixed(1)}`}
-            stroke="#5AD1DE" strokeWidth={1.4} opacity={0.75} fill="none" />
-        ))}
-        <path d={envD} stroke="#E0A458" strokeWidth={1.8} fill="none" opacity={0.95} />
-        <path d={limD} stroke="#F0796C" strokeWidth={1.6} fill="none" strokeDasharray="5 4" />
-        {Tx(lx(1.1e6), ly(56) - 7, "CISPR 32 class B", { c: "#F0796C", s: 9.5 })}
-        {Tx(x0 + 6, ly(dB(2 * amp * D)) - 6, "envelope", { c: "#E0A458", s: 9.5 })}
-        {[[f1, "1/(πD·T)", "#E0A458"], [f2, "1/(π·t_r)", "#A88BF0"]].map((m, i) =>
-          m[0] > fmin && m[0] < fmax ? (
-            <g key={i}>
-              <path d={`M ${lx(m[0])} ${y0} V ${y1}`} stroke={m[2]} strokeWidth={1.2}
-                strokeDasharray="3 3" fill="none" opacity={0.8} />
-              {Tx(lx(m[0]) + 4, y0 + 10 + i * 12, m[1], { c: m[2], s: 10 })}
+      <svg viewBox="0 0 660 202" style={{ width: "100%", height: "auto", display: "block" }} role="img">
+        {drawScope("sp", () => (<>
+          {/* the unit sits above the axis, clear of the topmost tick value */}
+          {Tx(x0 - 7, y0 - 4, "dBµV", { c: "#5C6E82", s: 9.5, a: "end" })}
+          {[0, 40, 80, 120, 160].map((d) => (
+            <g key={"h" + d}>
+              <path d={`M ${x0} ${ly(d)} H ${x1}`} {...gl} />
+              {Tx(x0 - 7, ly(d) + 3.5, String(d), { c: "#5C6E82", s: 9.5, a: "end" })}
             </g>
-          ) : null)}
-        {Tx(x0 - 7, y0 + 4, "dBµV", { c: "#5C6E82", s: 9.5, a: "end" })}
-        {Tx(x1, y1 + 13, "frequency", { c: "#5C6E82", s: 9.5, a: "end" })}
+          ))}
+          {dec.map((f, i) => (
+            <g key={"v" + f}>
+              <path d={`M ${lx(f)} ${y0} V ${y1}`} {...gl} />
+              {/* the last decade would collide with the axis caption below */}
+              {i < dec.length - 1
+                ? Tx(lx(f), y1 + 14, eng(f, "Hz"), { c: "#5C6E82", s: 9.5, a: "middle" })
+                : null}
+            </g>
+          ))}
+          {bars.map((b, i) => (
+            <path key={"b" + i} d={`M ${b[0].toFixed(1)} ${y1} V ${b[1].toFixed(1)}`}
+              stroke="#5AD1DE" strokeWidth={1.4} opacity={0.75} fill="none" />
+          ))}
+          <path d={envD} stroke="#E0A458" strokeWidth={1.8} fill="none" opacity={0.95} />
+          <path d={limD} stroke="#F0796C" strokeWidth={1.6} fill="none" />
+          {anns.map((a, i) => (
+            <g key={"a" + i}>
+              {a.rule !== undefined ? (
+                <path d={`M ${a.rule} ${y0} V ${y1}`} stroke={a.c} strokeWidth={1.2}
+                  strokeDasharray="3 3" fill="none" opacity={0.8} />
+              ) : null}
+              {Tx(a.x, ys[i], a.t, { c: a.c, s: 9.5, a: a.a })}
+            </g>
+          ))}
+          {Tx((x0 + x1) / 2, y1 + 30, "frequency", { c: "#5C6E82", s: 10.5, a: "middle" })}
+        </>))}
       </svg>
     </div>
   );
@@ -4093,32 +4418,54 @@ function Spectrum({ fsw, D, tr, amp }) {
 function SpecCard({ topo, spec, res }) {
   const fsw = (spec.fsw || 0) * 1e3;
   const amp0 = spec.vbus || spec.vdc || spec.vinNom || spec.vinMax || spec.vsec || spec.vout || 12;
-  const [amp, setAmp] = useState(String(amp0));
-  const [tr, setTr] = useState(String(spec.tsw || 20));
-  useEffect(() => { setAmp(String(amp0)); setTr(String(spec.tsw || 20)); }, [topo.id]);
+  const tr0 = spec.tsw || 20;
+  /* null means "follow the bench"; a number means the user has taken
+     control of this field and edits on the bench must not overwrite it. */
+  const [amp, setAmp] = useState(null);
+  const [tr, setTr] = useState(null);
+  useEffect(() => { setAmp(null); setTr(null); }, [topo.id]);
   if (!(fsw > 0)) return null;
-  const A = parseFloat(amp) || amp0, T = Math.max(parseFloat(tr) || 20, 0.5);
-  const D = res && res.wave && isFinite(res.wave.D) ? Math.min(Math.max(res.wave.D, 0.02), 0.98) : 0.5;
-  const f1 = fsw / (Math.PI * D), f2 = 1 / (Math.PI * T * 1e-9);
+  const ampTxt = amp === null ? String(amp0) : amp;
+  const trTxt = tr === null ? String(tr0) : tr;
+  const ampN = parseFloat(ampTxt), trN = parseFloat(trTxt);
+  const A = Number.isFinite(ampN) && ampN > 0 ? ampN : amp0;
+  const T = Number.isFinite(trN) && trN > 0 ? trN : tr0;
+  const D = res && res.wave && isFinite(res.wave.D) ? clamp(res.wave.D, 0.02, 0.98) : 0.5;
+  const generic = !(res && res.wave && isFinite(res.wave.D));
+  const f1 = fsw / (Math.PI * D), fEdge = 1 / (Math.PI * T * 1e-9);
   return (
     <div className="card">
       <span className="eyebrow">Spectrum · where the switching energy lands</span>
       <div className="fields" style={{ marginBottom: 12 }}>
         <div className="fld">
-          <label className="eyebrow" htmlFor="sp_a">switch-node step<span className="u"> · V</span></label>
-          <input id="sp_a" type="number" step="any" value={amp} onChange={(e) => setAmp(e.target.value)} />
+          <label htmlFor="sp_a">switch-node step<span className="u"> V</span></label>
+          <input id="sp_a" type="number" step="any" min="0.1" value={ampTxt}
+            onChange={(e) => setAmp(e.target.value)} />
         </div>
         <div className="fld">
-          <label className="eyebrow" htmlFor="sp_t">edge rate t_r<span className="u"> · ns</span></label>
-          <input id="sp_t" type="number" step="any" value={tr} onChange={(e) => setTr(e.target.value)} />
+          <label htmlFor="sp_t">edge rate <Mx t="t_r" /><span className="u"> ns</span></label>
+          <input id="sp_t" type="number" step="any" min="0.1" value={trTxt}
+            onChange={(e) => setTr(e.target.value)} />
+        </div>
+        <div className="fld">
+          <label htmlFor="sp_d">duty at the switch node</label>
+          <input id="sp_d" type="number" readOnly value={D.toFixed(3)}
+            title={generic
+              ? "This topology publishes no switching waveform, so a 0.5 duty is assumed."
+              : "Taken from the design above."} />
         </div>
       </div>
+      {generic ? (
+        <div className="note"><b>note ·</b> This topology does not publish a switching waveform,
+          so the spectrum below assumes a 50 % duty. The corner set by the edge rate is unaffected;
+          the first corner is not.</div>
+      ) : null}
       <Spectrum fsw={fsw} D={D} tr={T * 1e-9} amp={A} />
       <div className="grid3" style={{ marginTop: 12 }}>
         <div className="stat"><span className="eyebrow">first corner</span>
           <div className="big cu">{eng(f1, "Hz")}</div></div>
         <div className="stat"><span className="eyebrow">edge corner</span>
-          <div className="big vi">{eng(f2, "Hz")}</div></div>
+          <div className="big vi">{eng(fEdge, "Hz")}</div></div>
         <div className="stat"><span className="eyebrow">rolls off</span>
           <div className="big cy">−40 dB/dec</div></div>
       </div>
@@ -4126,7 +4473,7 @@ function SpecCard({ topo, spec, res }) {
         The envelope is flat to the first corner, falls at 20 dB/decade to the second, then at 40 dB/decade.
         Only the edge rate sets that second corner, which is why slowing the gate drive is the most direct
         lever on high-frequency content — and why it trades directly against switching loss.
-        Slew this edge twice as slowly and everything above <Sub t={eng(f2, "Hz")} /> drops by 6 dB.
+        Slew this edge twice as slowly and everything above <Sub t={eng(fEdge, "Hz")} /> drops by 6 dB.
       </p>
       <p className="flownote" style={{ color: "var(--faint)" }}>
         This is the source spectrum of an ideal trapezoid at the switch node, not a measured emission.
@@ -4142,26 +4489,34 @@ function SpecCard({ topo, spec, res }) {
    the inductor charges and slows as it discharges.                       */
 function FlowCard({ topo, res }) {
   const F = FLOW[topo.id];
-  const reduce = typeof window !== "undefined" && window.matchMedia
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduce = usePrefersReducedMotion();
   const [p, setP] = useState(0);
-  const [play, setPlay] = useState(!reduce);
+  const [play, setPlay] = useState(true);
   const [spd, setSpd] = useState(1);
   const [lens, setLens] = useState("i");
 
   useEffect(() => { setP(0); setLens("i"); }, [topo.id]);
+  useEffect(() => { if (reduce) setPlay(false); }, [reduce]);
   useEffect(() => {
     if (!play || !F) return undefined;
     let raf, last = 0;
     const step = (now) => {
-      if (last) setP((v) => (v + ((now - last) / 1000) * 0.28 * spd) % 1);
+      if (last) {
+        const dt = Math.min((now - last) / 1000, 0.1);
+        setP((v) => (v + dt * 0.28 * spd) % 1);
+      }
       last = now; raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [play, spd, F, topo.id]);
 
-  const sch = useMemo(() => (SCH[topo.sch] ? SCH[topo.sch]() : null), [topo.sch]);
+  /* The schematic underneath never changes while the animation runs, so it
+     is built once per topology and kept out of the per-frame path. */
+  const sch = useMemo(
+    () => drawScope("sc", () => (SCH[topo.sch] ? SCH[topo.sch]() : null)),
+    [topo.sch]
+  );
   const wv = res && res.wave ? res.wave : null;
   const D = wv && isFinite(wv.D) ? Math.min(Math.max(wv.D, 0.03), 0.97) : 0.5;
   const iLo = wv ? (wv.pulse ? 0 : Math.max(wv.iavg - wv.dI / 2, 0)) : 0;
@@ -4190,11 +4545,16 @@ function FlowCard({ topo, res }) {
   const iNow = M.f(p);
   const flowOff = -(qOf(p) / M.tot) * 240;
 
+  /* Phase lookup. Some topologies define windows that do not tile the
+     cycle (a rectifier conducts for a slice and idles for the rest), so
+     falling outside every window has to resolve to the last phase that
+     started rather than sticking on whatever was previously showing. */
+  const bounds = F.ph.map((q, k) =>
+    (q.f ? q.f(D) : [k / F.ph.length, (k + 1) / F.ph.length]));
   let idx = 0;
-  for (let k = 0; k < F.ph.length; k++) {
-    const b = F.ph[k].f ? F.ph[k].f(D) : [k / F.ph.length, (k + 1) / F.ph.length];
-    if (p >= b[0] && p < b[1]) { idx = k; break; }
-    if (p >= b[1]) idx = k;
+  for (let k = 0; k < bounds.length; k++) {
+    if (p >= bounds[k][0] && p < bounds[k][1]) { idx = k; break; }
+    if (p >= bounds[k][0]) idx = k;
   }
   const ph = F.ph[idx];
   const band = ph.f ? ph.f(D) : null;
@@ -4205,34 +4565,37 @@ function FlowCard({ topo, res }) {
   const rising = M.f(Math.min(p + 0.01, 0.999)) > iNow;
   const per = (640 - 52) / 2.4, cx = (52 + p * per) / 660 * 100;
 
+  const devs = (F.sw || []).map((q, j) => ({
+    label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
+  }));
+
   return (
     <div className="card">
       <span className="eyebrow">How it works · current path, at the real rate</span>
-      <div className="flowctl">
-        <button className={play ? "pl on" : "pl"} onClick={() => setPlay(!play)}>{play ? "❚❚" : "▶"}</button>
-        {[0.5, 1, 2].map((v) => (
-          <button key={v} className={spd === v && play ? "on" : ""}
-            onClick={() => { setSpd(v); setPlay(true); }}>{v}×</button>
-        ))}
-        <span className="sp" />
-        {F.ph.map((q, j) => (
-          <button key={j} className={j === idx ? "on" : ""} onClick={() => jump(j)}>{q.t}</button>
-        ))}
-        {F.emc ? (
+      <PlayBar
+        play={play} onPlay={() => setPlay(!play)}
+        spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
+        phases={F.ph.map((q) => q.t)} phase={play ? -1 : idx} onPhase={jump}
+        extra={
           <>
             <span className="sp" />
-            <button className={lens === "i" ? "on" : ""} onClick={() => setLens("i")}>current</button>
-            <button className={lens === "emc" ? "on" : ""} onClick={() => setLens("emc")}>EMC</button>
+            <button className={lens === "i" ? "on" : ""} onClick={() => setLens("i")}
+              aria-pressed={lens === "i"}>current path</button>
+            <button className={lens === "emc" ? "on" : ""} onClick={() => setLens("emc")}
+              aria-pressed={lens === "emc"} disabled={!F.emc}
+              title={F.emc ? "Show the hot loop and the swinging node" : "No EMC overlay drawn for this topology yet"}>
+              EMC hot spots
+            </button>
+            {wv ? (
+              <span className="ird">
+                <Mx t={wv.ilabel || "i_L"} /> = <b>{eng(iNow, "A")}</b>
+                <em className={rising ? "up" : "dn"}>{rising ? "▲ rising" : "▼ falling"}</em>
+              </span>
+            ) : null}
           </>
-        ) : null}
-        {wv ? (
-          <span className="ird">
-            <Mx t={wv.ilabel || "i_L"} /> = <b>{eng(iNow, "A")}</b>
-            <em className={rising ? "up" : "dn"}>{rising ? "▲ rising" : "▼ falling"}</em>
-          </span>
-        ) : null}
-      </div>
-      <div className="flowwrap">
+        }
+      />
+      <div className="flowwrap fig">
         {sch}
         <svg className="flowov" viewBox={`0 0 ${F.w} ${F.h}`} aria-hidden="true">
           {lens === "emc" && F.emc ? (
@@ -4250,10 +4613,23 @@ function FlowCard({ topo, res }) {
                 style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / M.pk) }} />)}
             </>
           )}
-          {(F.sw || []).map((q, j) => SwBadge(q[0], q[1], q[2],
-            ph.on ? !!ph.on[j] : false))}
+          {drawScope("db", () => (F.sw || []).map((q, j) =>
+            DevBadge(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false)))}
         </svg>
       </div>
+      {devs.length ? (
+        <div className="devleg">
+          {devs.map((d, j) => (
+            <span key={j} className={d.on ? "lit" : "blk"}>
+              <i /><b>{d.label}</b>
+              {d.diode
+                ? (d.on ? "forward biased — it conducts because the circuit forces it to"
+                        : "reverse biased — it blocks, no one told it to")
+                : (d.on ? "commanded on by the gate driver" : "commanded off by the gate driver")}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <p className="flownote">
         {lens === "emc"
           ? <Sub t="Red marks the loop carrying switched current: its enclosed area sets the magnetic field it radiates, so minimising it is the first layout job. Violet marks the node that swings the full rail every cycle — the dominant source of common-mode current through stray capacitance to earth. Keep its copper no larger than the current requires." />
@@ -4269,33 +4645,107 @@ function FlowCard({ topo, res }) {
   );
 }
 
+const TABS = [["bench", "Bench"], ["cheat", "Cheat sheet"], ["select", "Selector"]];
+
+/* The tab and the topology live in the URL hash, so the back button works,
+   a reload lands where you left off, and a specific converter can be sent
+   to someone as a link. */
+function readHash() {
+  if (typeof window === "undefined") return {};
+  const h = window.location.hash.replace(/^#\/?/, "");
+  if (!h) return {};
+  const [tab, tid] = h.split("/");
+  return {
+    tab: ["bench", "cheat", "select"].includes(tab) ? tab : undefined,
+    tid: tid && TOPOS.some((t) => t.id === tid) ? tid : undefined,
+  };
+}
+
 export default function App() {
-  const [tab, setTab] = useState("bench");
-  const [tid, setTid] = useState("buck");
+  const start = readHash();
+  const [tab, setTab] = useState(start.tab || "bench");
+  const [tid, setTid] = useState(start.tid || "buck");
   const [q, setQ] = useState("");
-  const [raw, setRaw] = useState(() => mkRaw("buck"));
+  const [sq, setSq] = useState("");
+  const [raw, setRaw] = useState(() => mkRaw(start.tid || "buck"));
   const [scat, setScat] = useState("All");
+  const tabRefs = useRef([]);
+
+  useEffect(() => {
+    const want = "#/" + tab + (tab === "bench" ? "/" + tid : "");
+    if (window.location.hash !== want) window.history.replaceState(null, "", want);
+  }, [tab, tid]);
+  useEffect(() => {
+    const on = () => {
+      const h = readHash();
+      if (h.tab) setTab(h.tab);
+      if (h.tid) setTid(h.tid);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
 
   const topo = TOPOS.find((t) => t.id === tid) || TOPOS[0];
+
+  /* Sanitise once, here, so no design() ever has to defend itself. Anything
+     unparseable falls back to the field default; anything out of range is
+     clamped to the nearest usable value. The field itself shows the user
+     that their entry was rewritten (see Fields). */
   const spec = useMemo(() => {
     const o = {};
     Object.entries(raw).forEach(([k, v]) => {
+      const F = FIELDS[k];
       const n = parseFloat(v);
-      o[k] = isFinite(n) ? n : (FIELDS[k] ? FIELDS[k].d : 0);
+      const base = isFinite(n) ? n : (F ? F.d : 0);
+      o[k] = F && F.mn !== undefined ? clamp(base, F.mn, F.mx) : base;
     });
     return o;
   }, [raw]);
+
+  /* A thrown exception and a design that simply yields no numbers are
+     different failures and get different messages — the old code caught
+     everything and reported "enter a full set of numbers", which was both
+     wrong and unhelpful when the real cause was a bug. */
   const res = useMemo(() => {
-    try { return topo.design ? topo.design(spec) : null; } catch (e) { return null; }
+    if (!topo.design) return null;
+    try { return topo.design(spec); } catch (e) {
+      return { error: e && e.message ? e.message : String(e) };
+    }
   }, [topo, spec]);
 
-  const pick = (id) => { setTid(id); setRaw(mkRaw(id)); if (tab !== "bench") setTab("bench"); };
+  /* Carry across only the values the user actually changed. A switching
+     frequency or an output current means the same thing on the next page
+     and re-typing it is pure friction — but each topology's own defaults
+     exist because its sensible operating point is different, so an
+     untouched field must keep the new page's default rather than dragging
+     a 3.3 V buck output onto a boost that cannot produce it. */
+  const pick = useCallback((id) => {
+    const prevDefaults = mkRaw(tid);
+    setRaw((prev) => {
+      const next = mkRaw(id);
+      Object.keys(next).forEach((k) => {
+        const edited = prev[k] !== undefined && prevDefaults[k] !== undefined
+          && prev[k] !== prevDefaults[k];
+        if (edited) next[k] = prev[k];
+      });
+      return next;
+    });
+    setTid(id);
+    setTab("bench");
+  }, [tid]);
   const set = (k, v) => setRaw((r) => ({ ...r, [k]: v }));
 
+  /* Fold diacritics so "cuk" finds "Ćuk" — otherwise the entry is
+     unreachable by typing, because nobody reaches for Ć. */
+  const fold = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const needle = fold(q.trim());
   const hits = TOPOS.filter((t) =>
-    !q.trim() || (t.name + " " + t.cat + " " + t.tag + " " + t.chips.join(" ")).toLowerCase().includes(q.toLowerCase()));
+    !needle || fold(t.name + " " + t.cat + " " + t.tag + " " + t.chips.join(" ")).includes(needle));
+  const sheetNeedle = fold(sq.trim());
   const sheetCats = ["All", ...Array.from(new Set(SHEETS.map((s) => s.cat)))];
-  const sheets = SHEETS.filter((s) => scat === "All" || s.cat === scat);
+  const sheets = SHEETS.filter((s) => (scat === "All" || s.cat === scat)
+    && (!sheetNeedle || fold(s.title + " " + s.cat + " "
+      + s.rows.map((r) => r.e + " " + (r.n || "")).join(" ")).includes(sheetNeedle)));
 
   return (
     <div className="ps">
@@ -4303,34 +4753,65 @@ export default function App() {
       <div className="hdr">
         <div className="brand">
           <h1>POWER<b>·</b>STAGE</h1>
-          <span>interactive designer and reference · 30 topologies</span>
+          <span>interactive designer and reference · {TOPOS.length} topologies</span>
         </div>
-        <div className="tabs">
-          {[["bench", "Bench"], ["cheat", "Cheat sheet"], ["select", "Selector"]].map(([k, l]) => (
-            <button key={k} className={"tab" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>{l}</button>
+        <div className="tabs" role="tablist" aria-label="Sections">
+          {TABS.map(([k, l], i) => (
+            <button key={k} id={"tab-" + k} role="tab" ref={(el) => { tabRefs.current[i] = el; }}
+              aria-selected={tab === k} aria-controls={"panel-" + k} tabIndex={tab === k ? 0 : -1}
+              className={"tab" + (tab === k ? " on" : "")}
+              onKeyDown={(e) => {
+                const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+                if (!d) return;
+                e.preventDefault();
+                const n = (i + d + TABS.length) % TABS.length;
+                setTab(TABS[n][0]);
+                if (tabRefs.current[n]) tabRefs.current[n].focus();
+              }}
+              onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
       </div>
 
       {tab === "bench" && (
-        <div className="wrap"><div className="layout">
+        <div className="wrap" id="panel-bench" role="tabpanel" aria-labelledby="tab-bench"><div className="layout">
           <nav className="rail" aria-label="Topologies">
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter topologies…" aria-label="Filter topologies" />
-            {CATS.map((c) => {
-              const list = hits.filter((t) => t.cat === c);
-              if (!list.length) return null;
-              return (
-                <div className="rgrp" key={c}>
-                  <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>{c}</span>
-                  {list.map((t) => (
-                    <button key={t.id} className={"ritem" + (t.id === tid ? " on" : "")} onClick={() => pick(t.id)}>
-                      {t.name}
-                    </button>
-                  ))}
+            <div className="railsearch">
+              <input value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter topologies…" aria-label="Filter topologies" />
+              {q ? <button className="railclear" onClick={() => setQ("")} aria-label="Clear filter">×</button> : null}
+            </div>
+            {q ? (
+              <span className="railcount" role="status" aria-live="polite">
+                {hits.length} of {TOPOS.length} {hits.length === 1 ? "topology" : "topologies"}
+              </span>
+            ) : null}
+            <div className="railbody">
+              {CATS.map((c) => {
+                const list = hits.filter((t) => t.cat === c);
+                if (!list.length) return null;
+                return (
+                  <div className="rgrp" key={c}>
+                    <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>{c}</span>
+                    {list.map((t) => (
+                      <button key={t.id} className={"ritem" + (t.id === tid ? " on" : "")}
+                        aria-current={t.id === tid ? "true" : undefined}
+                        onClick={() => pick(t.id)}>
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {!hits.length && (
+                <div className="rgrp">
+                  <p style={{ fontSize: "var(--t-fine)", margin: "4px 0 10px" }}>
+                    Nothing matches “{q}”.
+                  </p>
+                  <button className="ritem" onClick={() => setQ("")}>Clear the filter</button>
                 </div>
-              );
-            })}
-            {!hits.length && <div className="rgrp"><span className="eyebrow">no match</span></div>}
+              )}
+            </div>
           </nav>
 
           <main>
@@ -4350,8 +4831,14 @@ export default function App() {
             ) : FIGMAP[topo.id] ? (
               <div className="card">
                 <span className="eyebrow">Operation · one switching period</span>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Where the current actually goes</h3>
-                <FigPanel key={topo.id} id={topo.id} />
+                <h3 style={{ marginBottom: 12 }}>Where the current actually goes</h3>
+                <FigPanel key={topo.id} id={topo.id}
+                  duty={res && res.wave && isFinite(res.wave.D) ? res.wave.D : undefined} />
+                <p className="flownote" style={{ color: "var(--faint)", fontSize: "var(--t-fine)" }}>
+                  The current-path and EMC lenses are not drawn for this topology yet — those
+                  overlays are traced by hand per schematic. The timing strip above is live and
+                  follows the duty from your design.
+                </p>
               </div>
             ) : null}
 
@@ -4364,6 +4851,8 @@ export default function App() {
               <span className="eyebrow">Design output</span>
               <Results res={res} hideWave={!!FLOW[topo.id]} />
             </div>
+
+            <HeatCard topo={topo} spec={spec} />
 
             <SpecCard topo={topo} spec={spec} res={res} />
 
@@ -4385,29 +4874,45 @@ export default function App() {
       )}
 
       {tab === "cheat" && (
-        <div className="wrap">
+        <div className="wrap" id="panel-cheat" role="tabpanel" aria-labelledby="tab-cheat">
+          <div className="railsearch" style={{ maxWidth: 340, marginBottom: 14 }}>
+            <input className="sheetsearch" value={sq} onChange={(e) => setSq(e.target.value)}
+              placeholder="Search the cheat sheet…" aria-label="Search the cheat sheet" />
+            {sq ? <button className="railclear" onClick={() => setSq("")} aria-label="Clear search">×</button> : null}
+          </div>
           <div className="flt">
             {sheetCats.map((c) => (
-              <button key={c} className={scat === c ? "on" : ""} onClick={() => setScat(c)}>{c}</button>
+              <button key={c} className={scat === c ? "on" : ""} onClick={() => setScat(c)}
+                aria-pressed={scat === c}>{c}</button>
             ))}
           </div>
+          {sq || scat !== "All" ? (
+            <p role="status" aria-live="polite" style={{ fontSize: "var(--t-fine)", marginTop: -6 }}>
+              {sheets.length} of {SHEETS.length} sections
+            </p>
+          ) : null}
           <div className="grid2">
             {sheets.map((s, i) => (
               <div className="card" key={i}>
                 <span className="eyebrow">{s.cat}</span>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>{s.title}</h3>
+                <h3 style={{ marginBottom: 12 }}>{s.title}</h3>
                 {s.rows.map((r, j) => <Eq key={j} e={r.e} n={r.n} src={r.src} />)}
               </div>
             ))}
           </div>
+          {!sheets.length ? (
+            <div className="card"><p>Nothing matches “{sq}”. <button className="ritem"
+              style={{ display: "inline", width: "auto", padding: "2px 6px" }}
+              onClick={() => { setSq(""); setScat("All"); }}>Clear the search</button></p></div>
+          ) : null}
         </div>
       )}
 
       {tab === "select" && (
-        <div className="wrap">
+        <div className="wrap" id="panel-select" role="tabpanel" aria-labelledby="tab-select">
           <div className="card">
             <span className="eyebrow">Pick a topology</span>
-            <h3 style={{ fontSize: 15 }}>Five questions, in this order</h3>
+            <h3>Five questions, in this order</h3>
             <ul style={{ marginBottom: 14 }}>
               <li><b style={{ color: "#E4ECF4" }}>Do you need isolation?</b> Safety, ground loops or a large potential difference — if yes, everything in the isolated column, and the answer is usually a flyback below 150 W and a bridge above it.</li>
               <li><b style={{ color: "#E4ECF4" }}>Does V_in cross V_out?</b> If it does, you need a buck-boost family member: four-switch for efficiency, SEPIC for simplicity, Ćuk or Zeta if the ripple has to sit on a particular port.</li>
@@ -4415,22 +4920,36 @@ export default function App() {
               <li><b style={{ color: "#E4ECF4" }}>What is the real constraint?</b> Efficiency, height, cost, EMI, transient response. Each points toward a different solution, and they rarely coincide.</li>
               <li><b style={{ color: "#E4ECF4" }}>How will you rectify?</b> A separate decision from the primary topology, and often the bigger lever. Below about 12 V out, the diode drop costs more than anything you will win on the primary side — go synchronous, and use a current doubler once the output current passes roughly 20 A.</li>
             </ul>
-            <div style={{ overflowX: "auto" }}>
+            <p style={{ fontSize: "var(--t-fine)", color: "var(--faint)" }}>
+              Every row below that maps to a converter on the bench is clickable — it opens that
+              design with your current numbers already filled in.
+            </p>
+            <div className="scrollx">
               <table>
                 <thead><tr>
-                  <th>Topology</th><th><Mx t="M = V_out/V_in" /></th><th>Isolated</th><th>Typical power</th><th>Switch stress</th><th>Character</th>
+                  <th>Topology</th><th>Conversion</th><th>Isolated</th><th>Typical power</th>
+                  <th>Switch stress</th><th>Character</th>
                 </tr></thead>
                 <tbody>
-                  {SELECT.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ color: "#E4ECF4" }}>{r[0]}</td>
-                      <td><span className="ef" style={{ fontSize: 14.5 }}>{TeX(r[1], true)}</span></td>
-                      <td className="n" style={{ color: r[2] === "yes" ? "#6FD39B" : "#5C6E82" }}>{r[2]}</td>
-                      <td className="n">{r[3]}</td>
-                      <td className="v" style={{ fontSize: 12 }}><Mx t={r[4]} /></td>
-                      <td className="n"><Sub t={r[5]} /></td>
-                    </tr>
-                  ))}
+                  {SELECT.map((r, i) => {
+                    const id = SELECT_ID[r[0]];
+                    const go = id ? () => pick(id) : null;
+                    return (
+                      <tr key={i} onClick={go || undefined}
+                        tabIndex={go ? 0 : undefined}
+                        role={go ? "link" : undefined}
+                        onKeyDown={go ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } } : undefined}
+                        title={go ? "Open " + r[0] + " on the bench" : undefined}
+                        style={go ? { cursor: "pointer" } : undefined}>
+                        <td style={{ color: go ? "var(--cy)" : "var(--txt)" }}>{r[0]}</td>
+                        <td><Mx t={r[1]} /></td>
+                        <td className="n" style={{ color: r[2] === "yes" ? "#6FD39B" : "#5C6E82" }}>{r[2]}</td>
+                        <td className="n">{r[3]}</td>
+                        <td className="v" style={{ fontSize: "var(--t-fine)" }}><Mx t={r[4]} /></td>
+                        <td className="n"><Sub t={r[5]} /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
