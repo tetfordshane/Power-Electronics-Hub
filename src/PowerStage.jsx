@@ -272,6 +272,7 @@ function eng(v, unit) {
 const pct = (x) => (isFinite(x) ? (100 * x).toFixed(1) + " %" : "—");
 const f2 = (x) => (isFinite(x) ? x.toFixed(2) : "—");
 const f3 = (x) => (isFinite(x) ? x.toFixed(3) : "—");
+const clamp = (x, lo, hi) => (isFinite(x) ? Math.min(Math.max(x, lo), hi) : lo);
 
 /* ------------------------- typesetting maths -------------------------
    Turns a plain string such as "C_out = ΔI_L/(8·f_sw·ΔV)" into properly
@@ -1069,33 +1070,60 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [] }) {
   );
 }
 
-/* --------------------------- input registry --------------------------- */
+/* --------------------------- input registry ---------------------------
+   mn / mx are hard clamps applied in App before any design() sees the
+   number, so a stray 0 or a negative can never propagate as Infinity or
+   NaN into a result table. They are also fed to the <input> element so
+   the browser's own validation agrees with ours.                       */
 const FIELDS = {
-  vacIn: { l: "V_ac in", u: "Vrms", d: 230 }, idc: { l: "I_dc load", u: "A", d: 1 },
-  cbulk: { l: "C_bulk", u: "µF", d: 470 }, vsec: { l: "V_sec (square)", u: "V", d: 12 },
-  dnom: { l: "duty D", u: "", d: 0.4, s: 0.01 }, ql: { l: "loaded Q", u: "", d: 6, s: 0.5 },
-  vg: { l: "V_gate", u: "V", d: 10 },
-  vinMin: { l: "V_in min", u: "V", d: 9 }, vinNom: { l: "V_in nom", u: "V", d: 12 },
-  vinMax: { l: "V_in max", u: "V", d: 16 }, vout: { l: "V_out", u: "V", d: 3.3 },
-  iout: { l: "I_out", u: "A", d: 10 }, fsw: { l: "f_sw", u: "kHz", d: 500 },
-  r: { l: "ripple ΔI/I", u: "", d: 0.3, s: 0.05 }, dvout: { l: "ΔV_out p-p", u: "mV", d: 30 },
-  eff: { l: "target η", u: "", d: 0.9, s: 0.01 }, esr: { l: "C_out ESR", u: "mΩ", d: 3 },
-  rds: { l: "R_DS(on) hot", u: "mΩ", d: 8 }, vf: { l: "diode V_F", u: "V", d: 0.45 },
-  dcr: { l: "L DCR", u: "mΩ", d: 4 }, tsw: { l: "t_r + t_f", u: "ns", d: 20 },
-  qg: { l: "Q_g per FET", u: "nC", d: 15 }, nph: { l: "phases N", u: "", d: 3, s: 1 },
-  dmax: { l: "D_max", u: "", d: 0.45, s: 0.01 }, krp: { l: "K_rp = ΔI/I_pk", u: "", d: 0.6, s: 0.05 },
-  pout: { l: "P_out", u: "W", d: 65 }, vbus: { l: "V_bus", u: "V", d: 390 },
-  vacMin: { l: "V_ac min", u: "Vrms", d: 85 }, vacMax: { l: "V_ac max", u: "Vrms", d: 265 },
-  fline: { l: "f_line", u: "Hz", d: 50 }, thold: { l: "hold-up", u: "ms", d: 20 },
-  vbusMin: { l: "V_bus min", u: "V", d: 320 }, fr: { l: "f_r", u: "kHz", d: 100 },
-  ln: { l: "L_n = L_m/L_r", u: "", d: 5, s: 0.5 }, qf: { l: "Q at full load", u: "", d: 0.4, s: 0.05 },
-  vdc: { l: "V_dc link", u: "V", d: 400 }, vac: { l: "V_ac out", u: "Vrms", d: 230 },
-  fo: { l: "f_out", u: "Hz", d: 50 }, v2: { l: "V2", u: "V", d: 48 },
-  phi: { l: "phase shift φ", u: "°", d: 45 }, lr: { l: "L_r", u: "µH", d: 20 },
-  nstg: { l: "stages N", u: "", d: 3, s: 1 }, cfly: { l: "C_pump", u: "µF", d: 1 },
-  ncell: { l: "turns ratio n", u: "", d: 4, s: 0.5 }, td: { l: "dead time", u: "ns", d: 100 },
-  coss: { l: "C_oss (eff)", u: "pF", d: 300 }, llk: { l: "L_leak", u: "µH", d: 3 },
-  vclamp: { l: "clamp V", u: "V", d: 130 },
+  vacIn: { l: "V_ac in", u: "Vrms", d: 230, mn: 1, mx: 1000 },
+  idc: { l: "I_dc load", u: "A", d: 1, mn: 1e-3, mx: 1e4 },
+  cbulk: { l: "C_bulk", u: "µF", d: 470, mn: 0.1, mx: 1e6 },
+  vsec: { l: "V_sec (square)", u: "V", d: 12, mn: 0.1, mx: 1e4 },
+  dnom: { l: "duty D", u: "", d: 0.4, s: 0.01, mn: 0.01, mx: 0.99 },
+  ql: { l: "loaded Q", u: "", d: 6, s: 0.5, mn: 0.1, mx: 100 },
+  vg: { l: "V_gate", u: "V", d: 10, mn: 1, mx: 30 },
+  vinMin: { l: "V_in min", u: "V", d: 9, mn: 0.1, mx: 2000 },
+  vinNom: { l: "V_in nom", u: "V", d: 12, mn: 0.1, mx: 2000 },
+  vinMax: { l: "V_in max", u: "V", d: 16, mn: 0.1, mx: 2000 },
+  vout: { l: "V_out", u: "V", d: 3.3, mn: 0.05, mx: 2000 },
+  iout: { l: "I_out", u: "A", d: 10, mn: 1e-3, mx: 1e4 },
+  fsw: { l: "f_sw", u: "kHz", d: 500, mn: 0.1, mx: 1e5 },
+  r: { l: "ripple ΔI/I", u: "", d: 0.3, s: 0.05, mn: 0.01, mx: 2 },
+  dvout: { l: "ΔV_out p-p", u: "mV", d: 30, mn: 0.1, mx: 1e5 },
+  eff: { l: "target η", u: "", d: 0.9, s: 0.01, mn: 0.1, mx: 1 },
+  esr: { l: "C_out ESR", u: "mΩ", d: 3, mn: 0, mx: 1e4 },
+  rds: { l: "R_DS(on) hot", u: "mΩ", d: 8, mn: 0, mx: 1e5 },
+  vf: { l: "diode V_F", u: "V", d: 0.45, mn: 0, mx: 10 },
+  dcr: { l: "L DCR", u: "mΩ", d: 4, mn: 0, mx: 1e4 },
+  tsw: { l: "t_r + t_f", u: "ns", d: 20, mn: 0, mx: 1e5 },
+  qg: { l: "Q_g per FET", u: "nC", d: 15, mn: 0, mx: 1e4 },
+  nph: { l: "phases N", u: "", d: 3, s: 1, mn: 1, mx: 24 },
+  dmax: { l: "D_max", u: "", d: 0.45, s: 0.01, mn: 0.05, mx: 0.9 },
+  krp: { l: "K_rp = ΔI/I_pk", u: "", d: 0.6, s: 0.05, mn: 0.05, mx: 1 },
+  pout: { l: "P_out", u: "W", d: 65, mn: 0.1, mx: 1e6 },
+  vbus: { l: "V_bus", u: "V", d: 390, mn: 10, mx: 2000 },
+  vacMin: { l: "V_ac min", u: "Vrms", d: 85, mn: 1, mx: 1000 },
+  vacMax: { l: "V_ac max", u: "Vrms", d: 265, mn: 1, mx: 1000 },
+  fline: { l: "f_line", u: "Hz", d: 50, mn: 1, mx: 1000 },
+  thold: { l: "hold-up", u: "ms", d: 20, mn: 0.1, mx: 1e4 },
+  vbusMin: { l: "V_bus min", u: "V", d: 320, mn: 10, mx: 2000 },
+  fr: { l: "f_r", u: "kHz", d: 100, mn: 0.1, mx: 1e5 },
+  ln: { l: "L_n = L_m/L_r", u: "", d: 5, s: 0.5, mn: 1.1, mx: 50 },
+  qf: { l: "Q at full load", u: "", d: 0.4, s: 0.05, mn: 0.05, mx: 5 },
+  vdc: { l: "V_dc link", u: "V", d: 400, mn: 1, mx: 5000 },
+  vac: { l: "V_ac out", u: "Vrms", d: 230, mn: 1, mx: 2000 },
+  fo: { l: "f_out", u: "Hz", d: 50, mn: 0.1, mx: 5000 },
+  v2: { l: "V2", u: "V", d: 48, mn: 0.1, mx: 2000 },
+  phi: { l: "phase shift φ", u: "°", d: 45, mn: 1, mx: 89 },
+  lr: { l: "L_r", u: "µH", d: 20, mn: 0.01, mx: 1e5 },
+  nstg: { l: "stages N", u: "", d: 3, s: 1, mn: 1, mx: 20 },
+  cfly: { l: "C_pump", u: "µF", d: 1, mn: 1e-3, mx: 1e4 },
+  ncell: { l: "turns ratio n", u: "", d: 4, s: 0.5, mn: 0.05, mx: 200 },
+  td: { l: "dead time", u: "ns", d: 100, mn: 0, mx: 1e5 },
+  coss: { l: "C_oss (eff)", u: "pF", d: 300, mn: 1, mx: 1e6 },
+  llk: { l: "L_leak", u: "µH", d: 3, mn: 0.001, mx: 1e4 },
+  vclamp: { l: "clamp V", u: "V", d: 130, mn: 1, mx: 5000 },
 };
 const G = (t, rows) => ({ t, rows });
 const R = (k, v, n) => [k, v, n || ""];
@@ -1126,7 +1154,9 @@ const TA = [
     const Dn = du(s.vinNom), Dx = du(s.vinMin), Dm = du(s.vinMax);
     const dI = s.r * Io, L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
-    const Ipk = Io + dIn / 2, ILr = Math.sqrt(Io * Io + dIn * dIn / 12);
+    /* L is sized so the ripple hits its target at V_in max, which is also
+       where the ripple — and therefore the core's peak flux — is worst.  */
+    const Ipk = Io + dI / 2, ILr = Math.sqrt(Io * Io + dIn * dIn / 12);
     const Co = dI / (8 * fs * s.dvout * 1e-3), dVe = dI * s.esr * 1e-3;
     const Ihs = Math.sqrt(Dn * (Io * Io + dIn * dIn / 12));
     const Pc = Ihs * Ihs * s.rds * 1e-3, Psw = 0.5 * s.vinNom * Io * s.tsw * 1e-9 * fs;
@@ -1147,8 +1177,9 @@ const TA = [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
           R("t_on at V_in max", eng(Dm / fs, "s"), "minimum on-time limit"),
-          R("Inductor ripple ΔI_L", eng(dIn, "A"), pct(dIn / Io) + " of I_out"),
-          R("I_L peak / rms", eng(Ipk, "A") + " / " + eng(ILr, "A"), "saturation and heating"),
+          R("Inductor ripple ΔI_L", eng(dIn, "A"), pct(dIn / Io) + " of I_out at nominal"),
+          R("I_L peak (worst case) / rms", eng(Ipk, "A") + " / " + eng(ILr, "A"),
+            "peak taken at V_in max, where ripple is largest — size the core here"),
           R("DCM boundary", eng(dI / 2, "A")),
         ]),
         G("Passives", [
@@ -1187,32 +1218,34 @@ const TA = [
     { e: "M = D", n: "same as the buck; forced-PWM holds this into light load" },
     { e: "P_LS = I_rms²·R_DS + V_F·I_out·2·t_dead·f_sw", n: "body diode conducts during the dead time" },
     { e: "P_gate = Q_g·V_drive·f_sw", n: "per FET — matters above ~1 MHz" },
-    { e: "P_sw ≈ ½·V_in·I_out·(t_r + t_f)·f_sw + Q_oss·V_in·f_sw", n: "only the high-side FET hard-switches" },
+    { e: "P_sw ≈ ½·V_in·I_out·(t_r + t_f)·f_sw + ½·C_oss·V_in^2·f_sw", n: "only the high-side FET hard-switches; the C_oss term is the charge dumped into the SW node each turn-on" },
   ],
   pros: ["Much lower conduction loss at low V_out", "Inherently bidirectional — works as a boost in reverse", "Forced PWM gives a fixed frequency at any load"],
   cons: ["Shoot-through risk; dead time must be right", "Reverse inductor current at light load costs efficiency unless you allow DCM", "Two gate drives"],
   use: ["CPU / FPGA core rails", "48 V→12 V intermediate bus", "Battery chargers"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "qg", "td"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "qg", "vg", "coss", "td"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => Vo / (v * s.eff);
     const Dn = du(s.vinNom), Dx = du(s.vinMin), Dm = du(s.vinMax);
     const dI = s.r * Io, L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
-    const Ipk = Io + dIn / 2, ILr = Math.sqrt(Io * Io + dIn * dIn / 12);
+    const Ipk = Io + dI / 2, ILr = Math.sqrt(Io * Io + dIn * dIn / 12);
     const Co = dI / (8 * fs * s.dvout * 1e-3);
     const Ihs = Math.sqrt(Dn * (Io * Io + dIn * dIn / 12));
     const Ils = Math.sqrt((1 - Dn) * (Io * Io + dIn * dIn / 12));
     const Pc = Ihs * Ihs * s.rds * 1e-3, Pls = Ils * Ils * s.rds * 1e-3;
-    const Psw = 0.5 * s.vinNom * Io * s.tsw * 1e-9 * fs;
-    const Pdt = s.vf * Io * 2 * s.td * 1e-9 * fs, Pg = 2 * s.qg * 1e-9 * 5 * fs;
+    const Pcr = 0.5 * s.vinNom * Io * s.tsw * 1e-9 * fs;
+    const Poss = 0.5 * s.coss * 1e-12 * s.vinNom * s.vinNom * fs;
+    const Psw = Pcr + Poss;
+    const Pdt = s.vf * Io * 2 * s.td * 1e-9 * fs, Pg = 2 * s.qg * 1e-9 * s.vg * fs;
     const Pl = ILr * ILr * s.dcr * 1e-3;
     const Pt = Pc + Pls + Psw + Pdt + Pg + Pl, eta = Vo * Io / (Vo * Io + Pt);
     return {
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
-      loss: [["HS conduction", Pc, "I_rms²·R_DS(on)·D"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw"],
-        ["LS conduction", Pls, "I_rms²·R_DS(on)·(1−D)"], ["Body diode", Pdt, "2·V_F·I_out·t_dead·f_sw"],
-        ["Gate drive", Pg, "2·Q_g·V_drive·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
+      loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
+        ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"], ["Body diode", Pdt, "2·V_F·I_out·t_dead·f_sw"],
+        ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       wave: { D: Dn, dI: dIn, iavg: Io },
       warn: [
         Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair.",
@@ -1232,14 +1265,15 @@ const TA = [
         ]),
         G("Loss budget (nominal)", [
           R("HS conduction / switching", eng(Pc, "W") + " / " + eng(Psw, "W")),
+          R("— of which C_oss", eng(Poss, "W"), "½·C_oss·V_in²·f_sw, lost at every HS turn-on"),
           R("LS conduction", eng(Pls, "W"), "hard-switching loss ≈ 0"),
           R("Body diode (dead time)", eng(Pdt, "W"), "2 × " + s.td + " ns per cycle"),
-          R("Gate drive (both)", eng(Pg, "W")),
+          R("Gate drive (both)", eng(Pg, "W"), "at V_gate = " + s.vg + " V"),
           R("Inductor DCR", eng(Pl, "W")),
           R("Total / efficiency", eng(Pt, "W") + " → " + pct(eta)),
         ]),
         G("Design notes", [
-          R("SW node dV/dt", eng(s.vinNom / (s.tsw * 1e-9), "V/s"), "drives EMI and Miller turn-on"),
+          R("SW node dV/dt", s.tsw > 0 ? eng(s.vinNom / (s.tsw * 1e-9), "V/s") : "—", "drives EMI and Miller turn-on"),
           R("Bootstrap cap", eng(s.qg * 1e-9 / 0.1, "F") + " min", "for 100 mV droop, use 10–100×"),
         ]),
       ],
@@ -1268,7 +1302,12 @@ const TA = [
     const L = Vo * (1 - Dm) / (fs * dI);
     const dIn = Vo * (1 - Dn) / (fs * L);
     const m = Math.floor(N * Dn);
-    const K = ((m + 1 - N * Dn) * (N * Dn - m)) / ((1 - Dn) * N * Dn);
+    /* Kcancel is only defined for 0 < D < 1; outside that the converter is
+       not operating and the expression changes sign rather than blowing up
+       visibly, so pin it to the no-benefit value and let the warn explain. */
+    const K = Dn > 0 && Dn < 1
+      ? ((m + 1 - N * Dn) * (N * Dn - m)) / ((1 - Dn) * N * Dn)
+      : 1;
     const dIo = dIn * K;
     const Co = dIo / (8 * N * fs * s.dvout * 1e-3);
     const Iph_rms = Math.sqrt(Iph * Iph + dIn * dIn / 12);
@@ -1277,10 +1316,13 @@ const TA = [
     const Pl = N * Iph_rms * Iph_rms * s.dcr * 1e-3;
     return {
       hi: [["per-phase current", eng(Iph, "A")], ["ripple cancellation", "×" + f2(K)], ["output ripple f", eng(N * fs, "Hz")]],
-      loss: [["Conduction", Pc, "N·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
+      loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pl, "N·I_phase(rms)²·DCR"]],
       wave: { D: Dn, dI: dIn, iavg: Iph },
-      warn: [K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number."].filter(Boolean),
+      warn: [
+        Dn >= 1 && "V_out exceeds V_in·η — a buck cannot reach this operating point, so the ripple-cancellation numbers below do not apply.",
+        Dn < 1 && K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number.",
+      ].filter(Boolean),
       groups: [
         G("Per phase", [
           R("Phases", String(N)), R("Duty (nom)", f3(Dn)),
@@ -1294,7 +1336,9 @@ const TA = [
           R("Net output ripple", eng(dIo, "A"), "into C_out"),
           R("Ripple frequency", eng(N * fs, "Hz")),
           R("C_out (charge)", eng(Co, "F")),
-          R("Nearest null duties", Array.from({ length: N }, (_, i) => f2((i + 1) / N)).join(" · "), "ripple → 0 at these duties"),
+          R("Cancellation null duties",
+            N > 1 ? Array.from({ length: N - 1 }, (_, i) => f2((i + 1) / N)).join(" · ") : "none",
+            N > 1 ? "ripple → 0 at D = m/N, m = 1…N−1" : "a single phase has nothing to cancel against"),
         ]),
         G("Loss budget", [
           R("Total conduction (HS)", eng(Pc, "W")), R("Total switching", eng(Psw, "W")),
@@ -1327,12 +1371,23 @@ const TA = [
     const du = (v) => 1 - (v * s.eff) / Vo;
     const Dn = du(s.vinNom), Dx = du(s.vinMin), Dm = du(s.vinMax);
     const IL = Io / (1 - Dn), ILx = Io / (1 - Dx);
-    const dI = s.r * ILx, L = s.vinMin * Dx / (fs * dI);
-    const dIn = s.vinNom * Dn / (fs * L);
+    /* ΔI_L ∝ V_in·D = V_in·(1 − η·V_in/V_out), which is maximised at
+       D = 0.5 — i.e. V_in = V_out/2η — not at either end of the input
+       range. Size L against whichever point in range is actually worst. */
+    const vsProd = (v) => v * du(v);
+    const vHalf = Vo / (2 * s.eff);
+    const inRange = vHalf > s.vinMin && vHalf < s.vinMax;
+    const vWorst = [s.vinMin, s.vinMax, ...(inRange ? [vHalf] : [])]
+      .reduce((a, b) => (vsProd(b) > vsProd(a) ? b : a));
+    const dI = s.r * ILx, L = vsProd(vWorst) / (fs * dI);
+    const dIn = vsProd(s.vinNom) / (fs * L);
     const Ipk = ILx + dI / 2;
     const ILr = Math.sqrt(IL * IL + dIn * dIn / 12);
     const Co = Io * Dx / (fs * s.dvout * 1e-3);
-    const Icr = Math.sqrt(ILr * ILr * Dn + Io * Io * (1 - Dn) - Io * Io + Io * Io * Dn) || Io * Math.sqrt(Dn / (1 - Dn));
+    /* i_C = −I_out while the switch is on, and (i_L − I_out) while the
+       diode conducts. Integrating both intervals closes to the form below;
+       the second term is the inductor-ripple contribution.              */
+    const Icr = Math.sqrt(Io * Io * Dn / (1 - Dn) + (1 - Dn) * dIn * dIn / 12);
     const Iq = Math.sqrt(Dn) * ILr;
     const Pc = Iq * Iq * s.rds * 1e-3, Psw = 0.5 * Vo * IL * s.tsw * 1e-9 * fs;
     const Pd = s.vf * Io, Pl = ILr * ILr * s.dcr * 1e-3;
@@ -1356,10 +1411,11 @@ const TA = [
           R("I_L peak", eng(Ipk, "A"), "saturation limit"),
         ]),
         G("Passives", [
-          R("L", eng(L, "H"), "sized at V_in min"),
+          R("L", eng(L, "H"), "sized at V_in = " + eng(vWorst, "V") + " (D = " + f3(du(vWorst)) + ")"
+            + (inRange ? ", the D = 0.5 worst case inside your range" : ", the worst case in your range")),
           R("C_out (charge)", eng(Co, "F"), "for ΔV = " + s.dvout + " mV"),
           R("ΔV from ESR", eng(Ipk * s.esr * 1e-3, "V"), "usually dominant"),
-          R("C_out rms current", eng(Icr, "A"), "this is what kills electrolytics"),
+          R("C_out rms current", eng(Icr, "A"), "≈ I_out·√(D/(1−D)) — this is what kills electrolytics"),
         ]),
         G("Stresses", [
           R("Switch / diode V", eng(Vo, "V"), "plus ringing — derate ≥ 1.3×"),
@@ -1374,7 +1430,7 @@ const TA = [
         G("Control", [
           R("RHP zero (worst case)", eng(frhp, "Hz"), "at V_in min, full load"),
           R("Max sensible f_c", eng(frhp / 5, "Hz"), "and ≤ f_sw/10"),
-          R("Plant", "pole at " + eng(1 / (2 * Math.PI * (R / 2) * Co), "Hz"), "current mode, single pole"),
+          R("Plant", "pole at " + eng(1 / (2 * Math.PI * (Rld / 2) * Co), "Hz"), "current mode, single pole at 2/(R_load·C_out)"),
         ]),
       ],
     };
@@ -1466,8 +1522,24 @@ const TA = [
     const Lbo = s.vinMin * Dbo / (fs * dI);
     const L = Math.max(Lb, Lbo);
     const Co = Io * Dbo / (fs * s.dvout * 1e-3);
+    /* Buck-leg rms is worst at the HIGHEST buck duty, which occurs at the
+       lowest input where the buck leg still runs — not at V_in max.     */
+    const vBuckLo = Math.max(s.vinMin, Vo);
+    const DbMax = Math.min(Vo / (vBuckLo * s.eff), 1);
+    const IrmsBuck = Io * Math.sqrt(DbMax);
+    const IrmsBoost = ILbo * Math.sqrt(Dbo);
+    /* Loss budget: in either mode two switches conduct and two are static,
+       so the inductor current passes through one R_DS(on) each way.     */
+    const ILr = Math.sqrt(ILmax * ILmax + dI * dI / 12);
+    const Pcond = 2 * ILr * ILr * s.rds * 1e-3;
+    const Pdcr = ILr * ILr * s.dcr * 1e-3;
+    const Psw = 0.5 * Math.max(s.vinMax, Vo) * ILmax * s.tsw * 1e-9 * fs;
+    const Pt = Pcond + Pdcr + Psw, eta = Vo * Io / (Vo * Io + Pt);
     return {
-      hi: [["mode at V_in nom", mode], ["inductor", eng(L, "H")], ["peak I_L", eng(ILmax + dI / 2, "A")]],
+      hi: [["mode at V_in nom", mode], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
+      loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg"],
+        ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw"],
+        ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
       wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) },
       warn: [Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate."].filter(Boolean),
       groups: [
@@ -1485,8 +1557,15 @@ const TA = [
         ]),
         G("Stresses", [
           R("Device voltage", eng(Math.max(s.vinMax, Vo), "V"), "max of the two rails, not the sum"),
-          R("Q1/Q2 rms (buck)", eng(Io * Math.sqrt(Db), "A")),
-          R("Q3/Q4 rms (boost)", eng(ILbo * Math.sqrt(Dbo), "A")),
+          R("Peak I_L", eng(ILmax + dI / 2, "A"), "worst case across the range"),
+          R("Q1/Q2 rms (buck)", eng(IrmsBuck, "A"), "at D = " + f3(DbMax) + ", the highest buck duty"),
+          R("Q3/Q4 rms (boost)", eng(IrmsBoost, "A"), "at V_in min"),
+        ]),
+        G("Loss budget (worst case)", [
+          R("Switch conduction", eng(Pcond, "W"), "two devices in the current path"),
+          R("Switching", eng(Psw, "W")),
+          R("Inductor DCR", eng(Pdcr, "W")),
+          R("Total / efficiency", eng(Pt, "W") + " → " + pct(eta)),
         ]),
       ],
     };
@@ -1518,8 +1597,17 @@ const TA = [
     const Ic1 = Math.sqrt(Dn * Io * Io + (1 - Dn) * Iin * Iin);
     const C1 = Io * Dn / (fs * 0.05 * Vc1);
     const Co = dI / (8 * fs * s.dvout * 1e-3);
+    /* Switch and diode both carry (I_in + I_out): the switch for D, the
+       diode for (1 − D). That sum is what makes the Ćuk lossy at extremes. */
+    const Isum = Iin + Io;
+    const Iq = Isum * Math.sqrt(Dn);
+    const Pc = Iq * Iq * s.rds * 1e-3;
+    const Pd = s.vf * Isum * (1 - Dn);
+    const Pt = Pc + Pd, eta = Vo * Io / (Vo * Io + Pt);
     return {
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
+      loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
+        ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
       wave: { D: Dn, dI, iavg: Iin },
       warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
       groups: [
@@ -1537,7 +1625,13 @@ const TA = [
         ]),
         G("Stresses", [
           R("Switch and diode V", eng(Vc1, "V")),
-          R("Switch rms current", eng((Iin + Io) * Math.sqrt(Dn), "A")),
+          R("Switch rms current", eng(Iq, "A"), "carries I_in + I_out during t_on"),
+          R("Diode average current", eng(Isum * (1 - Dn), "A")),
+        ]),
+        G("Loss budget (nominal)", [
+          R("Switch conduction", eng(Pc, "W")),
+          R("Diode", eng(Pd, "W"), "replace with a FET if this dominates"),
+          R("Total / efficiency", eng(Pt, "W") + " → " + pct(eta), "conduction terms only"),
         ]),
       ],
     };
@@ -1570,9 +1664,18 @@ const TA = [
     const Cs = Io * Dx / (fs * 0.05 * s.vinMin);
     const Co = Io * Dx / (fs * s.dvout * 1e-3);
     const Vst = s.vinMax + Vo + Vf;
-    const Ipk = IL1 + Io + dI;
+    /* dI is already the ripple of the SUMMED (L1 + L2) current, so the
+       switch peak is the sum of the two DC currents plus half of it.    */
+    const Ipk = IL1 + Io + dI / 2;
+    const Isum = IL1 + Io;
+    const Iq = Isum * Math.sqrt(Dx);
+    const Pc = Iq * Iq * s.rds * 1e-3;
+    const Pd = Vf * Io;
+    const Pt = Pc + Pd, eta = Vo * Io / (Vo * Io + Pt);
     return {
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
+      loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
+        ["Diode", Pd, "V_F·I_out"]],
       wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn) },
       warn: [
         Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback.",
@@ -1582,7 +1685,7 @@ const TA = [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " / " + f3(Dn) + " / " + f3(Dm)),
           R("I_L1 (input, worst)", eng(IL1, "A")), R("I_L2 (output)", eng(Io, "A")),
-          R("Switch peak current", eng(Ipk, "A"), "I_L1 + I_L2 + ripple"),
+          R("Switch peak current", eng(Ipk, "A"), "I_L1 + I_L2 + ΔI/2"),
         ]),
         G("Passives", [
           R("L1 = L2 (uncoupled)", eng(L, "H"), "use L/2 each if coupled on one core"),
@@ -1594,7 +1697,13 @@ const TA = [
         ]),
         G("Stresses", [
           R("Switch / diode V", eng(Vst, "V"), "V_in max + V_out + V_F"),
+          R("Switch rms current", eng(Iq, "A"), "carries I_L1 + I_L2 during t_on"),
           R("Diode average current", eng(Io, "A")),
+        ]),
+        G("Loss budget (V_in min)", [
+          R("Switch conduction", eng(Pc, "W")),
+          R("Diode", eng(Pd, "W")),
+          R("Total / efficiency", eng(Pt, "W") + " → " + pct(eta), "conduction terms only"),
         ]),
       ],
     };
@@ -1649,32 +1758,45 @@ const TA = [
   chips: ["no inductor", "fixed ratio", "integrable"],
   what: "Capacitors are shuttled between the input and output by antiphase clocks. There is no inductor at all, so the whole thing integrates on-die, but the ratio is fixed by topology and the equivalent output resistance sets both the regulation and the loss.",
   eqs: [
-    { e: "V_out(ideal) = (N + 1)·V_in − N·V_F", n: "N pump stages; use FETs to kill the V_F term" },
-    { e: "R_out ≈ N / (f_sw·C)", n: "slow-switching limit — this is a real resistance, not a loss-free drop" },
+    { e: "V_out(ideal) = (N + 1)·(V_in − V_F)", n: "N pump stages means N+1 diodes in the charge path; use FETs to kill the V_F term entirely" },
+    { e: "R_SSL = N / (f_sw·C_fly)", n: "slow-switching limit — a real resistance set by charge transfer, not by any resistor" },
+    { e: "R_FSL ≈ 2·(2N + 1)·R_DS(on)", n: "fast-switching limit — the on-resistance the charge has to flow through" },
+    { e: "R_out = √(R_SSL^2 + R_FSL^2)", n: "the two limits combine in quadrature" },
     { e: "ΔV_out = I_out / (f_sw·C_out)", n: "ripple at the pump frequency" },
-    { e: "η_max = V_out / (N + 1)·V_in", n: "efficiency collapses away from the ideal ratio" },
+    { e: "η_max = V_out / ((N + 1)·V_in)", n: "efficiency collapses away from the ideal ratio — a charge pump cannot regulate for free" },
   ],
   pros: ["No magnetics — tiny, cheap, EMI-quiet", "Trivially integrated", "Very good light-load efficiency"],
   cons: ["Fixed ratio; regulation costs efficiency directly", "Output impedance rises fast at low f_sw or small C", "Poor at high current"],
   use: ["LCD and EEPROM bias", "Gate-drive bootstraps", "48 V→12 V unregulated 'DC transformers'"],
-  fields: ["vinNom", "iout", "fsw", "nstg", "cfly", "vf", "dvout"],
+  fields: ["vinNom", "iout", "fsw", "nstg", "cfly", "vf", "rds", "dvout"],
   design(s) {
     const fs = s.fsw * 1e3, N = Math.max(1, Math.round(s.nstg)), Cf = s.cfly * 1e-6;
-    const Vi = (N + 1) * s.vinNom - N * s.vf;
-    const Rssl = N / (2 * Cf * fs);
+    /* An N-stage Dickson puts N+1 rectifiers in the charge path, so every
+       one of them takes a V_F bite out of the ideal (N+1)·V_in.         */
+    const Vi = (N + 1) * (s.vinNom - s.vf);
+    const Videal = (N + 1) * s.vinNom;
+    const Rssl = N / (Cf * fs);
     const Rfsl = 2 * (2 * N + 1) * s.rds * 1e-3;
     const Ro = Math.sqrt(Rssl * Rssl + Rfsl * Rfsl);
     const Vl = Vi - s.iout * Ro;
     const Cout = s.iout / (fs * s.dvout * 1e-3);
-    const eta = Vl * s.iout / ((N + 1) * s.vinNom * s.iout);
+    const eta = Vl > 0 ? Vl / Videal : 0;
     return {
-      hi: [["ideal V_out", eng(Vi, "V")], ["loaded V_out", eng(Vl, "V")], ["R_out", eng(Ro, "Ω")]],
-      warn: [Vl < Vi * 0.8 && "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage."].filter(Boolean),
+      hi: [["ideal V_out", eng(Vi, "V")], ["loaded V_out", eng(Math.max(Vl, 0), "V")], ["R_out", eng(Ro, "Ω")]],
+      warn: [
+        Vl <= 0 && "R_out is large enough that the pump collapses under this load — it cannot deliver "
+          + eng(s.iout, "A") + " at all. Raise f_sw or C_pump, or accept far less current.",
+        Vl > 0 && Vl < Vi * 0.8 && "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage.",
+        Rfsl > Rssl * 2 && "R_DS(on) dominates R_out: you are in the fast-switching limit, so raising f_sw will not help. Use bigger switches.",
+      ].filter(Boolean),
       groups: [
         G("Output", [
-          R("Stages", String(N)), R("Ideal output", eng(Vi, "V")),
+          R("Stages", String(N), N + 1 + " rectifiers in the charge path"),
+          R("Ideal output", eng(Vi, "V"), "(N+1)·(V_in − V_F)"),
           R("Equivalent R_out", eng(Ro, "Ω")),
-          R("Loaded output", eng(Vl, "V"), "at " + eng(s.iout, "A")),
+          R("— slow-switching (charge)", eng(Rssl, "Ω"), "N/(f_sw·C_fly) — falls as f_sw rises"),
+          R("— fast-switching (R_DS)", eng(Rfsl, "Ω"), "2·(2N+1)·R_DS(on) — a floor f_sw cannot beat"),
+          R("Loaded output", eng(Math.max(Vl, 0), "V"), "at " + eng(s.iout, "A")),
           R("Droop", eng(s.iout * Ro, "V")),
         ]),
         G("Components", [
@@ -1683,9 +1805,9 @@ const TA = [
           R("Pump cap rms current", eng(s.iout / Math.sqrt(2), "A"), "roughly, per cap"),
         ]),
         G("Efficiency", [
-          R("Best-case η", pct(eta), "= V_out / (N+1)·V_in"),
-          R("Loss in R_out", eng(s.iout * s.iout * Ro, "W")),
-          R("Diode loss (if diodes)", eng(N * s.vf * s.iout, "W"), "use synchronous FETs to remove"),
+          R("Best-case η", pct(eta), "= V_out / ((N+1)·V_in)"),
+          R("Loss in R_out", eng(s.iout * s.iout * Ro, "W"), "irreducible charge-redistribution loss"),
+          R("Diode loss (if diodes)", eng((N + 1) * s.vf * s.iout, "W"), "use synchronous FETs to remove"),
         ]),
       ],
     };
@@ -1781,7 +1903,7 @@ const TB = [
     { e: "V_out = n·V_in·D,  n = N_s/N_p", n: "D limited to < 0.5 for core reset" },
     { e: "L = V_out·(1 − D)/(f_sw·ΔI_L)", n: "output filter behaves exactly like a buck" },
     { e: "V_DS = V_in(max)", n: "clamped by D_a/D_b — the whole point" },
-    { e: "I_pri = n·I_out + I_mag", n: "magnetising current adds nothing useful" },
+    { e: "I_pri = n·I_out + I_mag", n: "magnetising current adds nothing useful; the numbers below carry the reflected term only, so add I_mag = V_in·D/(L_m·f_sw) once you have picked a core" },
   ],
   pros: ["Devices clamped to V_in — 500 V FETs run off 400 V bus", "Low output ripple (inductor + buck-style filter)", "No dissipative snubber needed"],
   cons: ["Duty limited below 0.5 → poor transformer utilisation", "Two switches with one high-side drive", "Needs an output inductor"],
@@ -1796,7 +1918,6 @@ const TB = [
     const Co = dI / (8 * fs * s.dvout * 1e-3);
     const Ipri = n * Io;
     const Iprms = Ipri * Math.sqrt(Dn);
-    const Pcu = 0;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["D at V_in nom", f3(Dn)]],
       wave: { D: Dn, dI, iavg: Io },
@@ -1808,9 +1929,10 @@ const TB = [
         G("Transformer", [
           R("Turns ratio N_s/N_p", f3(n), "= 1/" + f2(1 / n)),
           R("D at V_in min / nom / max", f3(s.dmax) + " / " + f3(Dn) + " / " + f3(Dm)),
-          R("Primary current (flat top)", eng(Ipri, "A")),
-          R("Primary rms", eng(Iprms, "A")),
+          R("Primary current (flat top)", eng(Ipri, "A"), "reflected load only — magnetising current not included"),
+          R("Primary rms", eng(Iprms, "A"), "add I_mag once L_m is known"),
           R("Secondary rms", eng(Io * Math.sqrt(Dn), "A")),
+          R("Reset time needed", eng(Dn / fs, "s"), "equal to t_on — this is what forces D < 0.5"),
         ]),
         G("Output filter", [
           R("L", eng(L, "H"), "sized at V_in max"),
@@ -1902,16 +2024,24 @@ const TB = [
     const L = Vo * (1 - 2 * Dm) / (2 * fs * dI);
     const Co = dI / (8 * 2 * fs * s.dvout * 1e-3);
     const Ipri = n * Io;
-    const Icdiv = Ipri * Math.sqrt(Dn);
+    /* Both switches conduct D each, so the primary rms over a full period
+       is I_pri·√(2D). Each divider cap sees roughly half of that.       */
+    const Iqrms = Ipri * Math.sqrt(Dn);
+    const Iprms = Ipri * Math.sqrt(2 * Dn);
+    const Icdiv = Iprms / 2;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(s.vinMax, "V")]],
       wave: { D: Dn, dI, iavg: Io },
+      warn: [
+        s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
+      ].filter(Boolean),
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p", f3(n)),
           R("D per switch (nom)", f3(Dn)),
           R("Primary current when on", eng(Ipri, "A")),
-          R("Switch rms", eng(Icdiv, "A")),
+          R("Primary rms (full period)", eng(Iprms, "A"), "I_pri·√(2D) — both half-cycles"),
+          R("Switch rms (each)", eng(Iqrms, "A"), "I_pri·√D — one half-cycle each"),
         ]),
         G("Bridge capacitors", [
           R("Divider cap rms current", eng(Icdiv, "A"), "each cap carries half the primary rms"),
@@ -2010,29 +2140,60 @@ const TB = [
     const Lm = Ln * Lr;
     const M = (fn, Q) => 1 / Math.sqrt(Math.pow(1 + 1 / Ln - 1 / (Ln * fn * fn), 2) + Q * Q * Math.pow(fn - 1 / fn, 2));
     const Mmax = s.vinNom / s.vinMin, Mmin = s.vinNom / s.vinMax;
-    let fnLo = 0.4, fnHi = 2;
-    for (let f = 0.3; f <= 2; f += 0.005) { if (M(f, Qd) >= Mmax) { fnLo = f; break; } }
-    for (let f = 2; f >= 0.3; f -= 0.005) { if (M(f, Qd) >= Mmin) { fnHi = f; break; } }
-    let peak = 0; for (let f = 0.3; f <= 2; f += 0.005) peak = Math.max(peak, M(f, Qd));
+    /* The gain curve rises from zero, peaks BELOW f_n = 1, then falls away
+       monotonically. Only the falling side is inductive; the rising side is
+       capacitive, where the LLC loses ZVS and destroys itself. Locate the
+       peak first, then solve on the inductive branch only — a naive upward
+       sweep from f_n = 0.3 returns the capacitive solution.              */
+    const FN_LO = 0.2, FN_HI = 4;
+    let fPeak = 1, peak = 0;
+    for (let f = FN_LO; f <= FN_HI; f += 0.001) {
+      const m = M(f, Qd);
+      if (m > peak) { peak = m; fPeak = f; }
+    }
+    const solveFn = (target) => {
+      if (!(target > 0) || target > peak) return null;   // gain unreachable
+      if (M(FN_HI, Qd) > target) return null;            // never falls that far
+      let lo = fPeak, hi = FN_HI;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if (M(mid, Qd) >= target) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    };
+    const fnLo = solveFn(Mmax), fnHi = solveFn(Mmin);
     const Impk = n * (Vo + s.vf) / (4 * fr * Lm);
     const tdmin = 2 * s.coss * 1e-12 * s.vinNom / Math.max(Impk, 1e-9);
     const Icr = Math.sqrt(Math.pow(Math.PI * Io / (2 * Math.sqrt(2) * n), 2) + Math.pow(Impk / Math.sqrt(2), 2));
     const Vcr = s.vinNom / 2 + Icr * Math.sqrt(2) / (2 * Math.PI * fr * Cr);
+    const yTop = Math.max(2.2, Math.ceil(Math.max(peak, Mmax) * 1.12 * 5) / 5);
+    const xTop = 2;
     const series = [0.2, 0.35, 0.5, 0.8, 1.2].map((q, i) => {
-      const pts = []; for (let f = 0.35; f <= 2; f += 0.02) pts.push([f, Math.min(M(f, q), 2.2)]);
+      const pts = []; for (let f = 0.35; f <= xTop; f += 0.02) pts.push([f, Math.min(M(f, q), yTop)]);
       return { pts, c: ["#2E5A66", "#3C7C87", "#4AA0AC", "#5AD1DE", "#294A54"][i], o: 0.75, label: "Q=" + q };
     });
-    const opPts = []; for (let f = 0.35; f <= 2; f += 0.02) opPts.push([f, Math.min(M(f, Qd), 2.2)]);
-    series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd });
+    const opPts = []; for (let f = 0.35; f <= xTop; f += 0.02) opPts.push([f, Math.min(M(f, Qd), yTop)]);
+    series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd + " (design)" });
     return {
       hi: [["turns ratio", f2(n) + " : 1"], ["L_r / C_r", eng(Lr, "H") + " / " + eng(Cr, "F")], ["L_m", eng(Lm, "H")]],
       chart: {
-        series, xmin: 0.35, xmax: 2, ymin: 0, ymax: 2.2, xlab: "f_n = f_sw / f_r", ylab: "gain M",
-        marks: [{ y: Mmax, t: "M needed at V_in min", c: "#6FD39B" }, { y: Mmin, t: "M at V_in max", c: "#F0796C" }],
+        title: "Tank gain vs normalised frequency",
+        series, xmin: 0.35, xmax: xTop, ymin: 0, ymax: yTop, xlab: "f_n = f_sw / f_r", ylab: "gain M",
+        marks: [
+          { y: Mmax, t: "M needed at V_in min", c: "#6FD39B" },
+          { y: Mmin, t: "M at V_in max", c: "#F0796C" },
+        ],
+        vmarks: [{ x: fPeak, t: "peak gain — do not go left of this", c: "#F0796C" }],
       },
       warn: [
-        peak < Mmax * 1.1 && "Peak gain (" + f2(peak) + ") barely covers the " + f2(Mmax) + " you need at V_in min. Lower Q or L_n, or accept a narrower hold-up window.",
-        fnLo < 0.5 && "The low-line operating point sits at f_n = " + f2(fnLo) + ", close to the capacitive region. Losing ZVS there is how LLC converters fail.",
+        fnLo === null && "The tank cannot produce the gain of " + f2(Mmax) + " that V_in min demands — its peak is only "
+          + f2(peak) + ". Lower Q (lighter design load), lower L_n, or narrow the input range.",
+        fnLo !== null && peak < Mmax * 1.1 && "Peak gain (" + f2(peak) + ") barely covers the " + f2(Mmax)
+          + " you need at V_in min. Lower Q or L_n, or accept a narrower hold-up window.",
+        fnLo !== null && fnLo < fPeak * 1.1 && "The low-line point (f_n = " + f2(fnLo) + ") sits close to the peak-gain frequency at "
+          + f2(fPeak) + ". Any further down is capacitive, and losing ZVS there is how LLC converters fail.",
+        fnHi === null && "The tank never falls to the gain of " + f2(Mmin) + " that V_in max needs within f_n ≤ " + FN_HI
+          + " — the converter will not regulate at high line without burst mode.",
       ].filter(Boolean),
       groups: [
         G("Tank", [
@@ -2041,14 +2202,17 @@ const TB = [
           R("C_r", eng(Cr, "F"), "film, high dV/dt rating"),
           R("L_r", eng(Lr, "H"), "leakage or a discrete inductor"),
           R("L_m", eng(Lm, "H"), "L_n = " + f2(Ln)),
-          R("Peak gain at design Q", f2(peak)),
+          R("Peak gain at design Q", f2(peak), "at f_n = " + f2(fPeak)),
         ]),
         G("Operating range", [
           R("Gain needed at V_in min", f2(Mmax)),
           R("Gain needed at V_in max", f2(Mmin)),
-          R("f_sw at V_in min", eng(fnLo * fr, "Hz")),
-          R("f_sw at V_in max", eng(fnHi * fr, "Hz")),
-          R("Frequency span", f2(fnHi / fnLo) + " : 1"),
+          R("Peak-gain frequency", eng(fPeak * fr, "Hz"), "the capacitive boundary — never operate below it"),
+          R("f_sw at V_in min", fnLo === null ? "unreachable" : eng(fnLo * fr, "Hz"),
+            fnLo === null ? "the tank cannot make this much gain" : "on the inductive branch, f_n = " + f2(fnLo)),
+          R("f_sw at V_in max", fnHi === null ? "unreachable" : eng(fnHi * fr, "Hz"),
+            fnHi === null ? "gain never falls far enough" : "f_n = " + f2(fnHi)),
+          R("Frequency span", fnLo && fnHi ? f2(fnHi / fnLo) + " : 1" : "—"),
         ]),
         G("Currents and ZVS", [
           R("Magnetising peak current", eng(Impk, "A")),
@@ -2084,12 +2248,24 @@ const TB = [
     const Pmax = n * V1 * V2 * 0.25 / (2 * fs * L);
     const I1 = s.pout / V1, I2 = s.pout / V2;
     const ratio = n * V2 / V1;
-    const Ipk = (V1 / (4 * fs * L)) * (2 * d + ratio - 1) / 2;
+    /* Tank current is piecewise linear over the half period. Its two corner
+       values are the currents present at each bridge's switching instant —
+       which is exactly what has to charge C_oss for ZVS.                 */
+    const i0 = (V1 / (4 * fs * L)) * (1 - ratio + 2 * d * ratio);   // at the side-1 transition
+    const id = (V1 / (4 * fs * L)) * (2 * d + ratio - 1);           // at the side-2 transition
+    const Ipk = Math.max(Math.abs(i0), Math.abs(id));
+    const Irms = Math.sqrt((d * (i0 * i0 + i0 * id + id * id)
+      + (1 - d) * (id * id - id * i0 + i0 * i0)) / 3);
+    const Ereq = (4 / 3) * s.coss * 1e-12 * V1 * V1;
+    const E1 = 0.5 * L * i0 * i0, E2 = 0.5 * L * id * id;
     return {
-      hi: [["series inductance", eng(L, "H")], ["voltage match n·V2/V1", f2(ratio)], ["P at φ = 90°", eng(Pmax, "W")]],
+      hi: [["series inductance", eng(L, "H")], ["peak tank current", eng(Ipk, "A")], ["voltage match n·V2/V1", f2(ratio)]],
       warn: [
         Math.abs(ratio - 1) > 0.15 && "n·V2/V1 = " + f2(ratio) + ". Away from 1.0 the ZVS range shrinks quickly — retune the turns ratio or use an extended modulation scheme.",
         d > 0.45 && "You are operating close to the power limit (d = " + f2(d) + "). Circulating current and turn-off loss are near their worst here.",
+        E1 < Ereq && "Side 1 loses ZVS at this operating point: the tank stores " + eng(E1, "J")
+          + " at the transition but needs " + eng(Ereq, "J") + " to swing C_oss. Raise the phase shift, lower L, or use lower-C_oss devices.",
+        E2 < Ereq && "Side 2 loses ZVS: " + eng(E2, "J") + " available against " + eng(Ereq, "J") + " required.",
       ].filter(Boolean),
       groups: [
         G("Power transfer", [
@@ -2098,7 +2274,18 @@ const TB = [
           R("Rated power", eng(s.pout, "W")),
           R("Maximum power (d = 0.5)", eng(Pmax, "W")),
           R("Primary / secondary DC current", eng(I1, "A") + " / " + eng(I2, "A")),
-          R("Estimated peak tank current", eng(Math.abs(Ipk), "A")),
+        ]),
+        G("Tank current", [
+          R("Peak tank current", eng(Ipk, "A"), "sizes the transformer and the turn-off loss"),
+          R("Tank rms current", eng(Irms, "A"), "sizes the copper"),
+          R("Current at side-1 switching", eng(Math.abs(i0), "A")),
+          R("Current at side-2 switching", eng(Math.abs(id), "A")),
+          R("Circulating penalty", f2(Irms / (s.pout / V1)) + "×", "tank rms ÷ side-1 DC current; 1.0 would be ideal"),
+        ]),
+        G("Soft switching", [
+          R("Energy needed per transition", eng(Ereq, "J"), "(4/3)·C_oss·V1²"),
+          R("Energy available, side 1", eng(E1, "J"), E1 >= Ereq ? "ZVS" : "hard switching"),
+          R("Energy available, side 2", eng(E2, "J"), E2 >= Ereq ? "ZVS" : "hard switching"),
         ]),
         G("Design guidance", [
           R("Turns ratio n", f2(n)), R("Voltage match n·V2/V1", f2(ratio), "aim for 1.00"),
@@ -2123,8 +2310,9 @@ const TC = [
     { e: "V_bus > √2·V_ac(max)", n: "typically 390 V for universal input" },
     { e: "L = V_bus / (4·f_sw·ΔI)", n: "worst-case ripple occurs at v_in = V_bus/2" },
     { e: "C_bulk = 2·P_out·t_hold / (V_bus² − V_min²)", n: "hold-up almost always sets the bulk cap" },
-    { e: "ΔV(2f) = P_out / (2π·f_line·C·V_bus)", n: "peak of the second-harmonic bus ripple" },
+    { e: "ΔV(2f)_pp = P_out / (4π·f_line·C·V_bus)", n: "peak-to-peak second-harmonic bus ripple; the pulsating power flows at 2·f_line, so the ripple frequency is 2·f_line and ω = 4π·f_line" },
     { e: "I_C(rms) = P_out / (√2·V_bus)", n: "low-frequency cap ripple current" },
+    { e: "I_sw(rms) = I_pk·√(1/2 − 4√2·V_ac/(3π·V_bus))", n: "the second term comes from ∫sin³ over the line half-cycle — the switch stops conducting near the line peak" },
   ],
   pros: ["Meets IEC 61000-3-2 with PF > 0.99 and low THD", "Well-understood, huge controller ecosystem", "Gives downstream converters a stable 390 V bus"],
   cons: ["Bridge diodes cost 1–2 % efficiency", "Bulk cap is large and lifetime-limited", "Voltage loop must be slow, so transients are poor"],
@@ -2137,17 +2325,24 @@ const TC = [
     const dI = s.r * Ipk;
     const L = Vb / (4 * fs * dI);
     const C = 2 * Po * s.thold * 1e-3 / (Vb * Vb - s.vbusMin * s.vbusMin);
-    const Vrip = Po / (2 * Math.PI * s.fline * C * Vb);
+    /* The pulsating single-phase power lands on the bus at 2·f_line, so the
+       ripple angular frequency is 2π·(2·f_line) = 4π·f_line.             */
+    const Vpp = Po / (4 * Math.PI * s.fline * C * Vb);
     const Iclf = Po / (Math.SQRT2 * Vb);
     const Id = Po / Vb;
-    const Isw = Ipk * Math.sqrt(0.5 - (8 * Math.SQRT2 * s.vacMin) / (3 * Math.PI * Vb));
+    /* I_sw,rms² = (1/π)∫ I_pk²sin²θ·(1 − √2·V_ac·sinθ/V_bus) dθ.
+       ∫sin² gives the 1/2; ∫sin³ = 4/3 gives the second term. Using 8√2
+       here (the I_in,rms form of the same result) makes the radicand go
+       negative on 230 V-only designs and silently produces NaN.          */
+    const rad = 0.5 - (4 * Math.SQRT2 * s.vacMin) / (3 * Math.PI * Vb);
+    const Isw = Ipk * Math.sqrt(Math.max(rad, 0));
     const Pbr = 2 * s.vf * (2 * Ipk / Math.PI);
     const dImax = Vb / (4 * fs * L);
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["peak line current", eng(Ipk, "A")]],
       warn: [
         Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak.",
-        Vrip * 2 > 40 && "Bus ripple is " + eng(2 * Vrip, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference.",
+        Vpp > 20 && "Bus ripple is " + eng(Vpp, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference.",
       ].filter(Boolean),
       groups: [
         G("Line side", [
@@ -2160,7 +2355,7 @@ const TC = [
         G("Magnetics and bulk cap", [
           R("L_boost", eng(L, "H")),
           R("C_bulk for hold-up", eng(C, "F"), s.thold + " ms down to " + s.vbusMin + " V"),
-          R("Bus ripple (2·f_line)", eng(2 * Vrip, "V") + " p-p"),
+          R("Bus ripple (2·f_line)", eng(Vpp, "V") + " p-p", "± " + eng(Vpp / 2, "V") + " about the mean"),
           R("Bulk cap rms current", eng(Iclf, "A"), "plus HF component"),
         ]),
         G("Semiconductors", [
@@ -2199,7 +2394,10 @@ const TC = [
     const dI = s.r * Ipk, L = Vb / (4 * fs * dI);
     const C = 2 * Po * s.thold * 1e-3 / (Vb * Vb - s.vbusMin * s.vbusMin);
     const Pbr = 2 * s.vf * (2 * Ipk / Math.PI);
-    const Plf = Iin * Iin * s.rds * 1e-3 * 2;
+    /* Only ONE device of the line-frequency leg conducts per half cycle,
+       and it carries the full input current — so the conduction loss is
+       I_in²·R_DS, not twice that.                                        */
+    const Plf = Iin * Iin * s.rds * 1e-3;
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["bridge loss removed", eng(Pbr, "W")]],
       warn: ["This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."],
@@ -2211,7 +2409,7 @@ const TC = [
         ]),
         G("Efficiency accounting", [
           R("Diode loss avoided", eng(Pbr, "W"), "vs a bridged boost PFC"),
-          R("Line-frequency leg conduction", eng(Plf, "W"), "at R_DS(on) = " + s.rds + " mΩ"),
+          R("Line-frequency leg conduction", eng(Plf, "W"), "one device conducts per half cycle, at R_DS(on) = " + s.rds + " mΩ"),
           R("Net gain", eng(Pbr - Plf, "W")),
           R("Equivalent efficiency gain", pct((Pbr - Plf) / Po)),
         ]),
@@ -2231,9 +2429,9 @@ const TC = [
   what: "Two legs modulated out of phase produce three output levels, so the filter sees 2·f_sw and a smaller voltage step. That single choice — unipolar rather than bipolar switching — typically halves the filter inductor and cuts the ripple current by four.",
   eqs: [
     { e: "v_out(pk) = m·V_dc", n: "m ≤ 1 for linear modulation" },
-    { e: "ΔI = V_dc/(4·f_sw·L_f)", n: "unipolar PWM worst-case ripple" },
+    { e: "ΔI = V_dc/(8·f_sw·L_f)", n: "unipolar PWM: the output switches between 0 and ±V_dc at an effective 2·f_sw, and the worst case is at |v_out| = V_dc/2 — bipolar switching would give V_dc/(4·f_sw·L_f), twice as much" },
     { e: "f_res = 1/(2π√(L_f·C_f)),  10·f_out < f_res < f_sw/10", n: "filter placement rule" },
-    { e: "C_dc = P_out/(2π·2·f_out·V_dc·ΔV_dc)", n: "single-phase power pulsates at 2·f_out" },
+    { e: "C_dc = P_out/(2π·2·f_out·V_dc·ΔV_dc(p-p))", n: "single-phase power pulsates at 2·f_out; ΔV_dc here is peak-to-peak" },
   ],
   pros: ["Three output levels with only four switches", "Filter sees 2·f_sw", "Simple, well-understood control"],
   cons: ["DC link must absorb 2·f_out ripple power", "Dead time distorts the output near the zero crossing", "Common-mode voltage jumps unless you use a special modulation"],
@@ -2245,11 +2443,17 @@ const TC = [
     const m = Math.SQRT2 * Vac / Vdc;
     const Io = s.pout / Vac, Ipk = Math.SQRT2 * Io;
     const dI = s.r * Ipk;
-    const Lf = Vdc / (4 * fs * dI);
+    /* Unipolar (3-level) PWM: the terminal voltage steps between 0 and
+       ±V_dc at an effective 2·f_sw, and the worst case sits at half
+       modulation. That is V_dc/(8·f_sw·L) — half the bipolar result, and
+       the whole reason to choose unipolar switching.                    */
+    const Lf = Vdc / (8 * fs * dI);
     const fres = fs / 10;
     const Cf = 1 / (Lf * Math.pow(2 * Math.PI * fres, 2));
     const Iq = 2 * Math.PI * s.fo * Cf * Vac;
-    const Cdc = s.pout / (2 * Math.PI * 2 * s.fo * Vdc * (0.05 * Vdc));
+    /* Sized for 5 % PEAK-TO-PEAK ripple on the link at 2·f_out. */
+    const dVpp = 0.05 * Vdc;
+    const Cdc = s.pout / (2 * Math.PI * 2 * s.fo * Vdc * dVpp);
     const Vdt = s.td * 1e-9 * fs * Vdc;
     return {
       hi: [["modulation index", f3(m)], ["filter inductor", eng(Lf, "H")], ["filter cap", eng(Cf, "F")]],
@@ -2265,13 +2469,13 @@ const TC = [
           R("Effective filter frequency", eng(2 * fs, "Hz"), "unipolar PWM"),
         ]),
         G("Output filter", [
-          R("L_f", eng(Lf, "H"), "for " + pct(s.r) + " ripple"),
-          R("Ripple current ΔI", eng(dI, "A")),
+          R("L_f", eng(Lf, "H"), "for " + pct(s.r) + " ripple, unipolar PWM"),
+          R("Ripple current ΔI", eng(dI, "A"), "worst case, at |v_out| = V_dc/2"),
           R("C_f", eng(Cf, "F"), "resonance at " + eng(fres, "Hz")),
           R("Reactive current in C_f", eng(Iq, "A"), pct(Iq / Io) + " of rated"),
         ]),
         G("DC link and dead time", [
-          R("C_dc for 5 % ripple", eng(Cdc, "F"), "at 2·f_out = " + eng(2 * s.fo, "Hz")),
+          R("C_dc for 5 % ripple", eng(Cdc, "F"), eng(dVpp, "V") + " p-p at 2·f_out = " + eng(2 * s.fo, "Hz")),
           R("DC link rms ripple current", eng(s.pout / (Math.SQRT2 * Vdc), "A")),
           R("Dead-time voltage error", eng(Vdt, "V"), "distorts the output near zero crossing"),
           R("Device blocking voltage", eng(Vdc, "V")),
@@ -2403,7 +2607,10 @@ const TD = [
     const Vpk = Math.SQRT2 * s.vacIn - s.vf;
     const dV = Idc / (f * C);
     const Vdc = Vpk - dV / 2;
-    const rat = Math.min(dV / Vpk, 0.999);
+    /* θ_c = arccos(1 − ΔV/V_pk) is only real for 0 < ΔV/V_pk ≤ 1. Outside
+       that the capacitor never recharges within a cycle and the model has
+       nothing to say, so clamp and let the warning explain.             */
+    const rat = clamp(dV / Vpk, 1e-6, 0.999);
     const th = Math.acos(1 - rat);
     const Ipk = (4 * Math.PI * Idc) / th;
     const Irms = Ipk * Math.sqrt(th / (6 * Math.PI));
@@ -2412,7 +2619,9 @@ const TD = [
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["diode peak", eng(Ipk, "A")]],
       warn: [
-        dV > 0.3 * Vpk && "Ripple is " + pct(dV / Vpk) + " of the peak. The conduction-angle model gets rough past ~30 %, and the rail is barely DC.",
+        Vpk <= 0 && "V_F is larger than the peak of the AC input — no current can flow at all. Lower the diode drop or raise V_ac.",
+        Vpk > 0 && dV >= Vpk && "The capacitor fully discharges between peaks: this is not a DC rail, and the conduction-angle model below does not apply. Increase C_bulk or reduce the load.",
+        Vpk > 0 && dV <= Vpk && dV > 0.3 * Vpk && "Ripple is " + pct(dV / Vpk) + " of the peak. The conduction-angle model gets rough past ~30 %, and the rail is barely DC.",
         Ipk / Idc > 12 && "Crest factor is " + f2(Ipk / Idc) + ". The transformer and diode see currents an order of magnitude above the DC draw.",
         "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux.",
       ].filter(Boolean),
@@ -2461,7 +2670,7 @@ const TD = [
     const Vpk = Math.SQRT2 * s.vacIn - 2 * s.vf;
     const dV = Idc / (2 * f * C);
     const Vdc = Vpk - dV / 2;
-    const rat = Math.min(dV / Vpk, 0.999);
+    const rat = clamp(dV / Vpk, 1e-6, 0.999);
     const th = Math.acos(1 - rat);
     const Ipk = (2 * Math.PI * Idc) / th;
     const Irms = Ipk * Math.sqrt(th / (3 * Math.PI));
@@ -2494,7 +2703,7 @@ const TD = [
           R("Bridge conduction loss", eng(Pd, "W"), "two drops in the path"),
           R("Diode average (each)", eng(Idc / 2, "A")),
           R("Power factor", f2(PF)),
-          R("Apparent power drawn", eng(s.vacIn * Irms, "W") + "VA"),
+          R("Apparent power drawn", eng(s.vacIn * Irms, "VA")),
         ]),
       ],
     };
@@ -2642,7 +2851,11 @@ const TD = [
     const IL = Io / 2;
     const dI = s.r * IL;
     const L = (s.vsec - Vo) * D / (fs * dI);
-    const K = D < 0.5 ? Math.abs(1 - 2 * D) / (1 - D) : 0;
+    /* K(D) = |1−2D|/(1−D) is the published cancellation factor, and it is
+       genuinely 0 at D = 0.5 — but only D < 0.5 is physical here, since
+       each polarity can occupy at most half the period.                  */
+    const physical = D < 0.5;
+    const K = physical ? Math.abs(1 - 2 * D) / (1 - D) : NaN;
     const dIo = dI * K;
     const Co = dIo / (8 * 2 * fs * s.dvout * 1e-3);
     const Ipk = IL + dI / 2;
@@ -2666,7 +2879,7 @@ const TD = [
           R("DC current each", eng(IL, "A"), "half the load"),
           R("ΔI per inductor", eng(dI, "A")),
           R("Peak current each", eng(Ipk, "A")),
-          R("Cancellation factor K(D)", f2(K)),
+          R("Cancellation factor K(D)", f2(K), "|1−2D|/(1−D); 1.0 = no benefit"),
           R("Net output ripple", eng(dIo, "A"), "after cancellation"),
         ]),
         G("Rectifiers and cap", [
@@ -2674,7 +2887,9 @@ const TD = [
           R("Average current each", eng(Io / 2, "A")),
           R("Peak current each", eng(Io, "A"), "carries the full load during power transfer"),
           R("Rectifier loss", eng(Pd, "W")),
-          R("C_out (charge term)", eng(Co, "F"), "small, thanks to cancellation"),
+          R("C_out (charge term)", K > 1e-3 ? eng(Co, "F") : "≈ 0",
+            K > 1e-3 ? "small, thanks to cancellation"
+              : "the charge term vanishes at perfect cancellation — ESR and inductor mismatch set the real ripple here"),
         ]),
       ],
     };
@@ -2748,6 +2963,7 @@ const TE = [
     return {
       hi: [["load resistance", eng(R, "Ω")], ["shunt C", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
       chart: {
+        title: "Drain voltage and switch current over one RF cycle",
         series: [
           { pts: ceWave(0), c: "#5AD1DE", label: "v_DS / V_dc" },
           { pts: ceCur(), c: "#E0A458", label: "i_SW / I_dc" },
@@ -2821,6 +3037,7 @@ const TE = [
     return {
       hi: [["load (differential)", eng(2 * R, "Ω")], ["shunt C per side", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
       chart: {
+        title: "Drain voltage of both halves over one RF cycle",
         series: [
           { pts: ceWave(0), c: "#5AD1DE", label: "Q1" },
           { pts: ceWave(180), c: "#A88BF0", label: "Q2" },
@@ -2880,8 +3097,12 @@ const TE = [
   design(s) {
     const f = s.fsw * 1e3, w = 2 * Math.PI * f;
     const td = s.td * 1e-9, Coss = s.coss * 1e-12;
-    const D = 0.5 - f * td;
-    const V1 = (2 * s.vdc / Math.PI) * Math.sin(Math.PI * Math.max(D, 0));
+    /* D = 0.5 − f·t_dead can go to zero or negative when the dead time
+       swallows the whole half-period. Clamp so the tank maths stays finite
+       and let the warning below say the design is not realisable.       */
+    const Draw = 0.5 - f * td;
+    const D = clamp(Draw, 1e-3, 0.5);
+    const V1 = (2 * s.vdc / Math.PI) * Math.sin(Math.PI * D);
     const R = V1 * V1 / (2 * s.pout);
     const Ipk = V1 / R;
     const Cs = Ipk * td / (2 * s.vdc);
@@ -2892,9 +3113,10 @@ const TE = [
     return {
       hi: [["duty per device", f3(D)], ["load resistance", eng(R, "Ω")], ["device blocking V", eng(s.vdc, "V")]],
       warn: [
-        D <= 0.02 && "Dead time of " + s.td + " ns at " + s.fsw + " kHz leaves essentially no on-time. Shorten the dead time or drop the frequency.",
-        Coss > Cs && "C_oss (" + eng(Coss, "F") + ") is larger than the " + eng(Cs, "F") + " this dead time can move. Increase t_dead to at least " + eng(tdMin * 1e9, "") + " ns or the node will not reach the rail before turn-on.",
-        tdMin > td && "Required transition time is " + eng(tdMin * 1e9, "") + " ns against the " + s.td + " ns allowed — the bridge is switching hard.",
+        Draw <= 0 && "A " + s.td + " ns dead time at " + s.fsw + " kHz consumes the entire half-period: there is no on-time left and this operating point does not exist. The numbers below are clamped to a nominal duty and mean nothing until you shorten the dead time or lower the frequency.",
+        Draw > 0 && Draw <= 0.02 && "Dead time of " + s.td + " ns at " + s.fsw + " kHz leaves essentially no on-time. Shorten the dead time or drop the frequency.",
+        Coss > Cs && "C_oss (" + eng(Coss, "F") + ") is larger than the " + eng(Cs, "F") + " this dead time can move. Increase t_dead to at least " + f2(tdMin * 1e9) + " ns or the node will not reach the rail before turn-on.",
+        tdMin > td && "Required transition time is " + f2(tdMin * 1e9) + " ns against the " + s.td + " ns allowed — the bridge is switching hard.",
       ].filter(Boolean),
       groups: [
         G("Modulation", [
@@ -3124,7 +3346,7 @@ const SHEETS = [
   { e: "current density J = 4–6 A/mm²", n: "Wire in a wound component with reasonable airflow." },
   { e: "derate V: 80 % of rating", n: "MOSFET V_DS, cap voltage, diode V_R. For MLCCs across a switch node, use 50 %." },
   { e: "1 nH per mm of trace", n: "A 10 mm loop at 10 A/ns produces 100 V of overshoot. This is the mechanism behind most switch-node overshoot." },
-  { e: "efficiency → loss: 95 % of 100 W = 5.3 W", n: "Always convert to watts before designing the thermals; percentages obscure the magnitude." },
+  { e: "efficiency → loss: 95 % efficient at 100 W out = 5.3 W dissipated", n: "P_loss = P_out·(1/η − 1). Always convert to watts before designing the thermals; percentages obscure the magnitude." },
 ]},
 ];
 
@@ -3155,8 +3377,8 @@ const SELECT = [
   ["Boost PFC", "1/(1−D)", "no", "75 W – 3 kW", "V_bus", "Mains front end, PF > 0.99."],
   ["Totem-pole PFC", "1/(1−D)", "no", "300 W – 10 kW", "V_bus", "Bridgeless; needs GaN/SiC."],
   ["H-bridge inverter", "m·V_dc (peak)", "no", "100 W – 10 kW", "V_dc", "Single-phase DC→AC."],
-  ["Three-phase VSI", "0.707·m·V_dc", "no", "1 – 500 kW", "V_dc", "Motor drives, grid inverters."],
-  ["Three-level NPC", "0.707·m·V_dc", "no", "10 kW – 10 MW", "V_dc/2", "Half the device stress, low THD."],
+  ["Three-phase VSI", "V_LL = 0.707·m·V_dc", "no", "1 – 500 kW", "V_dc", "Motor drives, grid inverters. SVPWM."],
+  ["Three-level NPC", "V_LL = 0.707·m·V_dc", "no", "10 kW – 10 MW", "V_dc/2", "Half the device stress, low THD."],
   ["Class E", "resonant ZVS", "no", "1 – 500 W", "3.562·V_dc", "One switch, MHz capable, load-sensitive."],
   ["Class E push-pull", "resonant ZVS", "no", "10 W – 2 kW", "3.562·V_dc", "Twice the power, even harmonics cancel."],
   ["Class DE", "resonant ZVS", "no", "50 W – 5 kW", "V_dc", "ZVS without the voltage penalty."],
