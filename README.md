@@ -67,7 +67,31 @@ The dev server plus a browser is the real test. Beyond that:
 
 - `node scripts/check-tex.mjs` — every formula still typesets
 - `npm run build` — production build succeeds
+- `node scripts/sweep.mjs` — walks all 30 topologies with the dev server up
+  and reports console errors, text escaping its viewBox, overlapping labels,
+  and the cursor rake's spacing. Replaces doing that walk by hand.
 - Walk the 30 topologies and watch the console; the design panel should never
   show an em-dash, a NaN, or a negative component value
 - Numbers here are first-pass estimates from idealised models. If you change
   an equation, check it by hand at the defaults before trusting the display.
+
+### Measuring the animation
+
+Smoothness cannot be judged by reading the code, and it cannot be judged in a
+backgrounded browser tab either — `requestAnimationFrame` is suspended there,
+so the figure simply does not advance. These drive their own headless
+Chromium, which does composite:
+
+- `node scripts/record-animation.mjs <topology> <seconds>` then
+  `node scripts/analyse-frames.mjs` — captures the cursor rake, the arrow
+  field, the dash offset and each device's on/off state per frame, then
+  reports the continuity metrics. The one that matters: nothing may *appear*
+  at an opacity you could see. Anything entering or leaving has to dissolve,
+  so a mark with no near predecessor on the previous frame must be faint.
+- `node scripts/handoff-filmstrip.mjs <topology>` — a strip of live frames
+  through a hand-off, with the rake's positions and opacities beside each one.
+  Use this to look at the result; the metrics only say whether to.
+- `node scripts/wrap-filmstrip.mjs <topology> both` — the same idea driven by
+  the scrub control instead, which is deterministic and can be aimed exactly.
+  Note that scrubbing pauses the clock, and the edge dissolves are only
+  active while playing, so this strip cannot show them.

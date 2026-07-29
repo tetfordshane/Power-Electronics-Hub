@@ -844,20 +844,27 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
      over it. Sharing the coordinate system is the only way it can be
      guaranteed to sit exactly on the edge it is pointing at. */
   const uPhase = playhead === null ? 0 : (playhead * cycles) % 1;
-  const mx = playhead === null ? null : x0 + playhead * (x1 - x0);
-  /* The cursor is the only thing in the figure that is not periodic: the
-     waveform, the shaded band and the circuit all look identical either
-     side of the wrap, but the cursor has to travel back across the plot.
-     Dissolving it over the last few percent and bringing it back in over
-     the first few turns that jump into a hand-off.
+  /* One marker per drawn period, each at the same phase within its own
+     period. The plot holds a whole number of identical periods, so all of
+     those positions denote the same instant, and the rake can hand off at
+     the frame edge the way the current arrows do.
 
-     Only while it is running: parked at the start of the sweep the cursor
-     must stay fully visible, or stepping through the phases would hand you
-     a figure with no cursor in it at all. */
-  const EDGE = 0.035;
-  const t = (playhead === null || !fadeEdges) ? 1
-    : clamp(Math.min(playhead, 1 - playhead) / EDGE, 0, 1);
-  const fade = t * t * (3 - 2 * t);
+     A single cursor crossing the whole plot was the one thing here that was
+     not periodic, so it had to travel back at the wrap. Measured, that was
+     the last thing making the loop feel unlike the rest of the motion:
+     every other discontinuity — the shaded band moving to the other side of
+     the commutation, the flow dashes restarting — happens at all three
+     period boundaries, so the eye reads them as the rhythm rather than as a
+     seam. The cursor's return happened once a loop, and dissolving it to
+     hide the jump left roughly three quarters of a second with no cursor on
+     the plot at all. Now every period boundary looks like every other one,
+     which is what "uniform as it loops" has to mean. */
+  const CFADE = 0.16;
+  const cursors = playhead === null ? [] : Array.from({ length: cycles }, (_, c) => {
+    const s = c + uPhase;                       /* periods from the left edge */
+    const e = clamp(Math.min(s, cycles - s) / CFADE, 0, 1);
+    return { x: x0 + s * per, o: fadeEdges ? e * e * (3 - 2 * e) : 1 };
+  });
   const iNow = pulse
     ? (uPhase < D ? imin + (imax - imin) * (uPhase / D) : 0)
     : (uPhase < D ? imin + (imax - imin) * (uPhase / D)
@@ -942,14 +949,14 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
           { a: "middle", c: "#6FD39B", s: 9.5 })}
         {Tx((x0 + x1) / 2, bot + 62, period ? "time" : "time  ·  T = 1/f_sw",
           { a: "middle", c: "#8DA0B4", s: 10.5 })}
-        {mx !== null ? (
-          <g style={{ opacity: fade }}>
-            <path d={`M ${mx} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
+        {cursors.map((m, c) => (
+          <g key={"cu" + c} style={{ opacity: m.o.toFixed(3) }}>
+            <path d={`M ${m.x.toFixed(2)} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
               fill="none" opacity={0.6} />
-            <circle cx={mx} cy={vHigh ? 28 : 62} r={3.2} fill="#5AD1DE" />
-            <circle cx={mx} cy={yI(iNow)} r={3.6} fill="#E3A85C" />
+            <circle cx={m.x.toFixed(2)} cy={vHigh ? 28 : 62} r={3.2} fill="#5AD1DE" />
+            <circle cx={m.x.toFixed(2)} cy={yI(iNow)} r={3.6} fill="#E3A85C" />
           </g>
-        ) : null}
+        ))}
       </>))}
     </svg></div>
   );
@@ -4380,30 +4387,45 @@ function polySegs(d) {
 /* Place arrowheads along a measured path, advanced by how far the charge has
    travelled. They ride with the dashes rather than sitting still beside
    them: a fixed arrow next to a moving dash reads as a diagram annotation,
-   and looks inert the moment anything else on the figure changes. */
+   and looks inert the moment anything else on the figure changes.
+
+   A fixed number of arrows, spaced evenly, each position taken modulo the
+   path length — a treadmill. The earlier version placed them at base + k·step
+   and dropped any that ran past the end or landed near a corner, so the count
+   swung between six and ten and arrows blinked in and out about four times a
+   second. Measured, that flicker was a large part of what made the motion
+   feel rough, and it was worst at a commutation, where the route is changing
+   anyway and every other thing in the figure is moving too. */
 function arrowsAt({ segs, total }, travel, spacing = 104) {
   if (!total || !segs.length) return [];
   const n = Math.max(1, Math.round(total / spacing));
   const step = total / n;
   const base = ((travel % step) + step) % step;
   const out = [];
+  /* A conducting path has two ends, so on a moving belt of arrows one has to
+     enter at the start whenever one leaves at the finish. Appearing at full
+     strength, that entry is a pop — measured at roughly a hundred pixels,
+     several times a second, and it was the last thing making the motion feel
+     unsteady. Each arrow instead dissolves over the first and last stretch of
+     its path, so it arrives and departs rather than blinking. */
+  const FADE = 26;
   for (let k = 0; k < n; k++) {
-    const s = base + k * step;
-    if (s > total) continue;
-    const seg = segs.find((g) => s >= g.at && s <= g.at + g.len) || segs[segs.length - 1];
-    const t = s - seg.at;
-    /* skip the corners, where two directions meet and an arrow is ambiguous */
-    if (t < 8 || seg.len - t < 8) continue;
+    const s = (base + k * step) % total;
+    let seg = segs[segs.length - 1];
+    for (const g of segs) { if (s >= g.at && s <= g.at + g.len) { seg = g; break; } }
+    const t = clamp(s - seg.at, 0, seg.len);
+    const edge = clamp(Math.min(s, total - s) / FADE, 0, 1);
     out.push({
       x: seg.x + seg.dx * t, y: seg.y + seg.dy * t,
       a: Math.atan2(seg.dy, seg.dx) * 180 / Math.PI,
+      o: edge * edge * (3 - 2 * edge),
     });
   }
   return out;
 }
 
 const Chevron = (m, i) => (
-  <path key={"cv" + i} className="carrow"
+  <path key={"cv" + i} className="carrow" opacity={m.o === undefined ? 1 : m.o.toFixed(3)}
     d="M -4.5 -4.5 L 3 0 L -4.5 4.5"
     transform={`translate(${m.x.toFixed(1)},${m.y.toFixed(1)}) rotate(${m.a.toFixed(1)})`} />
 );
