@@ -49,9 +49,17 @@ letting a duty above 1 produce a negative inductance.
 breakdown bar and the design-space heatmap. Every topology has one; keep it
 that way when adding a topology, or both features vanish from that page.
 
-**Grid tracks.** Use `minmax(0, 1fr)`, never bare `1fr` — the automatic
-minimum of `1fr` is the track's max-content width, which is how one wide
-table used to push the whole document sideways on a phone.
+**Desktop only.** There are deliberately no width breakpoints. Don't add
+responsive CSS speculatively: the last attempt put `overflow-x:auto` on the
+KaTeX spans to stop a phone-width overflow, and that broke formula baselines
+and put scrollbars through the results tables on the screen people actually
+use. If narrow-screen support is ever wanted, do it as its own piece of work
+and verify it on desktop afterwards.
+
+**Grid tracks.** Use `minmax(0, 1fr)`, never bare `1fr`. This is not
+narrow-screen support — the automatic minimum of `1fr` is the track's
+max-content width, so one wide results table will push the layout past its
+own container at any window size, including a half-screen desktop window.
 
 ## Verifying a change
 

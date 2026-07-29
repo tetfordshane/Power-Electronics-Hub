@@ -4872,32 +4872,30 @@ export default function App() {
                 {hits.length} of {TOPOS.length} topologies
               </span>
             ) : null}
-            <div className="railbody">
-              {CATS.map((c) => {
-                const list = hits.filter((t) => t.cat === c);
-                if (!list.length) return null;
-                return (
-                  <div className="rgrp" key={c}>
-                    <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>{c}</span>
-                    {list.map((t) => (
-                      <button key={t.id} className={"ritem" + (t.id === tid ? " on" : "")}
-                        aria-current={t.id === tid ? "true" : undefined}
-                        onClick={() => pick(t.id)}>
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-              {!hits.length && (
-                <div className="rgrp">
-                  <p style={{ fontSize: "var(--t-fine)", margin: "4px 0 10px" }}>
-                    Nothing matches “{q}”.
-                  </p>
-                  <button className="ritem" onClick={() => setQ("")}>Clear the filter</button>
+            {CATS.map((c) => {
+              const list = hits.filter((t) => t.cat === c);
+              if (!list.length) return null;
+              return (
+                <div className="rgrp" key={c}>
+                  <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>{c}</span>
+                  {list.map((t) => (
+                    <button key={t.id} className={"ritem" + (t.id === tid ? " on" : "")}
+                      aria-current={t.id === tid ? "true" : undefined}
+                      onClick={() => pick(t.id)}>
+                      {t.name}
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
+              );
+            })}
+            {!hits.length && (
+              <div className="rgrp">
+                <p style={{ fontSize: "var(--t-fine)", margin: "4px 0 10px" }}>
+                  Nothing matches “{q}”.
+                </p>
+                <button className="ritem" onClick={() => setQ("")}>Clear the filter</button>
+              </div>
+            )}
           </nav>
 
           <main>

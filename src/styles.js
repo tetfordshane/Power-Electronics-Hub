@@ -451,35 +451,22 @@ export const CSS = `
 .ps .foot{color:var(--faint); font-size:var(--t-small); padding:0 22px;
   max-width:1440px; margin:0 auto; line-height:1.6}
 
-/* ------------------------------------------------------------ responsive
-   Every grid track is minmax(0,1fr), never plain 1fr. A bare 1fr keeps an
-   automatic minimum equal to the track's max-content width, so one wide
-   table or one 300px card minimum silently pushes the whole page wider
-   than the viewport and the document scrolls sideways. */
+/* --------------------------------------------------------------- widths
+   Desktop only — there are deliberately no width breakpoints. See the
+   README before adding any.
+
+   These rules are NOT narrow-screen support. Every grid track is
+   minmax(0,1fr) rather than a bare 1fr because 1fr keeps an automatic
+   minimum equal to the track's max-content width: one wide results table
+   would then push the layout past its own container at any window size,
+   including a half-screen desktop window. */
 .ps main{min-width:0}
 .ps .layout,.ps .grid2,.ps .grid3,.ps .fields{min-width:0}
 .ps .grid2 > *,.ps .grid3 > *,.ps .layout > *{min-width:0}
-@media (max-width:960px){
-  .ps .layout{grid-template-columns:minmax(0,1fr)}
-  .ps .rail{position:static; max-height:none}
-  .ps .railbody{max-height:320px; overflow:auto}
-  .ps .wrap{padding:16px 14px}
-  .ps .hdr{padding:16px 14px 0}
-  .ps .card{padding:15px 14px}
-  .ps h2{font-size:19px}
-  .ps .big{font-size:25px}
-  .ps .grid2,.ps .grid3{grid-template-columns:minmax(0,1fr)}
-  /* let long values wrap rather than widen the page */
-  .ps td.v{white-space:normal; word-break:break-word}
-  .ps td.k{width:48%}
-  .ps .tab{padding:8px 10px}
-  .ps .devleg{gap:5px 12px}
-}
-@media (max-width:520px){
-  .ps .fields{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
-  .ps .foot{padding:0 14px}
-}
-.ps .scrollx{overflow-x:auto; max-width:100%; -webkit-overflow-scrolling:touch}
+/* The selector table has six columns and is genuinely wider than a narrow
+   desktop window; it scrolls inside its own card rather than stretching
+   the page. */
+.ps .scrollx{overflow-x:auto; max-width:100%}
 .ps .scrollx table{min-width:640px}
 @media (prefers-reduced-motion:reduce){
   .ps *{transition:none !important; animation:none !important}
