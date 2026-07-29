@@ -3978,7 +3978,7 @@ function Results({ res, hideWave }) {
    the phase occupies, used to shade the matching part of the waveform.  */
 const FLOW = {
   classepp: { w: 660, h: 300, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[250, 105, "Q1"], [250, 195, "Q2"]],
+    sw: [[250, 105, "Q1", 0], [250, 195, "Q2", 180]],
     emc: { loop: "M 250 60 H 310 V 240 H 250 Z", node: [250, 60] },
     ph: [
     { on: [1,0], t: "Q1 conducting", f: () => [0, 0.5], n: "The upper stage pulls its drain to zero while the lower drain rings up. The two halves are identical circuits running exactly half a cycle apart.",
@@ -3987,7 +3987,7 @@ const FLOW = {
       d: ["M 40 150 H 70 V 240 H 250 V 150 H 282"], dim: ["M 310 60 V 150"] },
   ]},
   classde: { w: 620, h: 270, iShape: (u) => Math.abs(Math.sin(2 * Math.PI * u)),
-    sw: [[200, 92, "Q1"], [200, 182, "Q2"]],
+    sw: [[200, 92, "Q1", 0], [200, 182, "Q2", 0]],
     emc: { loop: "M 200 50 H 265 V 225 H 200 Z", node: [200, 137] },
     ph: [
     { on: [1,0], t: "Q1 on", f: () => [0, 0.46], n: "The high-side device connects the tank to the supply. Because the turn-on happened at zero volts during the preceding dead time, the transition cost nothing.",
@@ -3997,7 +3997,7 @@ const FLOW = {
     { on: [0,1], t: "Q2 on", f: () => [0.54, 1], n: "The low-side device takes over and tank current reverses. Each device only ever blocks the supply rail — the principal advantage over single-ended class E, where the device blocks 3.56 times the supply.",
       d: ["M 200 225 V 137 H 520 V 225"] },
   ]},
-  buck: { w: 660, h: 250, sw: [[170, 70, "Q1"], [215, 135, "D1"]],
+  buck: { w: 660, h: 250, sw: [[170, 70, "Q1", -90], [215, 135, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch connects the input to the inductor. With V_in − V_out across it the current ramps up, and the difference between that current and the load current charges C_out.",
@@ -4005,7 +4005,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor cannot sustain a discontinuity in its current, so it pulls the switch node below ground until D1 conducts. Current now circulates through the diode and decays at a rate set by V_out/L.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  boost: { w: 660, h: 250, sw: [[230, 145, "Q1"], [288, 70, "D1"]],
+  boost: { w: 660, h: 250, sw: [[230, 145, "Q1", 0], [288, 70, "D1"]],
     emc: { loop: "M 230 70 H 390 V 200 H 230 Z", node: [230, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch shorts the inductor to ground. Current ramps up storing energy, and the output is supplied entirely by C_out — which is why boost output ripple is so much worse than buck.",
@@ -4013,7 +4013,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor flies above the input, forward-biasing D1 and transferring its current to the output. This is also why load steps momentarily go the wrong way — the right-half-plane zero.",
       d: ["M 40 70 H 480 V 200 H 40"] },
   ]},
-  buckboost: { w: 660, h: 250, sw: [[170, 70, "Q1"], [290, 70, "D1"]],
+  buckboost: { w: 660, h: 250, sw: [[170, 70, "Q1", -90], [290, 70, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The full input voltage sits across the inductor and current ramps up. Nothing reaches the output during this interval — the load lives on C_out.",
@@ -4021,7 +4021,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor reverses its terminal voltage to keep current flowing, pulling the output node below ground through D1. That polarity inversion is inherent, not a wiring choice.",
       d: ["M 215 200 H 480 V 70 H 215"] },
   ]},
-  flyback: { w: 700, h: 275, sw: [[250, 185, "Q1"], [327, 60, "D1"]],
+  flyback: { w: 700, h: 275, sw: [[250, 185, "Q1", 0], [327, 60, "D1"]],
     emc: { loop: "M 90 55 H 250 V 235 H 90 Z", node: [250, 144] },
     ph: [
     { on: [1,0], t: "Q1 on — store", f: (D) => [0, D], n: "Primary current ramps and energy accumulates in the gap. The secondary diode is reverse-biased, so no power crosses the barrier yet; the output is held up by C_out alone.",
@@ -4029,7 +4029,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off — release", f: (D) => [D, 1], n: "The winding voltages reverse, D1 conducts and the stored energy transfers to the output. The primary now sees V_in plus the reflected V_R — the quantity that sets the primary device rating.",
       d: ["M 274 80 V 60 H 600 V 215 H 274 V 144"] },
   ]},
-  pfcboost: { w: 780, h: 280, sw: [[360, 155, "Q1"], [425, 105, "D"]],
+  pfcboost: { w: 780, h: 280, sw: [[360, 155, "Q1", 0], [425, 105, "D"]],
     emc: { loop: "M 360 105 H 560 V 195 H 360 Z", node: [360, 105] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The boost switch shorts the inductor across the rectified line. Current rises, following the reference the current loop derives from |v_ac| — this interval is where the sinusoidal input current is shaped.",
@@ -4072,7 +4072,7 @@ const FLOW = {
       d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214"] },
   ]},
   classe: { w: 660, h: 250, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[230, 130, "Q1"]],
+    sw: [[230, 130, "Q1", 0]],
     emc: { loop: "M 230 60 H 310 V 205 H 230 Z", node: [230, 60] },
     ph: [
     { on: [1], t: "Switch on", f: () => [0, 0.5], n: "The drain is held at zero volts. The choke current ramps up and the tank current flows through the switch — but the device turned on at zero voltage, so nothing was dissipated in the transition.",
@@ -4087,7 +4087,7 @@ const FLOW = {
      current path is the whole lesson: a synchronous buck (where the point
      is that a FET replaces the diode), the coupled-cap converters, and
      the bridge-fed isolated stages.                                    */
-  syncbuck: { w: 660, h: 250, sw: [[170, 70, "Q_HS"], [215, 145, "Q_LS"]],
+  syncbuck: { w: 660, h: 250, sw: [[170, 70, "Q_HS", -90], [215, 145, "Q_LS", 0]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "High side on", f: (D) => [0, D], n: "Identical to a plain buck: the input feeds the inductor and its current ramps up. The low-side FET is held off, and the dead time before this instant was covered by its body diode.",
@@ -4095,7 +4095,7 @@ const FLOW = {
     { on: [0,1], t: "Low side on", f: (D) => [D, 1], n: "This is the whole point of the topology. Instead of a diode dropping a fixed 0.4 V, a FET channel carries the same current at I·R_DS(on) — which at low output voltages is the single largest efficiency lever available.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  sepic: { w: 700, h: 250, sw: [[160, 145, "Q1"], [343, 70, "D1"]],
+  sepic: { w: 700, h: 250, sw: [[160, 145, "Q1", 0], [343, 70, "D1"]],
     emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "Both inductors charge: L1 straight from the input, L2 from the coupling capacitor, which is why C_s carries the full load current in rms terms. The diode is reverse biased and the output runs on C_out alone.",
@@ -4103,7 +4103,7 @@ const FLOW = {
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "Both inductor currents commutate into the diode and feed the output together. Because C_s blocks DC, a short on the output cannot drag the input down — the advantage a boost does not have.",
       d: ["M 40 70 H 600 V 200 H 40", "M 280 200 V 70"] },
   ]},
-  cuk: { w: 700, h: 250, sw: [[160, 145, "Q1"], [280, 135, "D1"]],
+  cuk: { w: 700, h: 250, sw: [[160, 145, "Q1", 0], [280, 135, "D1"]],
     emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The transfer capacitor discharges through the switch into the output side. Energy crosses this converter through C1's electric field rather than through a magnetic field — which is exactly why C1 sees the full load current and is the reliability limit.",
@@ -4111,7 +4111,7 @@ const FLOW = {
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "The diode takes over and C1 recharges from the input inductor. Both inductors keep conducting throughout, so the input and output currents are continuous — the property that makes a Ćuk quiet at both ports.",
       d: ["M 40 70 H 280 V 200 H 40", "M 280 70 H 600 V 200 H 280"] },
   ]},
-  halfbridge: { w: 780, h: 295, sw: [[230, 102, "Q1"], [230, 192, "Q2"], [465, 80, "D1"], [465, 205, "D2"]],
+  halfbridge: { w: 780, h: 295, sw: [[230, 102, "Q1", 0], [230, 192, "Q2", 0], [465, 80, "D1"], [465, 205, "D2"]],
     emc: { loop: "M 110 45 H 230 V 250 H 110 Z", node: [230, 147] },
     ph: [
     { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "The primary sees +V_in/2, because the capacitor divider holds the return at half the bus. That halving is the reason each device blocks only V_in, against 2·V_in for a push-pull.",
@@ -4196,24 +4196,101 @@ const isDiode = (label) => /^(D|SR|BD)/.test(String(label));
    drawn as a valve gate — open with current flowing through when forward
    biased, closed with a barrier across it when blocking. The words live in
    the legend under the figure, where words belong. */
-const DevRing = (x, y, label, on) => {
-  const diode = isDiode(label);
-  /* Just large enough to clear the device glyph, and no larger: the
-     schematic prints its own component name a few pixels to the side, and
-     a wider ring cuts through the first letter of it. */
-  const r = 12;
+/* ---------------------------------------------------------------------
+   Direction arrows along a conducting path.
+
+   Moving dashes imply direction only while they are moving; paused, or on
+   the very first paint, the figure says nothing about which way the charge
+   is going. These chevrons say it statically.
+
+   The flow paths are polylines built from M/H/V/L, so the geometry is
+   parsed directly rather than measured through the DOM: no layout, no ref,
+   and the result can be memoised per phase instead of recomputed a frame
+   at a time. */
+function polyPoints(d) {
+  const segs = String(d).match(/[MLHV][^MLHV]*/gi) || [];
+  const pts = []; let x = 0, y = 0;
+  for (const seg of segs) {
+    const c = seg[0].toUpperCase();
+    const n = seg.slice(1).trim().split(/[\s,]+/).filter((s) => s !== "").map(Number);
+    if (c === "M" || c === "L") {
+      for (let i = 0; i + 1 < n.length; i += 2) { x = n[i]; y = n[i + 1]; pts.push([x, y]); }
+    } else if (c === "H") { for (const v of n) { x = v; pts.push([x, y]); } }
+    else if (c === "V") { for (const v of n) { y = v; pts.push([x, y]); } }
+  }
+  return pts;
+}
+
+function pathArrows(d, spacing = 108) {
+  const pts = polyPoints(d);
+  if (pts.length < 2) return [];
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    segs.push({ x: pts[i - 1][0], y: pts[i - 1][1], dx: dx / len, dy: dy / len, len, at: total });
+    total += len;
+  }
+  if (!total) return [];
+  const n = Math.max(1, Math.round(total / spacing));
+  const step = total / n;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const s = (k + 0.5) * step;
+    const seg = segs.find((g) => s >= g.at && s <= g.at + g.len) || segs[segs.length - 1];
+    const t = s - seg.at;
+    /* keep chevrons off the corners, where two directions meet */
+    if (t < 9 || seg.len - t < 9) continue;
+    out.push({
+      x: seg.x + seg.dx * t, y: seg.y + seg.dy * t,
+      a: Math.atan2(seg.dy, seg.dx) * 180 / Math.PI,
+    });
+  }
+  return out;
+}
+
+const Chevron = (m, i) => (
+  <path key={"cv" + i} className="carrow"
+    d="M -4.5 -4.5 L 3 0 L -4.5 4.5"
+    transform={`translate(${m.x.toFixed(1)},${m.y.toFixed(1)}) rotate(${m.a.toFixed(1)})`} />
+);
+
+/* The two device kinds are marked in the terms that actually distinguish
+   them, rather than in two shades of the same badge.
+
+   A switch has a GATE, and something outside the power circuit decides what
+   that gate does. So a switch is marked on its gate lead: lit and driven, or
+   dark and idle. Nothing is drawn across the device itself — that was the
+   mark that read as "crossed out" rather than "open".
+
+   A diode has no gate. Nothing commands it; it responds to the voltage
+   across it. It keeps the ring, and the bar across it when it is blocking,
+   which reads as the barrier it is holding up against reverse voltage. */
+const DevMark = (x, y, label, on, rot) => {
+  if (isDiode(label)) {
+    const r = 12;
+    return (
+      <g key={nk()} className={"devr" + (on ? " on" : "") + " di"}>
+        <circle className="halo" cx={x} cy={y} r={r + 3} />
+        <circle className="ring" cx={x} cy={y} r={r} />
+        {!on ? <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} /> : null}
+      </g>
+    );
+  }
+  /* The MOSFET primitive draws its gate lead from local (−10,0) to (−22,0)
+     inside a rotate(rot) group, so the same transform locates it here. */
+  const a = ((rot || 0) * Math.PI) / 180;
+  const ca = Math.cos(a), sa = Math.sin(a);
+  const at = (px, py) => [x + px * ca - py * sa, y + px * sa + py * ca];
+  const [ix, iy] = at(-10, 0);
+  const [ox, oy] = at(-23, 0);
   return (
-    <g key={nk()} className={"devr" + (on ? " on" : "") + (diode ? " di" : " sw")}>
-      <circle className="halo" cx={x} cy={y} r={r + 3} />
-      <circle className="ring" cx={x} cy={y} r={r} />
-      {/* The bar belongs to the diode only. Across a diode it reads as the
-          barrier the device is holding up against reverse voltage. Across a
-          switch the same mark reads as "crossed out" — as though the part
-          were deleted rather than simply open — so an off switch is left to
-          its dim ring and the schematic's own open contacts. */}
-      {diode && !on
-        ? <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />
-        : null}
+    <g key={nk()} className={"devg" + (on ? " on" : "")}>
+      <circle className="halo" cx={x} cy={y} r={14} />
+      <path className="glead" d={`M ${ox.toFixed(1)} ${oy.toFixed(1)} L ${ix.toFixed(1)} ${iy.toFixed(1)}`} />
+      <circle className="gdot" cx={ox.toFixed(1)} cy={oy.toFixed(1)} r={2.8} />
     </g>
   );
 };
@@ -4707,6 +4784,12 @@ function FlowCard({ topo, res }) {
   const devs = (F.sw || []).map((q, j) => ({
     label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
   }));
+  /* The chevrons only change when the conducting path does, so they are
+     computed per phase rather than per frame. */
+  const arrows = useMemo(
+    () => (ph.d || []).map((d) => pathArrows(d)),
+    [ph.d]
+  );
 
   return (
     <div className="card">
@@ -4750,10 +4833,14 @@ function FlowCard({ topo, res }) {
                 style={{ strokeWidth: 5 + 6 * (iNow / M.pk) }} />)}
               {ph.d.map((d, j) => <path key={"f" + j} d={d} className="flowp"
                 style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / M.pk) }} />)}
+              {/* which way the charge is going, stated rather than implied */}
+              {arrows.map((set, j) => (
+                <g key={"ar" + j}>{set.map(Chevron)}</g>
+              ))}
             </>
           )}
           {drawScope("db", () => (F.sw || []).map((q, j) =>
-            DevRing(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false)))}
+            DevMark(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false, q[3])))}
         </svg>
       </div>
       {devs.length ? (

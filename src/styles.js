@@ -327,6 +327,21 @@ export const CSS = `
 .ps .devr.di.on .ring{stroke-dasharray:5 3.4; animation:psdring 1.1s linear infinite}
 @keyframes psdring{to{stroke-dashoffset:-16.8}}
 
+/* A switch is marked on its GATE, because that is the thing something else
+   decides. Lit and driven, or dark and idle — and nothing is drawn across
+   the device body, which is what previously read as "crossed out". */
+.ps .devg .halo{fill:none; stroke:none}
+.ps .devg .glead{stroke:var(--ghost); stroke-width:2; fill:none; stroke-linecap:round; opacity:.7}
+.ps .devg .gdot{fill:none; stroke:var(--ghost); stroke-width:1.6; opacity:.7}
+.ps .devg.on .glead{stroke:var(--gn); stroke-width:2.6; opacity:1}
+.ps .devg.on .gdot{fill:var(--gn); stroke:var(--gn); opacity:1}
+.ps .devg.on .halo{stroke:var(--gn); stroke-width:4.5; opacity:.13}
+
+/* direction of charge flow, held steady whether or not anything is moving */
+.ps .carrow{fill:none; stroke:#0C1017; stroke-width:3.4; stroke-linecap:round;
+  stroke-linejoin:round; paint-order:stroke}
+.ps .flowov .carrow{stroke:var(--gn); stroke-width:1.9; opacity:.95}
+
 /* the current trace carries the same charge-driven dashes as the circuit,
    so the two animations read as one quantity rather than two speeds */
 .ps .wflow{fill:none; stroke:var(--gn); stroke-width:2.6; stroke-linecap:round;
