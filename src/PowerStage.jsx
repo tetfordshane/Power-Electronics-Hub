@@ -843,7 +843,7 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
      Only while it is running: parked at the start of the sweep the cursor
      must stay fully visible, or stepping through the phases would hand you
      a figure with no cursor in it at all. */
-  const EDGE = 0.06;
+  const EDGE = 0.035;
   const t = (playhead === null || !fadeEdges) ? 1
     : clamp(Math.min(playhead, 1 - playhead) / EDGE, 0, 1);
   const fade = t * t * (3 - 2 * t);
@@ -1133,7 +1133,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["output cap", eng(Co, "F")]],
       loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot"], ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out·(1−D)"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
+      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
       warn: [
         Dx > 0.85 && "D reaches " + f3(Dx) + " at V_in min — check the controller's max duty and t_on.",
         Dm < 0.05 && "D falls to " + f3(Dm) + " at V_in max — t_on may be shorter than the minimum on-time.",
@@ -1215,7 +1215,7 @@ const TA = [
       loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
         ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"], ["Body diode", Pdt, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
+      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
       warn: [
         Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair.",
         dIn / 2 > Io && "Inductor ripple exceeds the DC current: current reverses each cycle. Fine for forced PWM, wasteful at light load.",
@@ -1289,7 +1289,7 @@ const TA = [
       hi: [["per-phase current", eng(Iph, "A")], ["ripple cancellation", "×" + f2(K)], ["output ripple f", eng(N * fs, "Hz")]],
       loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pl, "N·I_phase(rms)²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Iph, vlabel: "phase node v_SW", vhi: "V_in" },
+      wave: { D: Dn, dI: dIn, iavg: Iph, vlabel: "v_SW", vhi: "V_in" },
       warn: [
         Dn >= 1 && "V_out exceeds V_in·η — a buck cannot reach this operating point, so the ripple-cancellation numbers below do not apply.",
         Dn < 1 && K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number.",
@@ -1368,7 +1368,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["RHP zero", eng(frhp, "Hz")]],
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot"], ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "switch node v_SW", vhi: "V_out", vinv: true },
+      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "v_SW", vhi: "V_out", vinv: true },
       warn: [
         Dx > 0.8 && "D = " + f3(Dx) + " at V_in min. Conduction loss and the RHP zero both degrade rapidly beyond about 0.8 — consider two stages or a transformer-based topology.",
         s.vinMax > Vo && "V_in max exceeds V_out. A boost cannot regulate down; the output will follow the input through the diode.",
@@ -1442,7 +1442,7 @@ const TA = [
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
         ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "switch node v_A", vhi: "V_in" },
+      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "v_A", vhi: "V_in" },
       warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1514,7 +1514,7 @@ const TA = [
       loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg"],
         ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
-      wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) , vlabel: "switch node v_SW", vhi: "V_in" },
+      wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) , vlabel: "v_SW", vhi: "V_in" },
       warn: [Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate."].filter(Boolean),
       groups: [
         G("Modes", [
@@ -1582,7 +1582,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
       loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Iin, vlabel: "switch node v_SW", vhi: "V_in+|V_out|", vinv: true },
+      wave: { D: Dn, dI, iavg: Iin, vlabel: "v_SW", vhi: "V_in+|V_out|", vinv: true },
       warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1650,7 +1650,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
       loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
         ["Diode", Pd, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "switch node v_SW", vhi: "V_in+V_out", vinv: true },
+      wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "v_SW", vhi: "V_in+V_out", vinv: true },
       warn: [
         Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback.",
         Ics > 3 && "C_s rms is " + eng(Ics, "A") + " — plan on several ceramics or a film cap.",
@@ -1716,7 +1716,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
       loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
       groups: [
         G("Operating point", [
           R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
@@ -1848,8 +1848,8 @@ const TB = [
         ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],
         ["Output rectifier", Pdo, "V_F·I_out"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
-      wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "primary i_pri",
-        vlabel: "drain v_DS", vhi: "V_in+V_R", vinv: true },
+      wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "i_pri",
+        vlabel: "v_DS", vhi: "V_in+V_R", vinv: true },
       warn: [
         s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R.",
         Vds > 600 && "V_DS reaches " + eng(Vds, "V") + " before the leakage spike. That is 900 V+ silicon territory; lower N or use active clamp.",
@@ -1921,7 +1921,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series"],
         ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
       warn: [
         s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time.",
         Dm < 0.1 && "Duty falls to " + f3(Dm) + " at V_in max; check the controller's minimum on-time and the transformer's utilisation.",
@@ -1985,7 +1985,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against 2·V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
       warn: [
         s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
         2 * s.vinMax > 200 && "2·V_in max = " + eng(2 * s.vinMax, "V") + " before the spike. Consider a half-bridge instead.",
@@ -2047,7 +2047,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in/2" },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2" },
       warn: [
         s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
       ].filter(Boolean),
@@ -2109,7 +2109,7 @@ const TB = [
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
       loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
       warn: [
         dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
         zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load.",
@@ -2794,7 +2794,7 @@ const TD = [
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
       loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
         ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
-      wave: { D: D, dI: dI, iavg: Io, vlabel: "rectified v_rect", vhi: "V_sec", ilabel: "choke i_Lf" },
+      wave: { D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " exceeds 0.5. Each half-cycle can occupy at most half the period or the two halves overlap and short the secondary.",
         Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified.",
@@ -2920,7 +2920,7 @@ const TD = [
     return {
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
       loss: [["Rectifiers", Pd, "V_F·I_out"]],
-      wave: { D: D, dI: dI, iavg: IL, vlabel: "winding v_sec", vhi: "V_sec", ilabel: "inductor i_L1" },
+      wave: { D: D, dI: dI, iavg: IL, vlabel: "v_sec", vhi: "V_sec", ilabel: "i_L1" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period.",
         Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation.",
@@ -3884,6 +3884,7 @@ function FigPanel({ id, duty }) {
         play={play} onPlay={() => setPlay(!play)}
         spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
         phases={segs.map((sg) => sg[0])} phase={play ? -1 : idx} onPhase={jump}
+        pos={p} onPos={(v) => { setPlay(false); setP(v); }}
       />
       {FIGNOTE[id] ? <p className="cap" style={{ borderLeftColor: "var(--line)", marginTop: 10, minHeight: 0 }}>
         <Sub t={FIGNOTE[id]} /></p> : null}
@@ -3893,25 +3894,38 @@ function FigPanel({ id, duty }) {
 
 /* One transport bar, shared by the static figure and the current-flow card,
    so the same controls look and behave the same on every topology. */
-function PlayBar({ play, onPlay, spd, onSpd, phases, phase, onPhase, extra }) {
+function PlayBar({ play, onPlay, spd, onSpd, phases, phase, onPhase, extra, pos, onPos }) {
   return (
-    <div className="ctl" role="group" aria-label="Animation controls">
-      <button className={play ? "on" : ""} onClick={onPlay} aria-pressed={play}
-        aria-label={play ? "Pause animation" : "Play animation"}>
-        <span aria-hidden="true">{play ? "❚❚" : "▶"}</span> {play ? "pause" : "play"}
-      </button>
-      {[0.5, 1, 2].map((v) => (
-        <button key={v} className={spd === v && play ? "on" : ""} onClick={() => onSpd(v)}
-          aria-pressed={spd === v && play} aria-label={"Speed " + v + " times"}>{v}×</button>
-      ))}
-      <span className="sp" />
-      {phases.map((name, k) => (
-        <button key={k} className={phase === k ? "on" : ""} onClick={() => onPhase(k)} aria-pressed={phase === k}>
-          {name}
+    <>
+      <div className="ctl" role="group" aria-label="Animation controls">
+        <button className={play ? "on" : ""} onClick={onPlay} aria-pressed={play}
+          aria-label={play ? "Pause animation" : "Play animation"}>
+          <span aria-hidden="true">{play ? "❚❚" : "▶"}</span> {play ? "pause" : "play"}
         </button>
-      ))}
-      {extra}
-    </div>
+        {[0.5, 1, 2].map((v) => (
+          <button key={v} className={spd === v && play ? "on" : ""} onClick={() => onSpd(v)}
+            aria-pressed={spd === v && play} aria-label={"Speed " + v + " times"}>{v}×</button>
+        ))}
+        <span className="sp" />
+        {phases.map((name, k) => (
+          <button key={k} className={phase === k ? "on" : ""} onClick={() => onPhase(k)} aria-pressed={phase === k}>
+            {name}
+          </button>
+        ))}
+        {extra}
+      </div>
+      {/* Scrub. Stepping between named phases lands you in the middle of one;
+          this walks the whole cycle so a transition can be inspected at the
+          instant it happens. */}
+      {onPos ? (
+        <div className="scrub">
+          <span>scrub</span>
+          <input type="range" min="0" max="1" step="0.002" value={pos}
+            aria-label="Scrub through the switching cycle"
+            onChange={(e) => onPos(parseFloat(e.target.value))} />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -4337,9 +4351,9 @@ function polyPoints(d) {
   return pts;
 }
 
-function pathArrows(d, spacing = 108) {
+/* Measure a path once, per phase. */
+function polySegs(d) {
   const pts = polyPoints(d);
-  if (pts.length < 2) return [];
   const segs = [];
   let total = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -4349,16 +4363,26 @@ function pathArrows(d, spacing = 108) {
     segs.push({ x: pts[i - 1][0], y: pts[i - 1][1], dx: dx / len, dy: dy / len, len, at: total });
     total += len;
   }
-  if (!total) return [];
+  return { segs, total };
+}
+
+/* Place arrowheads along a measured path, advanced by how far the charge has
+   travelled. They ride with the dashes rather than sitting still beside
+   them: a fixed arrow next to a moving dash reads as a diagram annotation,
+   and looks inert the moment anything else on the figure changes. */
+function arrowsAt({ segs, total }, travel, spacing = 104) {
+  if (!total || !segs.length) return [];
   const n = Math.max(1, Math.round(total / spacing));
   const step = total / n;
+  const base = ((travel % step) + step) % step;
   const out = [];
   for (let k = 0; k < n; k++) {
-    const s = (k + 0.5) * step;
+    const s = base + k * step;
+    if (s > total) continue;
     const seg = segs.find((g) => s >= g.at && s <= g.at + g.len) || segs[segs.length - 1];
     const t = s - seg.at;
-    /* keep chevrons off the corners, where two directions meet */
-    if (t < 9 || seg.len - t < 9) continue;
+    /* skip the corners, where two directions meet and an arrow is ambiguous */
+    if (t < 8 || seg.len - t < 8) continue;
     out.push({
       x: seg.x + seg.dx * t, y: seg.y + seg.dy * t,
       a: Math.atan2(seg.dy, seg.dx) * 180 / Math.PI,
@@ -4903,12 +4927,11 @@ function FlowCard({ topo, res, spec }) {
   const devs = (F.sw || []).map((q, j) => ({
     label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
   }));
-  /* The chevrons only change when the conducting path does, so they are
-     computed per phase rather than per frame. */
-  const arrows = useMemo(
-    () => (ph.d || []).map((d) => pathArrows(d)),
-    [ph.d]
-  );
+  /* Measure the conducting paths once per phase; the arrowheads themselves
+     are then placed each frame from how far the charge has moved, so they
+     travel with the dashes at the same rate. */
+  const geo = useMemo(() => (ph.d || []).map(polySegs), [ph.d]);
+  const arrows = geo.map((g) => arrowsAt(g, -flowOff));
 
   return (
     <div className="card">
@@ -4917,6 +4940,7 @@ function FlowCard({ topo, res, spec }) {
         play={play} onPlay={() => setPlay(!play)}
         spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
         phases={F.ph.map((q) => q.t)} phase={play ? -1 : idx} onPhase={jump}
+        pos={p} onPos={(v) => { setPlay(false); setP(v); }}
         extra={
           <>
             <span className="sp" />
@@ -4952,9 +4976,11 @@ function FlowCard({ topo, res, spec }) {
                 style={{ strokeWidth: 5 + 6 * (iNow / M.pk) }} />)}
               {ph.d.map((d, j) => <path key={"f" + j} d={d} className="flowp"
                 style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / M.pk) }} />)}
-              {/* which way the charge is going, stated rather than implied */}
+              {/* which way the charge is going — travelling with it */}
               {arrows.map((set, j) => (
-                <g key={"ar" + j}>{set.map(Chevron)}</g>
+                <g key={"ar" + j} style={{ opacity: 0.55 + 0.45 * (iNow / M.pk) }}>
+                  {set.map(Chevron)}
+                </g>
               ))}
             </>
           )}

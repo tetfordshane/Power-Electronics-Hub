@@ -337,7 +337,19 @@ export const CSS = `
 .ps .devg.on .gdot{fill:var(--gn); stroke:var(--gn); opacity:1}
 .ps .devg.on .halo{stroke:var(--gn); stroke-width:4.5; opacity:.13}
 
-/* direction of charge flow, held steady whether or not anything is moving */
+/* scrub through the cycle by hand */
+.ps .scrub{display:flex; align-items:center; gap:10px; margin:9px 0 0}
+.ps .scrub span{font-size:var(--t-micro); color:var(--faint); letter-spacing:.06em;
+  text-transform:uppercase; font-weight:600}
+.ps .scrub input[type=range]{flex:1; max-width:340px; height:3px; -webkit-appearance:none;
+  appearance:none; background:var(--line2); border-radius:2px; outline:none}
+.ps .scrub input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none;
+  width:13px; height:13px; border-radius:50%; background:var(--cu); cursor:pointer;
+  border:2px solid var(--bg)}
+.ps .scrub input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%;
+  background:var(--cu); cursor:pointer; border:2px solid var(--bg)}
+
+/* direction of charge flow, carried along with it */
 .ps .carrow{fill:none; stroke:#0C1017; stroke-width:3.4; stroke-linecap:round;
   stroke-linejoin:round; paint-order:stroke}
 .ps .flowov .carrow{stroke:var(--gn); stroke-width:1.9; opacity:.95}
