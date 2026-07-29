@@ -801,17 +801,30 @@ function layoutLabelsX(items, minGap, lo, hi) {
 const WAVE_CYCLES = 3;
 
 function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_CYCLES,
-  pulse = false, band = null, playhead = null, flowOffset = null, fadeEdges = false }) {
-  const x0 = 52, x1 = 640, per = (x1 - x0) / cycles;
+  pulse = false, band = null, playhead = null, flowOffset = null, fadeEdges = false,
+  period = null, vhi = "high", vinv = false }) {
+  /* The left margin carries a named value on every tick ("peak 11.4 A"),
+     so it has to be wide enough to hold one — 52px was only ever enough for
+     a bare number. */
+  const x0 = 96, x1 = 640, per = (x1 - x0) / cycles;
   const imax = iavg + dI / 2;
   const imin = Math.max(iavg - dI / 2, 0);
   const top = 92, bot = 168, span = Math.max(imax * 1.18, 1e-9);
   const yI = (i) => bot - (i / span) * (bot - top);
-  let dv = `M ${x0} 62`, di = `M ${x0} ${yI(imin)}`;
+  /* Which way round the switch node sits.
+
+     Where the switch is in series with the input — buck, forward, bridge —
+     the node is pulled UP to the rail while the device conducts. Where the
+     switch returns to ground — boost, flyback, SEPIC, Ćuk — it is pulled
+     DOWN to zero while conducting, and flies up to the reflected rail when
+     it turns off. Drawing every topology the first way had the trace upside
+     down on the second group. */
+  const vOn = vinv ? 62 : 28, vOff = vinv ? 28 : 62;
+  let dv = `M ${x0} ${vOff}`, di = `M ${x0} ${yI(imin)}`;
   for (let c = 0; c < cycles + 1; c++) {
     const a = x0 + c * per, b = a + per * D, e = a + per;
     if (a > x1) break;
-    dv += ` L ${Math.min(a, x1)} 28 L ${Math.min(b, x1)} 28 L ${Math.min(b, x1)} 62 L ${Math.min(e, x1)} 62`;
+    dv += ` L ${Math.min(a, x1)} ${vOn} L ${Math.min(b, x1)} ${vOn} L ${Math.min(b, x1)} ${vOff} L ${Math.min(e, x1)} ${vOff}`;
     di += pulse
       ? ` L ${Math.min(a, x1)} ${yI(imin)} L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(b, x1)} ${yI(0)} L ${Math.min(e, x1)} ${yI(0)}`
       : ` L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(e, x1)} ${yI(imin)}`;
@@ -838,17 +851,27 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
     ? (uPhase < D ? imin + (imax - imin) * (uPhase / D) : 0)
     : (uPhase < D ? imin + (imax - imin) * (uPhase / D)
       : imax - (imax - imin) * ((uPhase - D) / Math.max(1 - D, 1e-6)));
-  const vHigh = uPhase < D;
+  const vHigh = vinv ? uPhase >= D : uPhase < D;
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
   /* The series name sits at the ripple peak and the mean value at the mean.
      At low ripple those are only a few pixels apart, so lay them out. */
   /* 15 px, not 12: these labels carry rendered subscripts, whose descenders
      make the real bounding box noticeably taller than the font size. */
   const [yName, yMean, yZero] = layoutLabels(
-    [yI(imax) + 4, yI(iavg) + 4, bot + 4], 15, top - 2, bot + 5
+    [yI(imax) + 3.5, yI(iavg) + 3.5, yI(imin) + 3.5], 13, top - 2, bot + 4
   );
+  /* Axis furniture. Both panes get a named quantity with its unit, real
+     numbers on the current scale rather than a single mean, and a time axis
+     in the periods the reader is actually looking at. Without this the plot
+     was two anonymous traces and a bracket. */
+  /* Name the two rails the node actually sits at. "on"/"off" made a power
+     node look like a logic signal, which invites reading it as the gate
+     drive — it is not; it is the node the filter averages. */
+  const tickV = [[28, vhi], [62, "0"]];
+  const tickI = [[imax, "peak"], [iavg, "mean"], [imin, "valley"]];
+  const tUnit = period ? (v) => eng(v * period, "s") : (v) => (v ? v + "T" : "0");
   return (
-    <div className="sch"><svg viewBox="0 0 660 190" style={{ width: "100%", height: "auto", display: "block" }}>
+    <div className="sch"><svg viewBox="0 0 660 244" style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("wv", () => (<>
         {band ? Array.from({ length: Math.ceil(cycles) + 1 }, (_, c) => {
           const ba = x0 + (c + band[0]) * per, bb = x0 + (c + band[1]) * per;
@@ -856,8 +879,17 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
           return <rect key={"bd" + c} x={ba} y={18} width={Math.max(Math.min(bb, x1) - ba, 0)}
             height={bot - 18} fill="#6FD39B" opacity=".08" />;
         }) : null}
+        {/* pane titles — what quantity, in what unit */}
+        {/* the subscript in the name descends, so the unit line needs real
+            clearance rather than a nominal line height */}
+        {Tx(6, 14, vlabel || "voltage", { c: "#5AD1DE", s: 10.5, b: 1 })}
+        {Tx(6, 30, "volts", { c: "#5C6E82", s: 8.5 })}
+        {Tx(6, 86, ilabel || "current", { c: "#E0A458", s: 10.5, b: 1 })}
+        {Tx(6, 102, "amps", { c: "#5C6E82", s: 8.5 })}
         <path d={`M ${x0} 20 H ${x1}`} {...gl} /><path d={`M ${x0} 62 H ${x1}`} {...gl} />
         <path d={`M ${x0} ${bot} H ${x1}`} {...gl} />
+        {/* the axis rules themselves */}
+        <path d={`M ${x0} 22 V 62 M ${x0} ${top - 4} V ${bot}`} stroke="#3E5266" strokeWidth={1} fill="none" />
         <path d={`M ${x0} ${yI(iavg)} H ${x1}`} stroke="#3E5266" strokeWidth={1} strokeDasharray="3 4" fill="none" />
         <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
         <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
@@ -869,14 +901,36 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
         {flowOffset !== null ? (
           <path className="wflow" d={di} style={{ strokeDashoffset: flowOffset }} />
         ) : null}
-        {Tx(x0 - 6, 34, vlabel, { a: "end", c: "#5AD1DE", s: 10.5 })}
-        {Tx(x0 - 6, 66, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
-        {Tx(x0 - 6, yName, ilabel, { a: "end", c: "#E0A458", s: 10.5 })}
-        {Tx(x0 - 6, yMean, eng(iavg, "A"), { a: "end", c: "#5C6E82", s: 10 })}
-        {Tx(x0 - 6, yZero, "0", { a: "end", c: "#5C6E82", s: 10.5 })}
-        {Tx(x0 + per * D / 2, 184, "D·T", { a: "middle", c: "#5C6E82", s: 10.5 })}
-        {Tx(x0 + per, 184, "T = 1/f_sw", { a: "middle", c: "#5C6E82", s: 10.5 })}
-        <path d={`M ${x0} 172 V 176 M ${x0 + per} 172 V 176`} {...gl} />
+        {/* voltage scale */}
+        {tickV.map(([yy, lab], i) => (
+          <g key={"tv" + i}>{Tx(x0 - 8, yy + 3.5, lab, { a: "end", c: "#5C6E82", s: 9.5 })}</g>
+        ))}
+        {/* current scale: the three numbers a designer sizes parts against,
+            each said in words as well as figures */}
+        {[[yName, imax, "peak"], [yMean, iavg, "mean"], [yZero, imin, "valley"]].map(([yy, v, lab], i) => (
+          <g key={"ti" + i}>
+            <path d={`M ${x0 - 5} ${yy - 3.5} H ${x0}`} {...gl} />
+            {Tx(x0 - 8, yy, lab + "  " + eng(v, "A"), { a: "end", c: "#8DA0B4", s: 9.5 })}
+          </g>
+        ))}
+        {/* time axis: one tick per drawn period, plus the on-time bracket */}
+        <path d={`M ${x0} ${bot} V ${bot + 6}`} {...gl} />
+        {Array.from({ length: cycles + 1 }, (_, c) => (
+          <g key={"tk" + c}>
+            <path d={`M ${x0 + c * per} ${bot} V ${bot + 6}`} {...gl} />
+            {Tx(x0 + c * per, bot + 18, tUnit(c), { a: "middle", c: "#5C6E82", s: 9.5 })}
+          </g>
+        ))}
+        {/* The on-time bracket gets its own row beneath the tick labels. Set
+            beside the bracket it collided with the first tick whenever the
+            duty ran long. */}
+        <path d={`M ${x0} ${bot + 30} H ${x0 + per * D}`} stroke="#6FD39B" strokeWidth={1.4} fill="none" />
+        <path d={`M ${x0} ${bot + 27} V ${bot + 33} M ${x0 + per * D} ${bot + 27} V ${bot + 33}`}
+          stroke="#6FD39B" strokeWidth={1.4} fill="none" />
+        {Tx(x0 + per * D / 2, bot + 45, "on-time  D·T = " + f3(D) + "·T",
+          { a: "middle", c: "#6FD39B", s: 9.5 })}
+        {Tx((x0 + x1) / 2, bot + 62, period ? "time" : "time  ·  T = 1/f_sw",
+          { a: "middle", c: "#8DA0B4", s: 10.5 })}
         {mx !== null ? (
           <g style={{ opacity: fade }}>
             <path d={`M ${mx} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
@@ -1079,7 +1133,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["output cap", eng(Co, "F")]],
       loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot"], ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out·(1−D)"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io },
+      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
       warn: [
         Dx > 0.85 && "D reaches " + f3(Dx) + " at V_in min — check the controller's max duty and t_on.",
         Dm < 0.05 && "D falls to " + f3(Dm) + " at V_in max — t_on may be shorter than the minimum on-time.",
@@ -1161,7 +1215,7 @@ const TA = [
       loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
         ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"], ["Body diode", Pdt, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io },
+      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
       warn: [
         Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair.",
         dIn / 2 > Io && "Inductor ripple exceeds the DC current: current reverses each cycle. Fine for forced PWM, wasteful at light load.",
@@ -1235,7 +1289,7 @@ const TA = [
       hi: [["per-phase current", eng(Iph, "A")], ["ripple cancellation", "×" + f2(K)], ["output ripple f", eng(N * fs, "Hz")]],
       loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pl, "N·I_phase(rms)²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Iph },
+      wave: { D: Dn, dI: dIn, iavg: Iph, vlabel: "phase node v_SW", vhi: "V_in" },
       warn: [
         Dn >= 1 && "V_out exceeds V_in·η — a buck cannot reach this operating point, so the ripple-cancellation numbers below do not apply.",
         Dn < 1 && K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number.",
@@ -1314,7 +1368,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["RHP zero", eng(frhp, "Hz")]],
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot"], ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL },
+      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "switch node v_SW", vhi: "V_out", vinv: true },
       warn: [
         Dx > 0.8 && "D = " + f3(Dx) + " at V_in min. Conduction loss and the RHP zero both degrade rapidly beyond about 0.8 — consider two stages or a transformer-based topology.",
         s.vinMax > Vo && "V_in max exceeds V_out. A boost cannot regulate down; the output will follow the input through the diode.",
@@ -1388,7 +1442,7 @@ const TA = [
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
         ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL },
+      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "switch node v_A", vhi: "V_in" },
       warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1460,7 +1514,7 @@ const TA = [
       loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg"],
         ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
-      wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) },
+      wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) , vlabel: "switch node v_SW", vhi: "V_in" },
       warn: [Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate."].filter(Boolean),
       groups: [
         G("Modes", [
@@ -1528,7 +1582,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
       loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Iin },
+      wave: { D: Dn, dI, iavg: Iin, vlabel: "switch node v_SW", vhi: "V_in+|V_out|", vinv: true },
       warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1596,7 +1650,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
       loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
         ["Diode", Pd, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn) },
+      wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "switch node v_SW", vhi: "V_in+V_out", vinv: true },
       warn: [
         Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback.",
         Ics > 3 && "C_s rms is " + eng(Ics, "A") + " — plan on several ceramics or a film cap.",
@@ -1662,7 +1716,7 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
       loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Io },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "switch node v_SW", vhi: "V_in" },
       groups: [
         G("Operating point", [
           R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
@@ -1794,7 +1848,8 @@ const TB = [
         ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],
         ["Output rectifier", Pdo, "V_F·I_out"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
-      wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "i_pri" },
+      wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "primary i_pri",
+        vlabel: "drain v_DS", vhi: "V_in+V_R", vinv: true },
       warn: [
         s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R.",
         Vds > 600 && "V_DS reaches " + eng(Vds, "V") + " before the leakage spike. That is 900 V+ silicon territory; lower N or use active clamp.",
@@ -1866,7 +1921,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series"],
         ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
       warn: [
         s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time.",
         Dm < 0.1 && "Duty falls to " + f3(Dm) + " at V_in max; check the controller's minimum on-time and the transformer's utilisation.",
@@ -1930,7 +1985,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against 2·V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
       warn: [
         s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
         2 * s.vinMax > 200 && "2·V_in max = " + eng(2 * s.vinMax, "V") + " before the spike. Consider a half-bridge instead.",
@@ -1992,7 +2047,7 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in/2" },
       warn: [
         s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
       ].filter(Boolean),
@@ -2054,7 +2109,7 @@ const TB = [
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
       loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io },
+      wave: { D: Dn, dI, iavg: Io , vlabel: "primary v_pri", vhi: "V_in" },
       warn: [
         dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
         zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load.",
@@ -2739,7 +2794,7 @@ const TD = [
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
       loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
         ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
-      wave: { D: D, dI: dI, iavg: Io, vlabel: "V_rect", ilabel: "i_Lf" },
+      wave: { D: D, dI: dI, iavg: Io, vlabel: "rectified v_rect", vhi: "V_sec", ilabel: "choke i_Lf" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " exceeds 0.5. Each half-cycle can occupy at most half the period or the two halves overlap and short the secondary.",
         Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified.",
@@ -2865,7 +2920,7 @@ const TD = [
     return {
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
       loss: [["Rectifiers", Pd, "V_F·I_out"]],
-      wave: { D: D, dI: dI, iavg: IL, vlabel: "winding", ilabel: "i_L1" },
+      wave: { D: D, dI: dI, iavg: IL, vlabel: "winding v_sec", vhi: "V_sec", ilabel: "inductor i_L1" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period.",
         Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation.",
@@ -3648,6 +3703,13 @@ const FIGS = {
   },
 };
 
+/* Plain-language name for each generic figure, so the card can say which
+   family pattern it is showing rather than implying it is this circuit. */
+const FIGFAMILY = {
+  buck: "buck", boost: "boost", bb: "buck-boost", flyback: "flyback",
+  rect: "rectifier", bridge: "bridge",
+};
+
 const FIGMAP = {
   buck: ["buck"], syncbuck: ["buck"], multiphase: ["buck"],
   boost: ["boost"], pfcboost: ["boost"], totempole: ["boost"],
@@ -4087,6 +4149,58 @@ const FLOW = {
      current path is the whole lesson: a synchronous buck (where the point
      is that a FET replaces the diode), the coupled-cap converters, and
      the bridge-fed isolated stages.                                    */
+  /* ---- traced from each topology's own schematic, so the operation figure
+     is the circuit shown above it rather than a generic family stand-in --- */
+  syncrect: { w: 680, h: 280, sw: [[330, 60, "SR1", -90], [330, 140, "SR2", -90]],
+    emc: { loop: "M 214 60 H 350 V 140 H 214 Z", node: [350, 100] },
+    ph: [
+    { on: [1,0], t: "SR1 conducting", f: () => [0, 0.5], n: "The upper half of the winding drives the load through SR1's channel. A FET conducting in the third quadrant drops I·R_DS(on) instead of a fixed V_F, which below about 12 V out is worth more than anything on the primary side.",
+      d: ["M 214 100 H 575 V 230 H 350 V 60 H 214"] },
+    { on: [0,1], t: "SR2 conducting", f: () => [0.5, 1], n: "The winding reverses and SR2 takes over. Both devices must be off before the other turns on: overlap shorts the winding, and gate timing that is late instead lets the body diode conduct and throws the advantage away.",
+      d: ["M 214 100 H 575 V 230 H 350 V 140 H 214"] },
+  ]},
+  totempole: { w: 720, h: 280,
+    sw: [[300, 100, "Q1", 0], [300, 190, "Q2", 0], [420, 100, "Q3", 0], [420, 190, "Q4", 0]],
+    emc: { loop: "M 300 50 H 640 V 240 H 300 Z", node: [300, 145] },
+    ph: [
+    { on: [0,1,0,1], t: "Q2 on — charge", f: (D) => [0, D], n: "The fast leg's low-side device shorts the boost inductor across the line and its current ramps. The slow leg is doing nothing but pointing the mains at the right rail — it changes state once per line half-cycle, not once per switching period.",
+      d: ["M 45 110 H 300 V 240 H 420 V 145 H 380 V 205 H 45"] },
+    { on: [1,0,0,1], t: "Q1 on — transfer", f: (D) => [D, 1], n: "The inductor current commutates into the high-side device and charges the bulk capacitor. There are no bridge diodes anywhere in this path, which is the whole point — and why the device needs to have essentially no reverse recovery.",
+      d: ["M 45 110 H 300 V 50 H 640 V 240 H 420 V 145 H 380 V 205 H 45"] },
+  ]},
+  zeta: { w: 700, h: 250, sw: [[170, 70, "Q1", -90], [340, 135, "D1"]],
+    emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    ph: [
+    { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The high-side switch connects the input to both the coupling capacitor and L1. C1 delivers its charge onward to L2 and the load, and L1 magnetises from the input.",
+      d: ["M 40 70 H 600 V 200 H 40", "M 215 70 V 200"] },
+    { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "D1 picks up both inductor currents. L2 faces the load directly, so output current stays continuous and the output ripple is small — the property that separates a Zeta from a SEPIC.",
+      d: ["M 340 200 V 70 H 600 V 200 H 340", "M 215 200 V 70 H 325"] },
+  ]},
+  fsbb: { w: 700, h: 250,
+    sw: [[170, 70, "Q1", -90], [215, 145, "Q2", 0], [330, 145, "Q3", 0], [400, 70, "Q4", -90]],
+    emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    ph: [
+    { on: [1,0,0,1], t: "Q1 on (buck mode)", f: (D) => [0, D], n: "In buck mode the boost leg is static: Q4 stays on, Q3 stays off, and the converter is an ordinary buck. The input feeds the inductor through Q1 and the current ramps up.",
+      d: ["M 40 70 H 600 V 200 H 40"], dim: ["M 330 70 V 200"] },
+    { on: [0,1,0,1], t: "Q2 on (buck mode)", f: (D) => [D, 1], n: "Q2 takes over as the synchronous freewheel path. Because both devices only ever block the larger of the two rails — never their sum — this topology stays efficient right through V_in ≈ V_out, where an inverting buck-boost is at its worst.",
+      d: ["M 215 200 V 70 H 600 V 200 H 215"], dim: ["M 330 70 V 200"] },
+  ]},
+  multiphase: { w: 700, h: 270,
+    sw: [[170, 75, "Q1H", 0], [170, 165, "Q1L", 0], [270, 90, "Q2H", 0], [270, 180, "Q2L", 0],
+         [370, 105, "Q3H", 0], [370, 195, "Q3L", 0]],
+    emc: { loop: "M 70 55 H 170 V 235 H 70 Z", node: [170, 120] },
+    ph: [
+    { on: [1,0,0,1,0,1], t: "Phase 1 driving", f: () => [0, 1/3], n: "Only one leg is drawing from the input at a time. The other two freewheel through their low-side devices, so the input capacitor sees a much smaller and much higher-frequency ripple than a single buck of the same total current would demand.",
+      d: ["M 30 55 H 170 V 120 H 520 V 150 H 640 V 235 H 30"],
+      dim: ["M 270 235 V 135 H 520", "M 370 235 V 150 H 520"] },
+    { on: [0,1,1,0,0,1], t: "Phase 2 driving", f: () => [1/3, 2/3], n: "The clock hands over 360°/N later. Each inductor carries only I_out/N, and their ripples land out of phase, so what reaches the output capacitor is a fraction of any one phase's ripple.",
+      d: ["M 30 55 H 270 V 135 H 520 V 150 H 640 V 235 H 30"],
+      dim: ["M 170 235 V 120 H 520", "M 370 235 V 150 H 520"] },
+    { on: [0,1,0,1,1,0], t: "Phase 3 driving", f: () => [2/3, 1], n: "The third leg takes its turn. The output sees ripple at N·f_sw, which is why the same transient response needs less capacitance than a single-phase design.",
+      d: ["M 30 55 H 370 V 150 H 640 V 235 H 30"],
+      dim: ["M 170 235 V 120 H 520", "M 270 235 V 135 H 520"] },
+  ]},
+
   syncbuck: { w: 660, h: 250, sw: [[170, 70, "Q_HS", -90], [215, 145, "Q_LS", 0]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
@@ -4180,7 +4294,9 @@ function LossBar({ items }) {
    and empties behind a barrier when it is holding voltage off. Each also
    states its condition in words — "closed"/"open" against "conducting"/
    "blocking" — because those are different physical situations.        */
-const isDiode = (label) => /^(D|SR|BD)/.test(String(label));
+/* SR1/SR2 are synchronous-rectifier FETs: they have gates and a driver
+   decides what they do, so they are switches, not diodes. */
+const isDiode = (label) => /^D/.test(String(label));
 
 /* A ring AROUND the device, never a panel on top of it.
 
@@ -4695,7 +4811,10 @@ function SpecCard({ topo, spec, res }) {
 /* the operation card: the conduction path, animated at the real current.
    Dash offset advances with accumulated charge, so the flow speeds up as
    the inductor charges and slows as it discharges.                       */
-function FlowCard({ topo, res }) {
+function FlowCard({ topo, res, spec }) {
+  /* the switching period, so the waveform can carry real time rather than
+     an anonymous "T" */
+  const period = spec && spec.fsw > 0 ? 1 / (spec.fsw * 1e3) : null;
   const F = FLOW[topo.id];
   const reduce = usePrefersReducedMotion();
   const [p, setP] = useState(0);
@@ -4863,7 +4982,8 @@ function FlowCard({ topo, res }) {
       </p>
       {wv ? (
         <div style={{ marginTop: 12 }}>
-          <Wave {...wv} band={band} playhead={p} flowOffset={flowOff} fadeEdges={play} />
+          <Wave {...wv} band={band} playhead={p} flowOffset={flowOff} fadeEdges={play}
+            period={period} />
         </div>
       ) : null}
     </div>
@@ -5059,18 +5179,23 @@ export default function App() {
             </div>
 
             {FLOW[topo.id] ? (
-              <FlowCard topo={topo} res={res} />
+              <FlowCard topo={topo} res={res} spec={spec} />
             ) : FIGMAP[topo.id] ? (
               <div className="card">
-                <span className="eyebrow">Operation · one switching period</span>
-                <h3 style={{ marginBottom: 12 }}>Where the current actually goes</h3>
+                <span className="eyebrow">Operation · the {FIGFAMILY[FIGMAP[topo.id][0]]} pattern</span>
+                <h3 style={{ marginBottom: 6 }}>How this family switches</h3>
+                {/* Naming the figure honestly matters more than it sounds. This
+                    is a generic family figure, NOT the schematic above it, and a
+                    reader who takes it for this converter's own circuit will
+                    mis-read which devices exist and where the current goes. */}
+                <div className="note" style={{ marginBottom: 12 }}>
+                  <b>note ·</b> This is the generic {FIGFAMILY[FIGMAP[topo.id][0]]} pattern, not the
+                  circuit drawn above. It shows the switching sequence this topology belongs to;
+                  its own conduction path is not traced yet. The timing strip is live and follows
+                  the duty from your design.
+                </div>
                 <FigPanel key={topo.id} id={topo.id}
                   duty={res && res.wave && isFinite(res.wave.D) ? res.wave.D : undefined} />
-                <p className="flownote" style={{ color: "var(--faint)", fontSize: "var(--t-fine)" }}>
-                  The current-path and EMC lenses are not drawn for this topology yet — those
-                  overlays are traced by hand per schematic. The timing strip above is live and
-                  follows the duty from your design.
-                </p>
               </div>
             ) : null}
 
