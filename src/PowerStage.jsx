@@ -820,14 +820,25 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
      it turns off. Drawing every topology the first way had the trace upside
      down on the second group. */
   const vOn = vinv ? 62 : 28, vOff = vinv ? 28 : 62;
-  let dv = `M ${x0} ${vOff}`, di = `M ${x0} ${yI(imin)}`;
-  for (let c = 0; c < cycles + 1; c++) {
+  /* Exactly `cycles` whole periods, and not one edge more.
+
+     Drawing cycles+1 and clipping the last at x1 left a sliver of the next
+     period's rising edge jammed against the right-hand edge — the cut-off
+     restart visible just before the cursor jumped back. Because the count is
+     a whole number the final period now lands precisely on x1 at the same
+     level the first one starts from, so the two ends of the sweep are the
+     same picture and the wrap has nothing to give away.
+
+     The starting level has to match that closing level too: a pulse
+     waveform ends each period at zero, so it must begin at zero and jump up
+     to the valley, not begin already at the valley. */
+  let dv = `M ${x0} ${vOff}`, di = `M ${x0} ${yI(pulse ? 0 : imin)}`;
+  for (let c = 0; c < cycles; c++) {
     const a = x0 + c * per, b = a + per * D, e = a + per;
-    if (a > x1) break;
-    dv += ` L ${Math.min(a, x1)} ${vOn} L ${Math.min(b, x1)} ${vOn} L ${Math.min(b, x1)} ${vOff} L ${Math.min(e, x1)} ${vOff}`;
+    dv += ` L ${a} ${vOn} L ${b} ${vOn} L ${b} ${vOff} L ${e} ${vOff}`;
     di += pulse
-      ? ` L ${Math.min(a, x1)} ${yI(imin)} L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(b, x1)} ${yI(0)} L ${Math.min(e, x1)} ${yI(0)}`
-      : ` L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(e, x1)} ${yI(imin)}`;
+      ? ` L ${a} ${yI(imin)} L ${b} ${yI(imax)} L ${b} ${yI(0)} L ${e} ${yI(0)}`
+      : ` L ${b} ${yI(imax)} L ${e} ${yI(imin)}`;
   }
   /* The marker is drawn inside this SVG rather than as a positioned element
      over it. Sharing the coordinate system is the only way it can be
@@ -873,9 +884,9 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
   return (
     <div className="sch"><svg viewBox="0 0 660 244" style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("wv", () => (<>
-        {band ? Array.from({ length: Math.ceil(cycles) + 1 }, (_, c) => {
+        {band ? Array.from({ length: cycles }, (_, c) => {
           const ba = x0 + (c + band[0]) * per, bb = x0 + (c + band[1]) * per;
-          if (ba > x1) return null;
+          if (ba >= x1) return null;
           return <rect key={"bd" + c} x={ba} y={18} width={Math.max(Math.min(bb, x1) - ba, 0)}
             height={bot - 18} fill="#6FD39B" opacity=".08" />;
         }) : null}
