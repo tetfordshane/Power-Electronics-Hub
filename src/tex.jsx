@@ -65,7 +65,14 @@ function lex(src) {
       const base = src.slice(i, j);
       i = j;
       let sub = null;
-      if (src[i] === "_") {
+      /* A component designator writes its index tight against the letter:
+         Q1, D4, C_1, L2. Without this the digit is read as a separate
+         factor and set as "Q 1", with multiplication spacing. */
+      if (sub === null && /^[A-Z]$/.test(base) && /^[0-9]{1,2}(?![0-9])/.test(src.slice(i))) {
+        const d = src.slice(i).match(/^[0-9]{1,2}/)[0];
+        sub = d; i += d.length;
+      }
+      if (sub === null && src[i] === "_") {
         const k = i + 1;
         if (src[k] === "{") {
           const e = src.indexOf("}", k);

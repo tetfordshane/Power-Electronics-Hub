@@ -179,14 +179,18 @@ export const CSS = `
 .ps tr:last-child td{border-bottom:0}
 .ps tbody tr{transition:background .12s}
 .ps tbody tr:hover{background:rgba(255,255,255,.022)}
-.ps td.k{color:var(--dim); width:46%; font-family:var(--ui)}
+/* label column carries the name and, beneath it, the note — both flush
+   left, so the eye runs straight down the labels and straight down the
+   numbers instead of zig-zagging between ragged right-aligned fragments */
+.ps td.k{color:var(--txt); width:58%; font-family:var(--ui); line-height:1.45}
 .ps td.v{
   font-family:var(--num); color:var(--txt); font-weight:500; text-align:right;
-  font-variant-numeric:tabular-nums; white-space:nowrap;
+  font-variant-numeric:tabular-nums; white-space:nowrap; vertical-align:top;
 }
 .ps td.n{color:var(--faint); font-size:var(--t-fine); font-family:var(--ui);
   font-weight:400; letter-spacing:0}
-.ps td.v .n{text-align:right; margin-top:3px; white-space:normal; line-height:1.4}
+.ps td.k .n{margin-top:2px; line-height:1.45; color:var(--faint);
+  font-size:var(--t-fine); max-width:46ch}
 .ps th.r,.ps td.r{text-align:right}
 
 /* ------------------------------------------------ animated operation figure */
@@ -307,34 +311,21 @@ export const CSS = `
    says so. A diode is not: it is a valve that responds to the voltage
    across it. They therefore get deliberately different vocabularies, so
    the two can never be mistaken for the same widget in two colours.      */
-.ps .swb rect,.ps .dib rect{fill:#0C1017; stroke:var(--line); stroke-width:1; opacity:.96}
-.ps .swb text,.ps .dib text{font-family:var(--ui); font-size:8.5px; font-weight:600;
-  fill:var(--faint); letter-spacing:.05em}
-.ps .swb circle{fill:var(--faint)}
-.ps .swb path{stroke:var(--faint); stroke-width:1.8; fill:none; stroke-linecap:round}
-.ps .swb .st{font-size:7px; font-weight:500; letter-spacing:.04em; fill:var(--ghost)}
-.ps .swb.on rect{stroke:#2E5B45; fill:#0E1A14}
-.ps .swb.on text{fill:var(--gn)}
-.ps .swb.on circle{fill:var(--gn)}
-.ps .swb.on path{stroke:var(--gn); stroke-width:2.2}
-.ps .swb.on .st{fill:var(--gn-dim)}
+.ps .devr .halo{fill:none; stroke:none}
+.ps .devr .ring{fill:none; stroke:var(--ghost); stroke-width:1.3; opacity:.7}
+.ps .devr .bar{stroke:var(--rd); stroke-width:1.9; stroke-linecap:round; fill:none; opacity:.8}
 
-/* diode: outlined valve behind a barrier when blocking, filled valve with
-   current visibly running through it when forward biased */
-.ps .dib .dtri{fill:none; stroke:var(--faint); stroke-width:1.5; stroke-linejoin:round}
-.ps .dib .dbar{stroke:var(--faint); stroke-width:2.2; fill:none; stroke-linecap:round}
-.ps .dib .dblock{stroke:var(--rd); stroke-width:1.5; fill:none; stroke-linecap:round;
-  animation:psblock 2.2s ease-in-out infinite}
-.ps .dib .dflow{stroke:var(--gn); stroke-width:2; fill:none; stroke-linecap:round;
-  stroke-dasharray:2 5.5; animation:psdflow .62s linear infinite}
-.ps .dib .st{font-size:7px; font-weight:500; letter-spacing:.04em; fill:var(--rd)}
-.ps .dib.on rect{stroke:#2E5B45; fill:#0E1A14}
-.ps .dib.on text{fill:var(--gn)}
-.ps .dib.on .dtri{fill:var(--gn); stroke:var(--gn)}
-.ps .dib.on .dbar{stroke:var(--gn); stroke-width:2.6}
-.ps .dib.on .st{fill:var(--gn-dim)}
-@keyframes psdflow{to{stroke-dashoffset:-7.5}}
-@keyframes psblock{0%,100%{opacity:.4}50%{opacity:1}}
+/* conducting: the ring closes into a bright loop with a soft halo */
+.ps .devr.on .ring{stroke:var(--gn); stroke-width:2; opacity:1}
+.ps .devr.on .halo{stroke:var(--gn); stroke-width:4.5; opacity:.15}
+
+/* A switch is COMMANDED, so its ring is a hard, continuous line — someone
+   drew it closed. A diode RESPONDS, so its ring is dashed and rotates while
+   it conducts, as if the circuit were pushing it round. Neither ever
+   obscures the symbol it surrounds. */
+.ps .devr.di .ring{stroke-dasharray:3.2 3.2}
+.ps .devr.di.on .ring{stroke-dasharray:5 3.4; animation:psdring 1.1s linear infinite}
+@keyframes psdring{to{stroke-dashoffset:-16.8}}
 
 /* device state legend under the figure */
 .ps .devleg{display:flex; flex-wrap:wrap; gap:6px 18px; margin:11px 0 0;

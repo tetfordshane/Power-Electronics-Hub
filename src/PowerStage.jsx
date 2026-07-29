@@ -794,7 +794,14 @@ function layoutLabelsX(items, minGap, lo, hi) {
   return out;
 }
 
-function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, pulse = false, band = null }) {
+/* CYCLES must stay a whole number. The playhead sweeps the full plot width
+   and the schematic completes one switching period per drawn cycle, so a
+   fractional count would leave the figure mid-period when the marker wraps
+   — which is what made the animation look like it restarted early. */
+const WAVE_CYCLES = 3;
+
+function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_CYCLES,
+  pulse = false, band = null, playhead = null }) {
   const x0 = 52, x1 = 640, per = (x1 - x0) / cycles;
   const imax = iavg + dI / 2;
   const imin = Math.max(iavg - dI / 2, 0);
@@ -809,6 +816,16 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, p
       ? ` L ${Math.min(a, x1)} ${yI(imin)} L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(b, x1)} ${yI(0)} L ${Math.min(e, x1)} ${yI(0)}`
       : ` L ${Math.min(b, x1)} ${yI(imax)} L ${Math.min(e, x1)} ${yI(imin)}`;
   }
+  /* The marker is drawn inside this SVG rather than as a positioned element
+     over it. Sharing the coordinate system is the only way it can be
+     guaranteed to sit exactly on the edge it is pointing at. */
+  const uPhase = playhead === null ? 0 : (playhead * cycles) % 1;
+  const mx = playhead === null ? null : x0 + playhead * (x1 - x0);
+  const iNow = pulse
+    ? (uPhase < D ? imin + (imax - imin) * (uPhase / D) : 0)
+    : (uPhase < D ? imin + (imax - imin) * (uPhase / D)
+      : imax - (imax - imin) * ((uPhase - D) / Math.max(1 - D, 1e-6)));
+  const vHigh = uPhase < D;
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
   /* The series name sits at the ripple peak and the mean value at the mean.
      At low ripple those are only a few pixels apart, so lay them out. */
@@ -839,6 +856,14 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = 2.4, p
         {Tx(x0 + per * D / 2, 184, "D·T", { a: "middle", c: "#5C6E82", s: 10.5 })}
         {Tx(x0 + per, 184, "T = 1/f_sw", { a: "middle", c: "#5C6E82", s: 10.5 })}
         <path d={`M ${x0} 172 V 176 M ${x0 + per} 172 V 176`} {...gl} />
+        {mx !== null ? (
+          <g>
+            <path d={`M ${mx} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
+              fill="none" opacity={0.6} />
+            <circle cx={mx} cy={vHigh ? 28 : 62} r={3.2} fill="#5AD1DE" />
+            <circle cx={mx} cy={yI(iNow)} r={3.6} fill="#E3A85C" />
+          </g>
+        ) : null}
       </>))}
     </svg></div>
   );
@@ -3213,7 +3238,7 @@ const SHEETS = [
   { e: "δ = 66/√f  mm (copper, 20 °C)", n: "Skin depth. 100 kHz → 0.21 mm, so wire thicker than ~0.4 mm diameter is wasted; use litz or foil." },
 ]},
 { cat: "Magnetics", title: "Core materials", rows: [
-  { e: "MnZn ferrite (N87, 3C95): B_sat ≈ 390 mT hot", n: "Default for 20 kHz–1 MHz. Low loss, hard saturation — needs a discrete gap." },
+  { e: "MnZn ferrite: B_sat ≈ 390 mT hot", n: "Grades N87 and 3C95 are the usual starting points. Default for 20 kHz–1 MHz. Low loss, hard saturation — needs a discrete gap." },
   { e: "Powder iron: B_sat ≈ 1.0–1.5 T", n: "Cheap, soft saturation, high core loss. Fine for line filters, poor above ~100 kHz." },
   { e: "Sendust / Kool Mµ: B_sat ≈ 1 T", n: "Distributed gap, soft roll-off, good DC bias behaviour. The usual PFC choke material." },
   { e: "MPP: B_sat ≈ 0.75 T", n: "Lowest loss of the powder cores, most expensive. Filter and output chokes." },
@@ -3908,8 +3933,14 @@ function Results({ res, hideWave }) {
             <table><tbody>
               {g.rows.map((r, j) => (
                 <tr key={j}>
-                  <td className="k"><Mx t={r[0]} /></td>
-                  <td className="v"><Mx t={r[1]} />{r[2] ? <div className="n"><Mx t={r[2]} /></div> : null}</td>
+                  {/* The note belongs under the LABEL, left-aligned. Hanging it
+                      right-aligned under the value left every row ragged and
+                      made the numbers impossible to scan down. */}
+                  <td className="k">
+                    <Mx t={r[0]} />
+                    {r[2] ? <div className="n"><Mx t={r[2]} /></div> : null}
+                  </td>
+                  <td className="v"><Mx t={r[1]} /></td>
                 </tr>
               ))}
             </tbody></table>
@@ -3926,7 +3957,7 @@ function Results({ res, hideWave }) {
    the phase occupies, used to shade the matching part of the waveform.  */
 const FLOW = {
   classepp: { w: 660, h: 300, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[275, 94, "Q1"], [275, 194, "Q2"]],
+    sw: [[250, 105, "Q1"], [250, 195, "Q2"]],
     emc: { loop: "M 250 60 H 310 V 240 H 250 Z", node: [250, 60] },
     ph: [
     { on: [1,0], t: "Q1 conducting", f: () => [0, 0.5], n: "The upper stage pulls its drain to zero while the lower drain rings up. The two halves are identical circuits running exactly half a cycle apart.",
@@ -3935,7 +3966,7 @@ const FLOW = {
       d: ["M 40 150 H 70 V 240 H 250 V 150 H 282"], dim: ["M 310 60 V 150"] },
   ]},
   classde: { w: 620, h: 270, iShape: (u) => Math.abs(Math.sin(2 * Math.PI * u)),
-    sw: [[217, 82, "Q1"], [217, 172, "Q2"]],
+    sw: [[200, 92, "Q1"], [200, 182, "Q2"]],
     emc: { loop: "M 200 50 H 265 V 225 H 200 Z", node: [200, 137] },
     ph: [
     { on: [1,0], t: "Q1 on", f: () => [0, 0.46], n: "The high-side device connects the tank to the supply. Because the turn-on happened at zero volts during the preceding dead time, the transition cost nothing.",
@@ -3945,7 +3976,7 @@ const FLOW = {
     { on: [0,1], t: "Q2 on", f: () => [0.54, 1], n: "The low-side device takes over and tank current reverses. Each device only ever blocks the supply rail — the principal advantage over single-ended class E, where the device blocks 3.56 times the supply.",
       d: ["M 200 225 V 137 H 520 V 225"] },
   ]},
-  buck: { w: 660, h: 250, sw: [[165, 32, "Q1"], [250, 131, "D1"]],
+  buck: { w: 660, h: 250, sw: [[170, 70, "Q1"], [215, 135, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch connects the input to the inductor. With V_in − V_out across it the current ramps up, and the difference between that current and the load current charges C_out.",
@@ -3953,7 +3984,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor cannot sustain a discontinuity in its current, so it pulls the switch node below ground until D1 conducts. Current now circulates through the diode and decays at a rate set by V_out/L.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  boost: { w: 660, h: 250, sw: [[252, 108, "Q1"], [285, 48, "D1"]],
+  boost: { w: 660, h: 250, sw: [[230, 145, "Q1"], [288, 70, "D1"]],
     emc: { loop: "M 230 70 H 390 V 200 H 230 Z", node: [230, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch shorts the inductor to ground. Current ramps up storing energy, and the output is supplied entirely by C_out — which is why boost output ripple is so much worse than buck.",
@@ -3961,7 +3992,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor flies above the input, forward-biasing D1 and transferring its current to the output. This is also why load steps momentarily go the wrong way — the right-half-plane zero.",
       d: ["M 40 70 H 480 V 200 H 40"] },
   ]},
-  buckboost: { w: 660, h: 250, sw: [[165, 32, "Q1"], [285, 48, "D1"]],
+  buckboost: { w: 660, h: 250, sw: [[170, 70, "Q1"], [290, 70, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The full input voltage sits across the inductor and current ramps up. Nothing reaches the output during this interval — the load lives on C_out.",
@@ -3969,7 +4000,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor reverses its terminal voltage to keep current flowing, pulling the output node below ground through D1. That polarity inversion is inherent, not a wiring choice.",
       d: ["M 215 200 H 480 V 70 H 215"] },
   ]},
-  flyback: { w: 700, h: 275, sw: [[272, 149, "Q1"], [327, 39, "D1"]],
+  flyback: { w: 700, h: 275, sw: [[250, 185, "Q1"], [327, 60, "D1"]],
     emc: { loop: "M 90 55 H 250 V 235 H 90 Z", node: [250, 144] },
     ph: [
     { on: [1,0], t: "Q1 on — store", f: (D) => [0, D], n: "Primary current ramps and energy accumulates in the gap. The secondary diode is reverse-biased, so no power crosses the barrier yet; the output is held up by C_out alone.",
@@ -3977,7 +4008,7 @@ const FLOW = {
     { on: [0,1], t: "Q1 off — release", f: (D) => [D, 1], n: "The winding voltages reverse, D1 conducts and the stored energy transfers to the output. The primary now sees V_in plus the reflected V_R — the quantity that sets the primary device rating.",
       d: ["M 274 80 V 60 H 600 V 215 H 274 V 144"] },
   ]},
-  pfcboost: { w: 780, h: 280, sw: [[382, 118, "Q1"], [425, 78, "D"]],
+  pfcboost: { w: 780, h: 280, sw: [[360, 155, "Q1"], [425, 105, "D"]],
     emc: { loop: "M 360 105 H 560 V 195 H 360 Z", node: [360, 105] },
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The boost switch shorts the inductor across the rectified line. Current rises, following the reference the current loop derives from |v_ac| — this interval is where the sinusoidal input current is shaped.",
@@ -3986,7 +4017,7 @@ const FLOW = {
       d: ["M 130 105 H 660 V 195 H 130"] },
   ]},
   halfwave: { w: 620, h: 230, iShape: (u) => (u < 0.16 ? 0.08 + Math.sin(Math.PI * u / 0.16) : 0.1),
-    sw: [[165, 40, "D1"]],
+    sw: [[170, 60, "D1"]],
     emc: { loop: "M 130 60 H 300 V 190 H 130 Z", node: [210, 60] },
     ph: [
     { on: [1], t: "Peak of the positive half", f: () => [0, 0.16], n: "The diode only conducts while the source exceeds the capacitor voltage — a narrow window near the peak. All the charge the load will draw for the entire cycle is delivered in this brief spike.",
@@ -3995,7 +4026,7 @@ const FLOW = {
       d: ["M 300 60 H 420 V 190 H 300"] },
   ]},
   bridgerect: { w: 620, h: 250, iShape: (u) => 0.06 + Math.pow(Math.abs(Math.sin(2 * Math.PI * u)), 5),
-    sw: [[227, 70, "D1"], [227, 168, "D2"], [327, 92, "D3"], [327, 182, "D4"]],
+    sw: [[210, 78, "D1"], [210, 153, "D2"], [310, 108, "D3"], [310, 183, "D4"]],
     emc: { loop: "M 210 55 H 400 V 205 H 210 Z", node: [310, 55] },
     ph: [
     { on: [1,0,0,1], t: "Positive half-cycle", f: () => [0, 0.5], n: "D1 and D4 conduct as a diagonal pair: current leaves the source, climbs to the positive rail, passes through the load, and returns through the opposite leg.",
@@ -4003,7 +4034,7 @@ const FLOW = {
     { on: [0,1,1,0], t: "Negative half-cycle", f: () => [0.5, 1], n: "The source reverses and the other diagonal takes over. Note what does not change: current through the load still flows top to bottom. That is precisely what the bridge arrangement achieves.",
       d: ["M 100 146 V 160 H 310 V 55 H 490 V 205 H 210 V 100 H 100 V 114"] },
   ]},
-  ctrect: { w: 680, h: 270, sw: [[293, 40, "D1"], [293, 120, "D2"]],
+  ctrect: { w: 680, h: 270, sw: [[300, 60, "D1"], [300, 140, "D2"]],
     emc: { loop: "M 214 60 H 340 V 140 H 214 Z", node: [340, 100] },
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
@@ -4011,7 +4042,7 @@ const FLOW = {
     { on: [0,1], t: "Lower half conducts", f: (D) => [0.5, 0.5 + D], n: "The transformer reverses and the bottom half-winding takes over through D2. Each half-winding works only half the time — which is why this secondary needs roughly twice the copper of a bridge.",
       d: ["M 214 140 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
   ]},
-  doubler: { w: 700, h: 300, sw: [[265, 165, "D1"], [305, 233, "D2"]],
+  doubler: { w: 700, h: 300, sw: [[250, 170, "D1"], [290, 230, "D2"]],
     emc: { loop: "M 214 80 H 250 V 260 H 290 V 200 H 214 Z", node: [250, 80] },
     ph: [
     { on: [0,1], t: "Winding positive", f: (D) => [0, D], n: "D2 clamps the lower terminal to the return, so L1 sees the winding voltage and charges while L2 freewheels. Both inductors feed the output continuously.",
@@ -4020,7 +4051,7 @@ const FLOW = {
       d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214"] },
   ]},
   classe: { w: 660, h: 250, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
-    sw: [[255, 118, "Q1"]],
+    sw: [[230, 130, "Q1"]],
     emc: { loop: "M 230 60 H 310 V 205 H 230 Z", node: [230, 60] },
     ph: [
     { on: [1], t: "Switch on", f: () => [0, 0.5], n: "The drain is held at zero volts. The choke current ramps up and the tank current flows through the switch — but the device turned on at zero voltage, so nothing was dissipated in the transition.",
@@ -4035,7 +4066,7 @@ const FLOW = {
      current path is the whole lesson: a synchronous buck (where the point
      is that a FET replaces the diode), the coupled-cap converters, and
      the bridge-fed isolated stages.                                    */
-  syncbuck: { w: 660, h: 250, sw: [[170, 36, "Q_HS"], [232, 116, "Q_LS"]],
+  syncbuck: { w: 660, h: 250, sw: [[170, 70, "Q_HS"], [215, 145, "Q_LS"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
     ph: [
     { on: [1,0], t: "High side on", f: (D) => [0, D], n: "Identical to a plain buck: the input feeds the inductor and its current ramps up. The low-side FET is held off, and the dead time before this instant was covered by its body diode.",
@@ -4043,42 +4074,44 @@ const FLOW = {
     { on: [0,1], t: "Low side on", f: (D) => [D, 1], n: "This is the whole point of the topology. Instead of a diode dropping a fixed 0.4 V, a FET channel carries the same current at I·R_DS(on) — which at low output voltages is the single largest efficiency lever available.",
       d: ["M 215 200 V 70 H 480 V 200 H 215"] },
   ]},
-  sepic: { w: 660, h: 260, sw: [[182, 109, "Q1"], [339, 49, "D1"]],
-    emc: { loop: "M 100 70 H 250 V 210 H 100 Z", node: [250, 70] },
+  sepic: { w: 700, h: 250, sw: [[160, 145, "Q1"], [343, 70, "D1"]],
+    emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "Both inductors charge: L1 straight from the input, L2 from the coupling capacitor, which is why C_s carries the full load current in rms terms. The diode is reverse biased and the output runs on C_out alone.",
-      d: ["M 40 70 H 250 V 210 H 40"], dim: ["M 470 70 H 560 V 210 H 470"] },
+      d: ["M 40 70 H 160 V 200 H 40", "M 160 70 H 280 V 200 H 160"], dim: ["M 385 70 H 600 V 200 H 385"] },
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "Both inductor currents commutate into the diode and feed the output together. Because C_s blocks DC, a short on the output cannot drag the input down — the advantage a boost does not have.",
-      d: ["M 40 70 H 560 V 210 H 40"] },
+      d: ["M 40 70 H 600 V 200 H 40", "M 280 200 V 70"] },
   ]},
-  cuk: { w: 660, h: 260, sw: [[182, 109, "Q1"], [300, 132, "D1"]],
-    emc: { loop: "M 100 70 H 330 V 210 H 100 Z", node: [250, 70] },
+  cuk: { w: 700, h: 250, sw: [[160, 145, "Q1"], [280, 135, "D1"]],
+    emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The transfer capacitor discharges through the switch into the output side. Energy crosses this converter through C1's electric field rather than through a magnetic field — which is exactly why C1 sees the full load current and is the reliability limit.",
-      d: ["M 40 70 H 250 V 210 H 40"] },
+      d: ["M 40 70 H 160 V 200 H 40", "M 160 70 H 600 V 200 H 160"] },
     { on: [0,1], t: "Switch off", f: (D) => [D, 1], n: "The diode takes over and C1 recharges from the input inductor. Both inductors keep conducting throughout, so the input and output currents are continuous — the property that makes a Ćuk quiet at both ports.",
-      d: ["M 40 70 H 330 V 210 H 40"] },
+      d: ["M 40 70 H 280 V 200 H 40", "M 280 70 H 600 V 200 H 280"] },
   ]},
-  halfbridge: { w: 660, h: 280, sw: [[247, 92, "Q1"], [247, 182, "Q2"], [463, 58, "D1"], [463, 183, "D2"]],
-    emc: { loop: "M 130 50 H 214 V 225 H 130 Z", node: [214, 137] },
+  halfbridge: { w: 780, h: 295, sw: [[230, 102, "Q1"], [230, 192, "Q2"], [465, 80, "D1"], [465, 205, "D2"]],
+    emc: { loop: "M 110 45 H 230 V 250 H 110 Z", node: [230, 147] },
     ph: [
     { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "The primary sees +V_in/2, because the capacitor divider holds the return at half the bus. That halving is the reason each device blocks only V_in, against 2·V_in for a push-pull.",
-      d: ["M 130 50 H 300 V 225 H 130"] },
-    { on: [0,0,0,0], t: "Both off", f: (D) => [D, 0.5], n: "Neither switch conducts. The primary is undriven and the output inductor freewheels through both rectifiers at once — this interval is what the series blocking capacitor uses to keep the volt-seconds balanced.",
-      d: ["M 430 60 H 560 V 220 H 430"], dim: ["M 130 50 H 300 V 225 H 130"] },
+      d: ["M 110 45 H 230 V 147 H 290 V 105 H 340", "M 340 169 H 320 V 200 H 110 V 45",
+          "M 364 105 V 80 H 500 V 140 H 740 V 255 H 400 V 138"] },
+    { on: [0,0,1,1], t: "Both off", f: (D) => [D, 0.5], n: "Neither switch conducts. The primary is undriven and the output inductor freewheels through both rectifiers at once — this interval is what the series blocking capacitor uses to keep the volt-seconds balanced.",
+      d: ["M 500 140 H 740 V 255 H 400 V 138"], dim: ["M 110 45 H 230 V 147 H 290 V 105 H 340"] },
     { on: [0,1,0,1], t: "Q2 on", f: (D) => [0.5, 0.5 + D], n: "The primary reverses and sees −V_in/2. Driving the core in both quadrants is what makes the transformer small compared with a single-ended forward of the same power.",
-      d: ["M 130 225 H 300 V 50 H 130"] },
-    { on: [0,0,0,0], t: "Both off", f: (D) => [0.5 + D, 1], n: "The second freewheel interval. Note the output ripple frequency is twice the switching frequency, so the filter is smaller than the switch timing alone would suggest.",
-      d: ["M 430 60 H 560 V 220 H 430"], dim: ["M 130 50 H 300 V 225 H 130"] },
+      d: ["M 340 105 H 290 V 147 H 230 V 250 H 110 V 147",
+          "M 364 171 V 205 H 500 V 140 H 740 V 255 H 400 V 138"] },
+    { on: [0,0,1,1], t: "Both off", f: (D) => [0.5 + D, 1], n: "The second freewheel interval. Note the output ripple frequency is twice the switching frequency, so the filter is smaller than the switch timing alone would suggest.",
+      d: ["M 500 140 H 740 V 255 H 400 V 138"], dim: ["M 110 45 H 230 V 147 H 290 V 105 H 340"] },
   ]},
-  chargepump: { w: 660, h: 240, iShape: (u) => (u < 0.5 ? 0.25 + 0.75 * Math.exp(-12 * u) : 0.25 + 0.75 * Math.exp(-12 * (u - 0.5))),
-    sw: [[97, 49, "D1"], [222, 49, "D2"]],
-    emc: { loop: "M 200 60 H 430 V 180 H 200 Z", node: [300, 60] },
+  chargepump: { w: 700, h: 250, iShape: (u) => (u < 0.5 ? 0.25 + 0.75 * Math.exp(-12 * u) : 0.25 + 0.75 * Math.exp(-12 * (u - 0.5))),
+    sw: [[103, 70, "D1"], [230, 70, "D2"], [365, 70, "D3"]],
+    emc: { loop: "M 55 70 H 300 V 178 H 55 Z", node: [165, 70] },
     ph: [
-    { on: [1,0], t: "Clock low — charge", f: () => [0, 0.5], n: "The flying capacitor is connected across the input and charges through the first rectifier. Charge moves as a spike whose size is set by how far the two capacitor voltages have drifted apart, not by any resistor.",
-      d: ["M 60 60 H 300 V 180 H 60"], dim: ["M 430 60 H 600 V 180 H 430"] },
-    { on: [0,1], t: "Clock high — pump", f: () => [0.5, 1], n: "The flying capacitor's bottom plate is lifted to the input, so its top plate now sits a full V_in above it and pours charge into the next stage. That redistribution is lossy no matter how good the switches are — which is what the equivalent R_out is really describing.",
-      d: ["M 200 60 H 600 V 180 H 200"] },
+    { on: [1,0,1], t: "Clock low — charge", f: () => [0, 0.5], n: "C1 is connected across the input and charges through D1, while D3 hands the previous stage's charge on to the output. Charge moves as a spike whose size is set by how far the capacitor voltages have drifted apart, not by any resistor.",
+      d: ["M 40 70 H 165 V 178", "M 300 70 H 600 V 200 H 480"] },
+    { on: [0,1,0], t: "Clock high — pump", f: () => [0.5, 1], n: "C1's bottom plate is lifted to the input, so its top plate now sits a full V_in above it and pours charge through D2 into C2. That redistribution is lossy no matter how good the switches are — it is what the equivalent R_out is really describing.",
+      d: ["M 165 70 H 300 V 178"], dim: ["M 420 70 H 600 V 200 H 480"] },
   ]},
 };
 
@@ -4128,39 +4161,36 @@ function LossBar({ items }) {
    "blocking" — because those are different physical situations.        */
 const isDiode = (label) => /^(D|SR|BD)/.test(String(label));
 
-const SwBadge = (x, y, label, on) => (
-  <g key={nk()} className={"swb" + (on ? " on" : "")}>
-    <rect x={x - 23} y={y - 14} width={46} height={35} rx={3} />
-    <text x={x} y={y - 4} textAnchor="middle">{label}</text>
-    <circle cx={x - 9} cy={y + 6} r={1.8} />
-    <circle cx={x + 9} cy={y + 6} r={1.8} />
-    <path className="lever"
-      d={on ? `M ${x - 9} ${y + 6} H ${x + 9}` : `M ${x - 9} ${y + 6} L ${x + 7} ${y - 2}`} />
-    <text className="st" x={x} y={y + 17} textAnchor="middle">{on ? "driven on" : "driven off"}</text>
-  </g>
-);
+/* A ring AROUND the device, never a panel on top of it.
 
-const DiodeBadge = (x, y, label, on) => {
-  const ty = y + 6;                       /* the valve sits below the name */
-  const tri = `M ${x - 11} ${ty - 5} L ${x - 11} ${ty + 5} L ${x - 2} ${ty} Z`;
+   Boxed badges had to be positioned somewhere, and on a dense schematic
+   every position was wrong: offset, and the device name appeared twice;
+   centred, and the box buried the very symbol it was describing. On a
+   four-diode bridge they simply collided.
+
+   A ring encircles the symbol instead, so it can never obscure it and
+   needs no knowledge of the device's orientation. The two device kinds
+   keep distinct vocabularies: a switch is COMMANDED, and its ring is solid
+   with a filled core when it is driven on; a diode RESPONDS, so its ring is
+   drawn as a valve gate — open with current flowing through when forward
+   biased, closed with a barrier across it when blocking. The words live in
+   the legend under the figure, where words belong. */
+const DevRing = (x, y, label, on) => {
+  const diode = isDiode(label);
+  /* Just large enough to clear the device glyph, and no larger: the
+     schematic prints its own component name a few pixels to the side, and
+     a wider ring cuts through the first letter of it. */
+  const r = 12;
   return (
-    <g key={nk()} className={"dib" + (on ? " on" : "")}>
-      <rect x={x - 25} y={y - 14} width={50} height={35} rx={3} />
-      <text x={x} y={y - 4} textAnchor="middle">{label}</text>
+    <g key={nk()} className={"devr" + (on ? " on" : "") + (diode ? " di" : " sw")}>
+      <circle className="halo" cx={x} cy={y} r={r + 3} />
+      <circle className="ring" cx={x} cy={y} r={r} />
       {on
-        /* forward biased: current visibly runs straight through the valve */
-        ? <path className="dflow" d={`M ${x - 20} ${ty} H ${x + 20}`} />
-        /* reverse biased: a barrier stands behind the cathode bar */
-        : <path className="dblock" d={`M ${x + 3} ${ty - 7} V ${ty + 7} M ${x + 7} ${ty - 7} V ${ty + 7}`} />}
-      <path className="dtri" d={tri} />
-      <path className="dbar" d={`M ${x - 2} ${ty - 6} V ${ty + 6}`} />
-      <text className="st" x={x} y={y + 17} textAnchor="middle">{on ? "conducting" : "blocking"}</text>
+        ? null
+        : <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />}
     </g>
   );
 };
-
-const DevBadge = (x, y, label, on) =>
-  (isDiode(label) ? DiodeBadge : SwBadge)(x, y, label, on);
 
 /* =====================================================================
    Design-space map.
@@ -4570,6 +4600,10 @@ function FlowCard({ topo, res }) {
   const [spd, setSpd] = useState(1);
   const [lens, setLens] = useState("i");
 
+  /* `u` runs 0→1 across the whole plotted waveform, not across one period.
+     The switching phase is derived from it, so the marker and the circuit
+     can never disagree: one clock, one wrap point, at the right-hand edge
+     of the plot rather than a third of the way along it. */
   useEffect(() => { setP(0); setLens("i"); }, [topo.id]);
   useEffect(() => { if (reduce) setPlay(false); }, [reduce]);
   useEffect(() => {
@@ -4578,7 +4612,7 @@ function FlowCard({ topo, res }) {
     const step = (now) => {
       if (last) {
         const dt = Math.min((now - last) / 1000, 0.1);
-        setP((v) => (v + dt * 0.28 * spd) % 1);
+        setP((v) => (v + dt * 0.28 * spd / WAVE_CYCLES) % 1);
       }
       last = now; raf = requestAnimationFrame(step);
     };
@@ -4613,12 +4647,15 @@ function FlowCard({ topo, res }) {
   }, [F, D, iLo, iHi]);
 
   if (!F || !M) return null;
+  /* p sweeps the whole plot; tPer is the position inside the current
+     switching period, which is what every circuit-state calculation wants. */
+  const tPer = (p * WAVE_CYCLES) % 1;
   const qOf = (u) => {
     const t = u * M.N, k = Math.min(Math.floor(t), M.N - 1);
     return M.q[k] + (M.q[k + 1] - M.q[k]) * (t - k);
   };
-  const iNow = M.f(p);
-  const flowOff = -(qOf(p) / M.tot) * 240;
+  const iNow = M.f(tPer);
+  const flowOff = -(qOf(tPer) / M.tot) * 240;
 
   /* Phase lookup. Some topologies define windows that do not tile the
      cycle (a rectifier conducts for a slice and idles for the rest), so
@@ -4628,17 +4665,18 @@ function FlowCard({ topo, res }) {
     (q.f ? q.f(D) : [k / F.ph.length, (k + 1) / F.ph.length]));
   let idx = 0;
   for (let k = 0; k < bounds.length; k++) {
-    if (p >= bounds[k][0] && p < bounds[k][1]) { idx = k; break; }
-    if (p >= bounds[k][0]) idx = k;
+    if (tPer >= bounds[k][0] && tPer < bounds[k][1]) { idx = k; break; }
+    if (tPer >= bounds[k][0]) idx = k;
   }
   const ph = F.ph[idx];
   const band = ph.f ? ph.f(D) : null;
+  /* Stepping to a phase parks the marker in the middle of that phase in the
+     FIRST drawn period, so the highlighted band and the marker agree. */
   const jump = (k) => {
     const b = F.ph[k].f ? F.ph[k].f(D) : [0, 1];
-    setPlay(false); setP((b[0] + b[1]) / 2);
+    setPlay(false); setP(((b[0] + b[1]) / 2) / WAVE_CYCLES);
   };
-  const rising = M.f(Math.min(p + 0.01, 0.999)) > iNow;
-  const per = (640 - 52) / 2.4, cx = (52 + p * per) / 660 * 100;
+  const rising = M.f(Math.min(tPer + 0.01, 0.999)) > iNow;
 
   const devs = (F.sw || []).map((q, j) => ({
     label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
@@ -4689,7 +4727,7 @@ function FlowCard({ topo, res }) {
             </>
           )}
           {drawScope("db", () => (F.sw || []).map((q, j) =>
-            DevBadge(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false)))}
+            DevRing(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false)))}
         </svg>
       </div>
       {devs.length ? (
@@ -4711,9 +4749,8 @@ function FlowCard({ topo, res }) {
           : <Sub t={ph.n} />}
       </p>
       {wv ? (
-        <div className="flowwrap" style={{ marginTop: 12 }}>
-          <Wave {...wv} band={band} />
-          <div className="wcur" style={{ left: cx + "%" }} />
+        <div style={{ marginTop: 12 }}>
+          <Wave {...wv} band={band} playhead={p} />
         </div>
       ) : null}
     </div>
