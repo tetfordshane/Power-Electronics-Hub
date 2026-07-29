@@ -2755,8 +2755,6 @@ const TD = [
       loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"],
         ["Body diode (dead time)", Pbody, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
-      loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"], ["Body diode", Pbody, "2·V_F·I_out·t_dead·f_sw"],
-        ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
       warn: [
         Psync > Pdio && "At this current the FET is losing to the diode. R_DS(on) of " + s.rds + " mΩ breaks even at " + eng(Ibe, "A") + " — either parallel devices or keep the Schottky.",
         Pgate > 0.25 * Psync && "Gate drive is " + pct(Pgate / Psync) + " of the total. At " + s.fsw + " kHz a lower-Q_g device beats a lower-R_DS one.",
