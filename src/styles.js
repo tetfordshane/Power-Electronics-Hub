@@ -373,19 +373,11 @@ export const CSS = `
 .ps .lit{display:inline-flex; align-items:baseline; gap:7px; flex-wrap:wrap;
   min-width:0; max-width:100%}
 .ps .lit b{color:var(--txt); font-weight:600}
-/* KaTeX output does not line-break, so a long expression would otherwise
-   push the whole page wider than the viewport. Give it its own scroll. */
-.ps .lit em{font-style:normal; color:var(--faint); font-size:var(--t-micro);
-  min-width:0; max-width:100%; overflow-x:auto}
-/* Overflow is handled on the CONTAINER, never on the .tex span itself:
-   giving a KaTeX span its own scroll context breaks the strut-based
-   baseline alignment and scatters the sub- and superscripts. The scroll is
-   a safety net for a formula wider than its column; the scrollbar chrome is
-   hidden, because a row of scrollbars through a results table reads as
-   broken layout. */
-.ps .lit em,.ps td.n,.ps td.v{scrollbar-width:none; -ms-overflow-style:none}
-.ps .lit em::-webkit-scrollbar,.ps td.n::-webkit-scrollbar,
-.ps td.v::-webkit-scrollbar{width:0; height:0}
+.ps .lit em{font-style:normal; color:var(--faint); font-size:var(--t-micro); min-width:0}
+/* Never put overflow on a .tex span: giving a KaTeX span its own scroll
+   context breaks its strut-based baseline alignment and scatters the sub-
+   and superscripts. Formulas are given columns wide enough to sit in
+   instead — see .lleg — so nothing needs to scroll or be clipped. */
 
 /* ---------------------------------------------------------------- lists */
 .ps ul{margin:0; padding-left:18px; color:var(--dim)}
