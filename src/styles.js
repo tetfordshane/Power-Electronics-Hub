@@ -319,23 +319,38 @@ export const CSS = `
 .ps .devr.on .ring{stroke:var(--gn); stroke-width:2; opacity:1}
 .ps .devr.on .halo{stroke:var(--gn); stroke-width:4.5; opacity:.15}
 
-/* A switch is COMMANDED, so its ring is a hard, continuous line — someone
-   drew it closed. A diode RESPONDS, so its ring is dashed and rotates while
-   it conducts, as if the circuit were pushing it round. Neither ever
-   obscures the symbol it surrounds. */
+/* A diode RESPONDS, so its ring is dashed and rotates while it conducts, as
+   if the circuit were pushing it round. It never obscures the symbol it
+   surrounds — a diode body is nearly round, so a ring clears it. */
 .ps .devr.di .ring{stroke-dasharray:3.2 3.2}
 .ps .devr.di.on .ring{stroke-dasharray:5 3.4; animation:psdring 1.1s linear infinite}
 @keyframes psdring{to{stroke-dashoffset:-16.8}}
+.ps .devr .bar, .ps .devr .ring, .ps .devr .halo{transition:opacity .2s ease, stroke .2s ease}
 
-/* A switch is marked on its GATE, because that is the thing something else
-   decides. Lit and driven, or dark and idle — and nothing is drawn across
-   the device body, which is what previously read as "crossed out". */
-.ps .devg .halo{fill:none; stroke:none}
+/* A switch gets no ring at all. The FET glyph is tall and left-heavy, so a
+   circle centred on it slices through the channel, the gate plate and both
+   power leads — which is exactly what looked wrong. Mark the two things the
+   symbol is already about instead: the GATE, because something outside the
+   power circuit decides it, and the CHANNEL, because that is what the gate
+   opens. Off, the channel is dashed and dim; on, the dashes close into one
+   solid conducting bar. */
 .ps .devg .glead{stroke:var(--ghost); stroke-width:2; fill:none; stroke-linecap:round; opacity:.7}
 .ps .devg .gdot{fill:none; stroke:var(--ghost); stroke-width:1.6; opacity:.7}
+/* casing, so the channel never merges with the flow dashes crossing it */
+.ps .devg .chanbg{stroke:var(--bg); stroke-width:5.6; fill:none; stroke-linecap:butt}
+/* 8 · 2.5 · 5 · 2.5 · 8 = the symbol's own three channel segments and their
+   two gaps, over the 26-unit length. Solid "26 0" when on: same arity, so the
+   gaps visibly close into one bar instead of snapping. */
+.ps .devg .chan{stroke:var(--ghost); stroke-width:2.6; fill:none; opacity:.75;
+  stroke-linecap:butt; stroke-dasharray:8 2.5 5 2.5 8}
+.ps .devg .gglow{fill:var(--gn); stroke:none; opacity:0}
 .ps .devg.on .glead{stroke:var(--gn); stroke-width:2.6; opacity:1}
 .ps .devg.on .gdot{fill:var(--gn); stroke:var(--gn); opacity:1}
-.ps .devg.on .halo{stroke:var(--gn); stroke-width:4.5; opacity:.13}
+.ps .devg.on .gglow{opacity:.17}
+.ps .devg.on .chan{stroke:var(--gn); stroke-width:3.2; opacity:1; stroke-dasharray:26 0}
+.ps .devg .gglow, .ps .devg .glead, .ps .devg .gdot, .ps .devg .chan{
+  transition:stroke .2s ease, fill .2s ease, opacity .2s ease,
+             stroke-width .2s ease, stroke-dasharray .2s ease}
 
 /* scrub through the cycle by hand */
 .ps .scrub{display:flex; align-items:center; gap:10px; margin:9px 0 0}
@@ -354,6 +369,35 @@ export const CSS = `
   stroke-linejoin:round; paint-order:stroke}
 .ps .flowov .carrow{stroke:var(--gn); stroke-width:1.9; opacity:.95}
 
+/* ------------------------------------------------- live facts under a figure
+   What the figure knows and the tables do not say out loud: the conduction
+   mode, the ripple as a fraction of the mean, the output ripple and how much
+   of it is ESR, the ripple current the capacitor has to be rated for.
+
+   Deliberately NOT the .chip pill used in the header card. Those are static
+   taxonomy — "step-down", "RHP zero" — and belong to the topology. These are
+   readings off the operating point just typed in, and change as you type, so
+   they are set as instrument readout: mono, tabular, squared off. Reusing the
+   pill would have said the two kinds of thing were the same kind of thing. */
+.ps .wfacts{display:flex; flex-wrap:wrap; gap:6px 8px; margin:10px 0 0}
+.ps .wfacts > span{
+  display:inline-flex; align-items:baseline; gap:7px;
+  background:var(--surf2); border:1px solid var(--line); border-radius:3px;
+  padding:3px 9px; font-size:var(--t-micro);
+}
+.ps .wfacts i{
+  font-style:normal; font-family:var(--ui); font-weight:500; color:var(--faint);
+}
+.ps .wfacts b{
+  font-family:var(--num); font-weight:600; color:var(--dim);
+  font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"zero" 1;
+}
+/* A mode that changes what every other pane means — discontinuous conduction,
+   or current running backwards — is not just another reading. */
+.ps .wfacts .note{border-color:#5A431F; background:#1B140A}
+.ps .wfacts .note i{color:var(--cu-dim)}
+.ps .wfacts .note b{color:var(--cu)}
+
 /* the current trace carries the same charge-driven dashes as the circuit,
    so the two animations read as one quantity rather than two speeds */
 .ps .wflow{fill:none; stroke:var(--gn); stroke-width:2.6; stroke-linecap:round;
@@ -369,6 +413,19 @@ export const CSS = `
 .ps .devleg .lit i{background:var(--gn)}
 .ps .devleg .lit b{color:var(--txt)}
 .ps .devleg .blk i{background:var(--rd); opacity:.7}
+/* the polarity marks are not a device state, so they get the voltage hue
+   rather than the on/off green and red */
+.ps .devleg .pol i{background:var(--cy)}
+.ps .devleg .pol b{color:var(--cy); letter-spacing:.08em}
+
+/* --------------------------------- instantaneous inductor polarity marks
+   Cyan, because on this page cyan is voltage — the same hue as the switch-node
+   pane these marks explain. The backing disc is the page background rather
+   than a tint, so the mark sits ON the wire without the wire showing through
+   the glyph. Opacity is left to transition (the .fig rule above), which is
+   what turns the plus into a minus as a fade rather than a jump. */
+.ps .polm circle{fill:var(--bg); stroke:var(--line2); stroke-width:1}
+.ps .polm path{fill:none; stroke:var(--cy); stroke-width:1.9; stroke-linecap:round}
 
 /* --------------------------------------------------------------- EMC lens */
 .ps .emcloop{fill:rgba(240,121,108,.07); stroke:var(--rd); stroke-width:2;

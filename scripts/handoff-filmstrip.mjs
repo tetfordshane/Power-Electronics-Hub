@@ -29,13 +29,13 @@ await page.evaluate(() => {
   if (b) b.click();
 });
 
-const waveHandle = () => page.evaluateHandle(() => [...document.querySelectorAll("svg")]
-  .find((s) => /244$/.test(s.getAttribute("viewBox") || "")) || null);
+const waveHandle = () => page.evaluateHandle(() => document.querySelector('[data-fig="wave"]'));
 
-const read = () => page.evaluate(() => [...document.querySelectorAll("svg path")]
-  .filter((p) => /^M [\d.]+ 18 V 168$/.test(p.getAttribute("d") || ""))
-  .map((p) => [+p.getAttribute("d").match(/^M ([\d.]+)/)[1],
-    +(p.parentElement.style.opacity || 1)]));
+const read = () => page.evaluate(() => [...document.querySelectorAll('[data-fig="wave"] .rake')]
+  .map((g) => {
+    const p = g.querySelector("path");
+    return [+(p.getAttribute("d").match(/^M ([\d.]+)/)[1]), +(g.style.opacity || 1)];
+  }));
 
 const el = (await waveHandle()).asElement();
 if (!el) { console.log("no wave figure on this topology"); await browser.close(); process.exit(1); }

@@ -6,6 +6,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 
 import { CSS } from "./styles.js";
 import { Eq, Mx, Sub, Mixed } from "./tex.jsx";
+import { buildCycle, cycleKey } from "./cycle.js";
 
 /* ---------------------------- numbers ---------------------------- */
 function eng(v, unit) {
@@ -90,6 +91,20 @@ const subParts = (t) => {
   }
   if (last < s.length) out.push(s.slice(last));
   return out;
+};
+/* How wide a label will actually be, in the mono face the figures use.
+
+   Counting characters overestimates anything with a subscript by nearly half
+   — "v_SW" is four characters and about two and a half glyph widths — which
+   was enough to push the unit set beside it clear off into the plot. The mono
+   advance is 0.6 em, and subParts already knows which runs are subscript. */
+const txWidth = (t, s = 11.5) => {
+  const parts = subParts(t);
+  const adv = s * 0.6;
+  if (typeof parts === "string") return parts.length * adv;
+  let w = 0;
+  for (const p of parts) w += typeof p === "string" ? p.length * adv : p.sub.length * adv * 0.72;
+  return w;
 };
 const Tx = (x, y, t, o = {}) => {
   const parts = subParts(t);
@@ -800,17 +815,61 @@ function layoutLabelsX(items, minGap, lo, hi) {
    — which is what made the animation look like it restarted early. */
 const WAVE_CYCLES = 3;
 
-function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_CYCLES,
-  pulse = false, band = null, playhead = null, flowOffset = null, fadeEdges = false,
-  period = null, vhi = "high", vinv = false }) {
-  /* The left margin carries a named value on every tick ("peak 11.4 A"),
-     so it has to be wide enough to hold one — 52px was only ever enough for
-     a bare number. */
-  const x0 = 96, x1 = 640, per = (x1 - x0) / cycles;
-  const imax = iavg + dI / 2;
-  const imin = Math.max(iavg - dI / 2, 0);
-  const top = 92, bot = 168, span = Math.max(imax * 1.18, 1e-9);
-  const yI = (i) => bot - (i / span) * (bot - top);
+/* ---------------------------------------------------------------------
+   The figure is a stack of panes over one shared time axis.
+
+   It used to be two panes with their coordinates written into the drawing
+   code — `top = 92, bot = 168`, a `yI` that only the current knew about, and
+   two hand-built path strings. Adding a third pane meant re-deriving every
+   number in the function, and the capacitor panes need two.
+
+   So a pane is now data: a name, a unit, a colour, a height, the value range
+   its own axis covers, and its trace as a polyline in cycle-relative time.
+   One layout pass stacks them; one drawing pass draws them. Everything that
+   was special about the voltage pane — that its two levels are named rather
+   than numbered — is expressed as a span of [0,1] with named ticks, so it
+   goes through the same code as the rest.
+
+   Panes are drawn in layers rather than pane by pane: all the gridlines,
+   then all the reference lines, then all the traces, then all the scales.
+   A trace must sit over its neighbour's furniture, not under it.        */
+const PX0 = 96, PX1 = 640;   /* the plotting column; left margin holds "peak 11.4 A" */
+const PANE_TOP = 20;         /* where the first pane's top rule sits */
+const PANE_GAP = 30;         /* clear space between panes — the titles live in it */
+
+/* Read a value off a pane's trace at phase u.
+
+   The ripple pane's segments carry a Bézier control point, so this follows
+   the drawn curve rather than a chord across it. At the ripple peak — the one
+   place on that pane worth putting a marker — a chord is visibly low. */
+function paneAt(pts, u) {
+  const t = clamp(u, 0, 1);
+  for (let k = 0; k < pts.length - 1; k++) {
+    const a = pts[k], b = pts[k + 1];
+    if (b.u <= a.u) continue;
+    if (t <= b.u) {
+      const s = (t - a.u) / (b.u - a.u);
+      return b.q ? (1 - s) * (1 - s) * a.v + 2 * s * (1 - s) * b.q.v + s * s * b.v
+        : a.v + (b.v - a.v) * s;
+    }
+  }
+  return pts[pts.length - 1].v;
+}
+
+function Wave(props) {
+  const { vlabel = "SW node", ilabel = "i_L", cycles = WAVE_CYCLES,
+    band = null, playhead = null, flowOffset = null, fadeEdges = false,
+    period = null, vhi = "high", vinv = false } = props;
+  /* One shared description of the cycle, so this pane and the animated
+     schematic can never draw different currents. See src/cycle.js. */
+  const M = useMemo(() => buildCycle(props), [cycleKey(props)]);
+  const D = M.D, iavg = props.iavg;
+  const x0 = PX0, x1 = PX1, per = (x1 - x0) / cycles;
+  const C = M.cap;
+
+  /* ---------------- the panes, in the order they stack ---------------- */
+  const panes = [];
+
   /* Which way round the switch node sits.
 
      Where the switch is in series with the input — buck, forward, bridge —
@@ -818,28 +877,147 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
      switch returns to ground — boost, flyback, SEPIC, Ćuk — it is pulled
      DOWN to zero while conducting, and flies up to the reflected rail when
      it turns off. Drawing every topology the first way had the trace upside
-     down on the second group. */
-  const vOn = vinv ? 62 : 28, vOff = vinv ? 28 : 62;
-  /* Exactly `cycles` whole periods, and not one edge more.
+     down on the second group.
 
-     Drawing cycles+1 and clipping the last at x1 left a sliver of the next
-     period's rising edge jammed against the right-hand edge — the cut-off
-     restart visible just before the cursor jumped back. Because the count is
-     a whole number the final period now lands precisely on x1 at the same
-     level the first one starts from, so the two ends of the sweep are the
-     same picture and the wrap has nothing to give away.
+     The pane's scale is [0,1] and the ticks are named, because most of these
+     topologies know what the node swings between by name and not by value. */
+  const lOn = vinv ? 0 : 1, lOff = vinv ? 1 : 0;
+  /* Volt-second balance, drawn rather than asserted.
 
-     The starting level has to match that closing level too: a pulse
-     waveform ends each period at zero, so it must begin at zero and jump up
-     to the valley, not begin already at the valley. */
-  let dv = `M ${x0} ${vOff}`, di = `M ${x0} ${yI(pulse ? 0 : imin)}`;
-  for (let c = 0; c < cycles; c++) {
-    const a = x0 + c * per, b = a + per * D, e = a + per;
-    dv += ` L ${a} ${vOn} L ${b} ${vOn} L ${b} ${vOff} L ${e} ${vOff}`;
-    di += pulse
-      ? ` L ${a} ${yI(imin)} L ${b} ${yI(imax)} L ${b} ${yI(0)} L ${e} ${yI(0)}`
-      : ` L ${b} ${yI(imax)} L ${e} ${yI(imin)}`;
+     The inductor tied to this node cannot support a mean voltage: whatever it
+     gains while the node sits at one rail it must give back while the node
+     sits at the other, or its current would climb without limit. So the mean
+     of the node is pinned by the duty alone — mean = D·on + (1−D)·off — and
+     the two areas between the trace and that mean are equal for any D at all:
+
+         (1−D)·|on − off|·D    above,     D·|on − off|·(1−D)   below.
+
+     Identically the same expression. That is the whole of volt-second balance,
+     and it needs no rail voltages to state — which is why it can be drawn on
+     every topology here, including the ones whose node swings between two
+     levels the design only knows by name.
+
+     It is also why the mean sits at level D and not halfway: the shaded
+     rectangles are the same AREA, not the same shape. A short tall lobe
+     balances a long shallow one, and reading that off the figure is the
+     intuition the equation M = D is standing on.
+
+     Which is exactly why none of it is drawn in DISCONTINUOUS conduction. Once
+     the current reaches zero the diode stops conducting and the node stops
+     being a two-level square: it sits at the output for the rest of the
+     period, a third level this pane does not draw. Volt-seconds still balance
+     over the two conducting intervals, but they no longer balance about D ×
+     swing, and M = D fails — which is the single most important thing about
+     DCM. Shading two lobes and calling them equal would assert the opposite,
+     on the one operating point where it is false. */
+  const vsOK = M.mode !== "dcm";
+  const vRef = D * lOn + (1 - D) * lOff;
+  panes.push({
+    key: "v", name: vlabel || "voltage", unit: "volts", c: "#5AD1DE",
+    h: 42, span: [0, 1], inset: 8, axUp: 2, rules: [0, 1],
+    /* Exactly `cycles` whole periods, and not one edge more. The leading
+       duplicate at u = 0 is the opening vertical edge; without it the trace
+       would begin already at the rail it is about to jump to. */
+    pts: [{ u: 0, v: lOff }, { u: 0, v: lOn }, { u: D, v: lOn },
+      { u: D, v: lOff }, { u: 1, v: lOff }],
+    ref: vRef,
+    lobes: vsOK ? [{ u0: 0, u1: D, v: lOn }, { u0: D, u1: 1, v: lOff }] : null,
+    dash: vsOK ? [{ v: vRef, da: "3 4" }] : [],
+    ticks: vsOK ? [[1, vhi], [vRef, "mean"], [0, "0"]] : [[1, vhi], [0, "0"]],
+    fmt: null, dot: { c: "#5AD1DE", r: 3.2 },
+  });
+
+  /* Two-sided, because a synchronous rectifier's current genuinely reverses
+     at light load and a zero-based scale drops that half of the waveform
+     through the floor and across the time axis. Where the current never goes
+     negative — every diode-rectified topology — iFloor is 0 and this is the
+     same mapping as before, to the bit.
+
+     The current comes from the shared model as a polyline, so whatever shape
+     it describes — a plain ramp, a pulse that stops at turn-off, a ramp bent
+     by core saturation, a discontinuous cycle that sits at zero — is drawn
+     without the drawing knowing which of those it is. */
+  const iCeil = Math.max(M.iMax * 1.18, 1e-9);
+  const iFloor = Math.min(M.iMin * 1.18, 0);
+  panes.push({
+    key: "i", name: ilabel || "current", unit: "amps", c: "#E0A458",
+    h: 76, span: [iFloor, iCeil], inset: 0, axUp: -4, rules: [1],
+    pts: M.pts.map((p) => ({ u: p.u, v: p.i })),
+    flow: flowOffset !== null,
+    /* Where the current reverses, the zero crossing is the whole point — it
+       is the moment the freewheel FET starts pulling current back into the
+       input rather than delivering it. */
+    dash: [{ v: iavg, da: "3 4" }].concat(iFloor < 0 ? [{ v: 0, da: "2 3", lab: "0" }] : []),
+    ticks: [[M.iPeak, "peak"], [iavg, "mean"], [M.iValley, "valley"]],
+    fmt: (v) => eng(v, "A"), dot: { c: "#E3A85C", r: 3.6 },
+  });
+
+  /* ---- the capacitor: what the output actually sees ----
+     Only drawn where the design supplied a capacitor to model. The two panes
+     go together — the ripple turns where the current crosses zero, and
+     showing either alone throws away the argument. */
+  if (C) {
+    const iSpan = Math.max(C.iCmax - C.iCmin, 1e-12) * 0.16;
+    panes.push({
+      /* The sign convention belongs in the header, once. On the ticks it read
+         "out of C −1.33 A", which is sixteen characters of right-aligned mono
+         in an 88-pixel margin — it ran off the left edge of the figure. */
+      key: "ic", name: "i_C", unit: "amps · + into C", c: "#A88BF0",
+      h: 60, span: [C.iCmin - iSpan, C.iCmax + iSpan], inset: 0, axUp: -4, rules: [1],
+      pts: C.iC.map((p) => ({ u: p.u, v: p.i })),
+      dash: [{ v: 0, da: "2 3", lab: "0" }],
+      ticks: [[C.iCmax, "peak"], [C.iCmin, "valley"]],
+      fmt: (v) => eng(v, "A"), dot: { c: "#B49BF3", r: 3.4 },
+    });
+    const vPad = Math.max(C.vPP, 1e-12) * 0.22;
+    /* The ripple, as one quadratic per segment of the current. The control
+       points come from the model, which owns the algebra; see cycle.js. */
+    const ripple = C.vTot.map((v, k) => ({
+      u: C.iC[k].u, v, q: k > 0 && C.ctrl[k - 1] ? C.ctrl[k - 1] : null,
+    }));
+    panes.push({
+      key: "vc", name: "v_C", unit: "volts · ripple", c: "#F0796C",
+      h: 60, span: [C.vMin - vPad, C.vMax + vPad], inset: 0, axUp: -4, rules: [1],
+      pts: ripple,
+      /* The charge-only parabola, under the real trace. The gap between them
+         is the ESR term, which is the reason a measured ripple peak never
+         sits where the textbook parabola says it should. */
+      under: C.esr > 0 ? C.vCap.map((v, k) => ({
+        u: C.iC[k].u, v, q: k > 0 && C.ctrlCap[k - 1] ? C.ctrlCap[k - 1] : null,
+      })) : null,
+      dash: [{ v: 0, da: "2 3", lab: "V_out" }],
+      ticks: [[C.vMax, "peak"], [C.vMin, "valley"]],
+      fmt: (v) => eng(v, "V"), dot: { c: "#F58E82", r: 3.4 },
+    });
   }
+
+  /* ---------------- layout: stack them, then give each its scale ------- */
+  let yc = PANE_TOP;
+  for (const p of panes) {
+    p.y0 = yc; p.y1 = yc + p.h; yc = p.y1 + PANE_GAP;
+    const [lo, hi] = p.span, hy = p.y0 + (p.inset || 0);
+    const den = hi - lo || 1;
+    p.y = (v) => p.y1 - ((v - lo) / den) * (p.y1 - hy);
+  }
+  const bot = panes[panes.length - 1].y1;
+  const HEIGHT = bot + 76;
+
+  /* Tile a pane's trace across the drawn periods. Straight segments and
+     curved ones go through the same loop, so no pane needs its own builder. */
+  const tile = (pts, y) => {
+    let d = `M ${x0} ${+y(pts[0].v).toFixed(2)}`;
+    for (let c = 0; c < cycles; c++) {
+      const a = x0 + c * per;
+      for (let k = 1; k < pts.length; k++) {
+        const p = pts[k], px = +(a + p.u * per).toFixed(3), py = +y(p.v).toFixed(2);
+        d += p.q
+          ? ` Q ${+(a + p.q.u * per).toFixed(3)} ${+y(p.q.v).toFixed(2)} ${px} ${py}`
+          : ` L ${px} ${py}`;
+      }
+    }
+    return d;
+  };
+
   /* The marker is drawn inside this SVG rather than as a positioned element
      over it. Sharing the coordinate system is the only way it can be
      guaranteed to sit exactly on the edge it is pointing at. */
@@ -865,31 +1043,90 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
     const e = clamp(Math.min(s, cycles - s) / CFADE, 0, 1);
     return { x: x0 + s * per, o: fadeEdges ? e * e * (3 - 2 * e) : 1 };
   });
-  const iNow = pulse
-    ? (uPhase < D ? imin + (imax - imin) * (uPhase / D) : 0)
-    : (uPhase < D ? imin + (imax - imin) * (uPhase / D)
-      : imax - (imax - imin) * ((uPhase - D) / Math.max(1 - D, 1e-6)));
-  const vHigh = vinv ? uPhase >= D : uPhase < D;
   const gl = { stroke: "#22303F", strokeWidth: 1, fill: "none" };
-  /* The series name sits at the ripple peak and the mean value at the mean.
-     At low ripple those are only a few pixels apart, so lay them out. */
-  /* 15 px, not 12: these labels carry rendered subscripts, whose descenders
+  /* Every pane's scale labels get collision layout. The series name sits at
+     the peak and the mean value at the mean; at low ripple those are only a
+     few pixels apart.
+
+     13 px, not 10: these labels carry rendered subscripts, whose descenders
      make the real bounding box noticeably taller than the font size. */
-  const [yName, yMean, yZero] = layoutLabels(
-    [yI(imax) + 3.5, yI(iavg) + 3.5, yI(imin) + 3.5], 13, top - 2, bot + 4
-  );
-  /* Axis furniture. Both panes get a named quantity with its unit, real
-     numbers on the current scale rather than a single mean, and a time axis
-     in the periods the reader is actually looking at. Without this the plot
-     was two anonymous traces and a bracket. */
-  /* Name the two rails the node actually sits at. "on"/"off" made a power
-     node look like a logic signal, which invites reading it as the gate
-     drive — it is not; it is the node the filter averages. */
-  const tickV = [[28, vhi], [62, "0"]];
-  const tickI = [[imax, "peak"], [iavg, "mean"], [imin, "valley"]];
+  for (const p of panes) {
+    p.tickY = layoutLabels(p.ticks.map(([v]) => p.y(v) + 3.5), 13, p.y0 - 2, p.y1 + 4);
+    p.d = tile(p.pts, p.y);
+    p.dUnder = p.under ? tile(p.under, p.y) : null;
+  }
+  /* Where the ripple turns, and why. The capacitor's voltage peaks where its
+     CURRENT crosses zero — not where the inductor current peaks — so join the
+     two panes at each crossing and let the figure make the argument. */
+  const cx = C && panes.length === 4
+    ? C.cross.map((p) => ({ u: p.u, yi: panes[2].y(0), yv: panes[3].y(p.v) }))
+    : [];
   const tUnit = period ? (v) => eng(v * period, "s") : (v) => (v ? v + "T" : "0");
+
+  /* What this figure knows and the tables do not say out loud.
+
+     Conduction mode is the one that matters most and was the hardest to see:
+     the design panel warns about DCM in a sentence among other sentences,
+     while every ratio printed beside it silently assumes continuous
+     conduction. Saying it here, next to the shape it changes, is the point.
+
+     The rest are numbers a designer needs and would otherwise have to derive:
+     ripple as a fraction of the mean rather than as an absolute; the ripple
+     CURRENT the output capacitor has to be rated for, which kills more
+     capacitors than the voltage rating does; and how much of the output
+     ripple is ESR rather than charge, because those two are fixed by
+     different properties of the same part and only one of them improves when
+     you buy more capacitance. */
+  const facts = [];
+  const dISpan = M.iPeak - M.iValley;
+  facts.push(M.mode === "dcm"
+    ? { k: "conduction", v: "discontinuous", note: true }
+    : M.iValley < 0
+      ? { k: "conduction", v: "reverses each cycle", note: true }
+      : { k: "conduction", v: "continuous" });
+  if (iavg > 0 && Number.isFinite(dISpan)) {
+    facts.push({ k: "ripple", v: pct(dISpan / iavg) + " of mean" });
+  }
+  facts.push(vsOK
+    ? { k: "volt-seconds", v: "balanced about " + f3(vRef) + " × swing" }
+    : { k: "volt-seconds", v: "M ≠ D — third node level not drawn" });
+  if (props.sat > 0) {
+    facts.push({ k: "core softening", v: pct(props.sat) + " roll-off at peak" });
+  }
+  if (C) {
+    facts.push({ k: "ΔV_out", v: eng(C.vPP, "V") + " p-p" });
+    if (C.esr > 0 && C.vPP > 0) {
+      facts.push({ k: "of which ESR", v: pct(1 - C.capPP / C.vPP) });
+    }
+    facts.push({ k: "C_out must carry", v: eng(C.iCrms, "A") + " rms" });
+    /* As a frequency, not as a multiple of a symbol: this is the number the
+       capacitor's impedance curve and the loop crossover are read at. */
+    if (C.n * C.sub > 1 && Number.isFinite(C.fRipple)) {
+      facts.push({ k: "output ripples at", v: eng(C.fRipple, "Hz") });
+    }
+  }
+  /* data-fig names this surface for the measurement scripts, and data-trace
+     names each trace within it. They used to find the traces by stroke colour
+     and the cursor by matching the exact `d` of its path — so the figure could
+     not gain a pane without silently breaking every one of them.
+
+     data-qerr is the model's own confession. A capacitor's charge must balance
+     over a period; where a topology hands over a spec that does not balance —
+     the wrong family, a rectifier current that does not average to the load,
+     an interleaving factor that is not there — the model corrects it and
+     records how big the correction was. It is the one number that catches
+     every way the wiring between a design and this pane can be wrong, so
+     scripts/check-ripple.mjs asserts on it for all 30 topologies rather than
+     trusting thirty hand-derived specs to be right. */
   return (
-    <div className="sch"><svg viewBox="0 0 660 244" style={{ width: "100%", height: "auto", display: "block" }}>
+    <div>
+    <div className="sch"><svg data-fig="wave" viewBox={`0 0 660 ${HEIGHT}`}
+      data-qerr={C ? C.qErr.toExponential(3) : null}
+      data-vpp={C ? C.vPP.toExponential(6) : null}
+      data-cappp={C ? C.capPP.toExponential(6) : null}
+      data-icrms={C ? C.iCrms.toExponential(6) : null}
+      data-cval={C ? C.C.toExponential(6) : null}
+      style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("wv", () => (<>
         {band ? Array.from({ length: cycles }, (_, c) => {
           const ba = x0 + (c + band[0]) * per, bb = x0 + (c + band[1]) * per;
@@ -897,40 +1134,88 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
           return <rect key={"bd" + c} x={ba} y={18} width={Math.max(Math.min(bb, x1) - ba, 0)}
             height={bot - 18} fill="#6FD39B" opacity=".08" />;
         }) : null}
-        {/* pane titles — what quantity, in what unit */}
-        {/* the subscript in the name descends, so the unit line needs real
-            clearance rather than a nominal line height */}
-        {Tx(6, 14, vlabel || "voltage", { c: "#5AD1DE", s: 10.5, b: 1 })}
-        {Tx(6, 30, "volts", { c: "#5C6E82", s: 8.5 })}
-        {Tx(6, 86, ilabel || "current", { c: "#E0A458", s: 10.5, b: 1 })}
-        {Tx(6, 102, "amps", { c: "#5C6E82", s: 8.5 })}
-        <path d={`M ${x0} 20 H ${x1}`} {...gl} /><path d={`M ${x0} 62 H ${x1}`} {...gl} />
-        <path d={`M ${x0} ${bot} H ${x1}`} {...gl} />
-        {/* the axis rules themselves */}
-        <path d={`M ${x0} 22 V 62 M ${x0} ${top - 4} V ${bot}`} stroke="#3E5266" strokeWidth={1} fill="none" />
-        <path d={`M ${x0} ${yI(iavg)} H ${x1}`} stroke="#3E5266" strokeWidth={1} strokeDasharray="3 4" fill="none" />
-        <path d={dv} stroke="#5AD1DE" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
-        <path d={di} stroke="#E0A458" strokeWidth={1.8} fill="none" strokeLinejoin="round" />
+        {/* Pane titles — what quantity, in what unit — on one line above the
+            pane, name then unit.
+
+            The unit used to sit on a second line INSIDE the pane, at y0 + 10,
+            which is exactly where a scale label for a value near the top of
+            the pane lands. With two panes and generous headroom they missed
+            each other; with four they did not, and "amps" ended up underneath
+            "peak 11.4 A". Above the pane there is nothing to collide with, and
+            the whole left margin is left to the scale. */}
+        {panes.map((p) => (
+          <g key={"ti" + p.key}>
+            {Tx(6, p.y0 - 6, p.name, { c: p.c, s: 10.5, b: 1 })}
+            {Tx(6 + txWidth(p.name, 10.5) + 6, p.y0 - 6, p.unit, { c: "#5C6E82", s: 8.5 })}
+          </g>
+        ))}
+        {/* horizontal rules: each pane says which of its own edges it wants */}
+        {panes.map((p) => p.rules.map((f, i) => (
+          <path key={"gr" + p.key + i} d={`M ${x0} ${f ? p.y1 : p.y0} H ${x1}`} {...gl} />
+        )))}
+        {/* The volt-second lobes. Same fill and same opacity on both, because
+            the claim being made is that their AREAS are equal — give them two
+            colours and the eye compares the colours instead. */}
+        {panes.map((p) => (p.lobes || []).map((lb, i) => Array.from({ length: cycles }, (_, c) => {
+          const xa = x0 + (c + lb.u0) * per, xb = Math.min(x0 + (c + lb.u1) * per, x1);
+          const ya = p.y(lb.v), yr = p.y(p.ref);
+          if (xb <= xa) return null;
+          return <rect key={"vs" + p.key + i + "_" + c} x={+xa.toFixed(2)}
+            y={+Math.min(ya, yr).toFixed(2)} width={+(xb - xa).toFixed(2)}
+            height={+Math.abs(yr - ya).toFixed(2)} fill={p.c} opacity={0.13} />;
+        })))}
+        {/* reference levels — the mean, and zero wherever the trace crosses it */}
+        {panes.map((p) => (p.dash || []).map((r, i) => (
+          <g key={"dl" + p.key + i}>
+            <path d={`M ${x0} ${+p.y(r.v).toFixed(2)} H ${x1}`} stroke="#3E5266"
+              strokeWidth={1} strokeDasharray={r.da} fill="none" />
+            {r.lab ? Tx(x1 + 4, p.y(r.v) + 3.5, r.lab, { c: "#5C6E82", s: 9 }) : null}
+          </g>
+        )))}
+        {/* the axis rules themselves, one subpath per pane */}
+        <path d={panes.map((p) => `M ${x0} ${p.y0 + p.axUp} V ${p.y1}`).join(" ")}
+          stroke="#3E5266" strokeWidth={1} fill="none" />
+        {/* the crossing guides, before the traces so they read as furniture */}
+        {cx.map((k, i) => Array.from({ length: cycles }, (_, c) => {
+          const px = +(x0 + (c + k.u) * per).toFixed(2);
+          return (
+            <g key={"cx" + i + "_" + c}>
+              <path d={`M ${px} ${+k.yi.toFixed(2)} V ${+k.yv.toFixed(2)}`} stroke="#5C6E82"
+                strokeWidth={1} strokeDasharray="1 3" fill="none" opacity={0.75} />
+              <circle cx={px} cy={+k.yi.toFixed(2)} r={2.1} fill="#A88BF0" />
+              <circle cx={px} cy={+k.yv.toFixed(2)} r={2.1} fill="#F0796C" />
+            </g>
+          );
+        }))}
+        {/* the traces. An underlay goes first — it is what the trace over it
+            would have been without the resistance in series. */}
+        {panes.map((p) => (p.dUnder ? (
+          <path key={"un" + p.key} d={p.dUnder} stroke={p.c} strokeWidth={1.1} fill="none"
+            strokeDasharray="4 4" opacity={0.5} />
+        ) : null))}
+        {panes.map((p) => (
+          <path key={"tr" + p.key} data-trace={p.key} d={p.d} stroke={p.c} strokeWidth={1.8}
+            fill="none" strokeLinejoin="round" />
+        ))}
         {/* The same charge-driven dashes that run round the circuit, laid
             along the current trace. The schematic's flow accelerates and
             eases with the instantaneous current; without this the trace
             beside it appeared to run at a flat, unrelated speed. Both are
             driven by one offset, so they move together. */}
-        {flowOffset !== null ? (
-          <path className="wflow" d={di} style={{ strokeDashoffset: flowOffset }} />
-        ) : null}
-        {/* voltage scale */}
-        {tickV.map(([yy, lab], i) => (
-          <g key={"tv" + i}>{Tx(x0 - 8, yy + 3.5, lab, { a: "end", c: "#5C6E82", s: 9.5 })}</g>
-        ))}
-        {/* current scale: the three numbers a designer sizes parts against,
-            each said in words as well as figures */}
-        {[[yName, imax, "peak"], [yMean, iavg, "mean"], [yZero, imin, "valley"]].map(([yy, v, lab], i) => (
-          <g key={"ti" + i}>
-            <path d={`M ${x0 - 5} ${yy - 3.5} H ${x0}`} {...gl} />
-            {Tx(x0 - 8, yy, lab + "  " + eng(v, "A"), { a: "end", c: "#8DA0B4", s: 9.5 })}
+        {panes.map((p) => (p.flow ? (
+          <path key={"fl" + p.key} className="wflow" d={p.d}
+            style={{ strokeDashoffset: flowOffset }} />
+        ) : null))}
+        {/* the scales: the numbers a designer sizes parts against, each said
+            in words as well as figures. A pane with no numeric scale — the
+            switch node, whose rails are named — gets the words alone. */}
+        {panes.map((p) => p.ticks.map(([v, lab], i) => (
+          <g key={"tk" + p.key + i}>
+            {p.fmt ? <path d={`M ${x0 - 5} ${+(p.tickY[i] - 3.5).toFixed(2)} H ${x0}`} {...gl} /> : null}
+            {Tx(x0 - 8, p.tickY[i], p.fmt ? lab + "  " + p.fmt(v) : lab,
+              { a: "end", c: p.fmt ? "#8DA0B4" : "#5C6E82", s: 9.5 })}
           </g>
-        ))}
+        )))}
         {/* time axis: one tick per drawn period, plus the on-time bracket */}
         <path d={`M ${x0} ${bot} V ${bot + 6}`} {...gl} />
         {Array.from({ length: cycles + 1 }, (_, c) => (
@@ -949,16 +1234,32 @@ function Wave({ D, dI, iavg, vlabel = "SW node", ilabel = "i_L", cycles = WAVE_C
           { a: "middle", c: "#6FD39B", s: 9.5 })}
         {Tx((x0 + x1) / 2, bot + 62, period ? "time" : "time  ·  T = 1/f_sw",
           { a: "middle", c: "#8DA0B4", s: 10.5 })}
+        {/* One dot per pane, all at the same instant — which is the point of
+            stacking the panes in the first place. Each is read off its own
+            pane's trace, so a dot cannot drift from the curve under it. */}
         {cursors.map((m, c) => (
-          <g key={"cu" + c} style={{ opacity: m.o.toFixed(3) }}>
+          <g key={"cu" + c} className="rake" style={{ opacity: m.o.toFixed(3) }}>
             <path d={`M ${m.x.toFixed(2)} 18 V ${bot}`} stroke="#E6EDF5" strokeWidth={1.1}
               fill="none" opacity={0.6} />
-            <circle cx={m.x.toFixed(2)} cy={vHigh ? 28 : 62} r={3.2} fill="#5AD1DE" />
-            <circle cx={m.x.toFixed(2)} cy={yI(iNow)} r={3.6} fill="#E3A85C" />
+            {panes.map((p) => (
+              <circle key={p.key} cx={m.x.toFixed(2)} cy={+p.y(paneAt(p.pts, uPhase)).toFixed(2)}
+                r={p.dot.r} fill={p.dot.c} />
+            ))}
           </g>
         ))}
       </>))}
     </svg></div>
+    {/* The facts sit outside the plotting surface, not on it. On it they would
+        be competing with the traces for the same 660 × 424 of attention; below
+        it they are a caption, which is what they are. */}
+    <div className="wfacts">
+      {facts.map((f, i) => (
+        <span key={i} className={f.note ? "note" : ""}>
+          <i><Sub t={f.k} /></i><b>{f.v}</b>
+        </span>
+      ))}
+    </div>
+    </div>
   );
 }
 
@@ -1066,10 +1367,18 @@ const FIELDS = {
   vout: { l: "V_out", u: "V", d: 3.3, mn: 0.05, mx: 2000 },
   iout: { l: "I_out", u: "A", d: 10, mn: 1e-3, mx: 1e4 },
   fsw: { l: "f_sw", u: "kHz", d: 500, mn: 0.1, mx: 1e5 },
-  r: { l: "ripple ΔI/I", u: "", d: 0.3, s: 0.05, mn: 0.01, mx: 2 },
+  /* Ripple ratio. The ceiling has to sit above 2, or discontinuous
+     conduction is unreachable: ΔI is proportional to I_out here, so the
+     boundary I_out = ΔI/2 lands at ΔI/I ≈ 2 and the tool's own DCM warning
+     could never fire. */
+  r: { l: "ripple ΔI/I", u: "", d: 0.3, s: 0.05, mn: 0.01, mx: 3 },
   dvout: { l: "ΔV_out p-p", u: "mV", d: 30, mn: 0.1, mx: 1e5 },
   eff: { l: "target η", u: "", d: 0.9, s: 0.01, mn: 0.1, mx: 1 },
   esr: { l: "C_out ESR", u: "mΩ", d: 3, mn: 0, mx: 1e4 },
+  /* How much inductance is left at the peak. Datasheets quote exactly this
+     ("−20 % at 12 A"), and it is what bends the current ramp away from the
+     textbook triangle: 0 draws the ideal straight ramp. */
+  lsag: { l: "L roll-off at I_pk", u: "%", d: 20, s: 5, mn: 0, mx: 80 },
   rds: { l: "R_DS(on) hot", u: "mΩ", d: 8, mn: 0, mx: 1e5 },
   vf: { l: "diode V_F", u: "V", d: 0.45, mn: 0, mx: 10 },
   dcr: { l: "L DCR", u: "mΩ", d: 4, mn: 0, mx: 1e4 },
@@ -1104,6 +1413,10 @@ const FIELDS = {
 };
 const G = (t, rows) => ({ t, rows });
 const R = (k, v, n) => [k, v, n || ""];
+/* ESR in ohms from the mΩ field, and zero where a topology does not offer
+   one. A design that has no ESR input still gets a ripple pane; it just gets
+   the charge term alone, which is what its own C_out formula assumes. */
+const esrOhm = (s) => (Number(s.esr) > 0 ? s.esr * 1e-3 : 0);
 /* A conversion ratio the topology cannot reach is a design error, not a set
    of numbers. Returning this says so, instead of printing a duty above 1
    and a negative inductance as though they meant something. */
@@ -1128,7 +1441,7 @@ const TA = [
   pros: ["Simplest topology, smallest part count", "Continuous output current → small C_out, low ripple", "Well-behaved control-to-output response, no RHP zero"],
   cons: ["Pulsating input current → needs real input capacitance", "No isolation, no polarity inversion", "High-side gate drive needs a bootstrap or isolated supply"],
   use: ["Point-of-load rails", "Battery→logic conversion", "Pre-regulators"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => Vo / (v * s.eff);
@@ -1151,7 +1464,12 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["output cap", eng(Co, "F")]],
       loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot"], ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out·(1−D)"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
+      /* The capacitor sees the inductor ripple and nothing else — output
+         current is continuous. C_out was sized at V_in max, where the ripple
+         is worst, so the pane's ripple at nominal input is the smaller
+         number, which is the honest one to show beside the nominal duty. */
+      wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         Dx > 0.85 && "D reaches " + f3(Dx) + " at V_in min — check the controller's max duty and t_on.",
         Dm < 0.05 && "D falls to " + f3(Dm) + " at V_in max — t_on may be shorter than the minimum on-time.",
@@ -1207,7 +1525,7 @@ const TA = [
   pros: ["Much lower conduction loss at low V_out", "Inherently bidirectional — works as a boost in reverse", "Forced PWM gives a fixed frequency at any load"],
   cons: ["Shoot-through risk; dead time must be right", "Reverse inductor current at light load costs efficiency unless you allow DCM", "Two gate drives"],
   use: ["CPU / FPGA core rails", "48 V→12 V intermediate bus", "Battery chargers"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "qg", "vg", "coss", "td"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "qg", "vg", "coss", "td", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => Vo / (v * s.eff);
@@ -1233,7 +1551,8 @@ const TA = [
       loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
         ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"], ["Body diode", Pdt, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
+      wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair.",
         dIn / 2 > Io && "Inductor ripple exceeds the DC current: current reverses each cycle. Fine for forced PWM, wasteful at light load.",
@@ -1281,7 +1600,7 @@ const TA = [
   pros: ["Current and loss split across devices and copper", "Dramatically lower input and output ripple", "Faster transient response per unit of output capacitance"],
   cons: ["N× the parts, gate drives and current sensing", "Needs current sharing between phases", "Layout symmetry becomes critical"],
   use: ["CPU/GPU core rails (hundreds of amps)", "48 V→12 V converters", "High-current chargers"],
-  fields: ["vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "nph", "rds", "dcr", "tsw"],
+  fields: ["vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "nph", "rds", "dcr", "tsw", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, N = Math.max(1, Math.round(s.nph));
     const Dn = Vo / (s.vinNom * s.eff), Dm = Vo / (s.vinMax * s.eff);
@@ -1307,7 +1626,12 @@ const TA = [
       hi: [["per-phase current", eng(Iph, "A")], ["ripple cancellation", "×" + f2(K)], ["output ripple f", eng(N * fs, "Hz")]],
       loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pl, "N·I_phase(rms)²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: Iph, vlabel: "v_SW", vhi: "V_in" },
+      /* One phase is plotted; the capacitor sees all N. Handing the model the
+         phase count rather than the cancelled ripple means the pane derives
+         the cancellation from the waveforms themselves — so if K above is
+         ever wrong, the two disagree visibly instead of agreeing quietly. */
+      wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Iph, vlabel: "v_SW", vhi: "V_in",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, n: N } },
       warn: [
         Dn >= 1 && "V_out exceeds V_in·η — a buck cannot reach this operating point, so the ripple-cancellation numbers below do not apply.",
         Dn < 1 && K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number.",
@@ -1353,7 +1677,7 @@ const TA = [
   pros: ["Continuous, low-ripple input current", "Ground-referenced switch — trivial gate drive", "Only one magnetic component"],
   cons: ["RHP zero forces a slow loop", "No output disconnect or short-circuit protection", "Output cap carries large rms ripple"],
   use: ["Battery→higher rail", "LED drivers", "PFC front ends", "Photovoltaic MPPT"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "lsag"],
   defs: { vinMin: 9, vinNom: 12, vinMax: 16, vout: 24, iout: 3, fsw: 300, r: 0.35 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -1386,7 +1710,14 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["RHP zero", eng(frhp, "Hz")]],
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot"], ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "v_SW", vhi: "V_out", vinv: true },
+      /* Pulse-fed output: while the switch is on the diode is blocking and the
+         capacitor alone holds the rail up, then takes the whole inductor
+         current at turn-off — peak first, decaying to the valley. That step is
+         why a boost output cap is an order of magnitude larger than a buck's
+         for the same ripple, and the pane is where you can see it. */
+      wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: IL , vlabel: "v_SW", vhi: "V_out", vinv: true,
+        cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
+          i0: IL + dIn / 2, i1: IL - dIn / 2 } },
       warn: [
         Dx > 0.8 && "D = " + f3(Dx) + " at V_in min. Conduction loss and the RHP zero both degrade rapidly beyond about 0.8 — consider two stages or a transformer-based topology.",
         s.vinMax > Vo && "V_in max exceeds V_out. A boost cannot regulate down; the output will follow the input through the diode.",
@@ -1439,7 +1770,7 @@ const TA = [
   pros: ["Negative rail from one switch and one inductor", "Wide conversion range around unity", "Ground-referenced switch if you drive it high-side-free"],
   cons: ["Both ports pulsate → caps at both ends", "V_in + |V_out| device stress", "RHP zero in CCM"],
   use: ["Bias rails for op-amps and LCDs", "Negative gate-drive supplies", "Small industrial supplies"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "esr", "rds", "vf", "dcr", "tsw", "lsag"],
   defs: { vinMin: 9, vinNom: 12, vinMax: 16, vout: 12, iout: 2, fsw: 300, r: 0.35 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = Math.abs(s.vout), Io = s.iout;
@@ -1460,7 +1791,9 @@ const TA = [
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
         ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
-      wave: { D: Dn, dI: dIn, iavg: IL , vlabel: "v_A", vhi: "V_in" },
+      wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: IL , vlabel: "v_A", vhi: "V_in",
+        cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
+          i0: IL + dIn / 2, i1: IL - dIn / 2 } },
       warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1500,7 +1833,7 @@ const TA = [
   pros: ["Devices only see the larger of the two rails", "High efficiency at V_in ≈ V_out (both legs mostly static)", "Bidirectional; ideal for battery systems"],
   cons: ["Four switches, four drives", "Mode transitions need careful hysteresis or they chatter", "Control is more complex than any single-mode converter"],
   use: ["USB-PD and battery chargers", "48 V systems with wide input", "Supercapacitor interfaces"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "rds", "dcr", "tsw"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "rds", "dcr", "tsw", "lsag"],
   defs: { vinMin: 9, vinNom: 12, vinMax: 16, vout: 15, iout: 5, fsw: 300, r: 0.35 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -1527,12 +1860,26 @@ const TA = [
     const Pdcr = ILr * ILr * s.dcr * 1e-3;
     const Psw = 0.5 * Math.max(s.vinMax, Vo) * ILmax * s.tsw * 1e-9 * fs;
     const Pt = Pcond + Pdcr + Psw, eta = Vo * Io / (Vo * Io + Pt);
+    /* The figure follows whichever leg is switching at nominal input, so the
+       duty and the inductor current are the operating mode's own — and so is
+       the output capacitor's job. In buck mode the output inductor feeds the
+       load continuously; in boost mode the far leg's rectifier delivers in
+       pulses and the capacitor covers the on-time alone. Same hardware, two
+       entirely different ripple mechanisms — which is exactly the thing that
+       catches people out at the handover. */
+    const Dw = mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo;
+    const ILw = mode === "buck" ? Io : Io / (1 - Dw);
+    const capW = mode === "buck"
+      ? { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs }
+      : { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
+        i0: ILw + dI / 2, i1: ILw - dI / 2 };
     return {
       hi: [["mode at V_in nom", mode], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
       loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg"],
         ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw"],
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
-      wave: { D: mode === "buck" ? Vo / s.vinNom : 1 - s.vinNom / Vo, dI, iavg: mode === "buck" ? Io : Io / (1 - (1 - s.vinNom / Vo)) , vlabel: "v_SW", vhi: "V_in" },
+      wave: { rect: "sync", sat: s.lsag / 100, D: Dw, dI, iavg: ILw,
+        vlabel: "v_SW", vhi: "V_in", cap: capW },
       warn: [Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate."].filter(Boolean),
       groups: [
         G("Modes", [
@@ -1577,7 +1924,7 @@ const TA = [
   pros: ["Continuous current at both ports — small filters", "Ripple steering possible with coupled inductors", "Single switch"],
   cons: ["Transfer cap carries the full load current in rms terms", "Inverting output", "Fourth-order dynamics: harder to compensate"],
   use: ["Low-noise inverting rails", "Sensor and instrumentation supplies", "Some LED drivers"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = Math.abs(s.vout), Io = s.iout;
     const du = (v) => Vo / (Vo + v * s.eff);
@@ -1600,7 +1947,13 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
       loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Iin, vlabel: "v_SW", vhi: "V_in+|V_out|", vinv: true },
+      /* The pane plots L1, the input inductor — but the capacitor faces L2.
+         Both windings see V_in during t_on so their ripples are equal, and L2
+         carries I_out rather than I_in, so the capacitor's own current is
+         handed over explicitly. Driving it from the plotted trace would draw
+         the input winding's DC level onto the output ripple. */
+      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Iin, vlabel: "v_SW", vhi: "V_in+|V_out|", vinv: true,
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, iavg: Io, dI } },
       warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
       groups: [
         G("Operating point", [
@@ -1644,7 +1997,7 @@ const TA = [
   pros: ["Non-inverting, wide range around unity", "DC blocking gives short-circuit tolerance", "Coupled inductors cut part count"],
   cons: ["Large rms current in C_s", "V_in + V_out device stress", "Fourth-order plant with an RHP zero"],
   use: ["Automotive 12 V rails (crank to load-dump)", "Li-ion → 3.3 V/5 V", "LED drivers with wide input"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds", "esr"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds", "esr", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, Vf = s.vf;
     const du = (v) => (Vo + Vf) / (v + Vo + Vf);
@@ -1668,7 +2021,13 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
       loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
         ["Diode", Pd, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "v_SW", vhi: "V_in+V_out", vinv: true },
+      /* The output diode carries both winding currents, and only while the
+         switch is off — so the output is pulse-fed exactly as a boost's is.
+         Their sum averages I_out/(1−D) over that interval, which is what
+         closes the charge balance. */
+      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "v_SW", vhi: "V_in+V_out", vinv: true,
+        cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
+          i0: Io / (1 - Dn) + dI / 2, i1: Io / (1 - Dn) - dI / 2 } },
       warn: [
         Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback.",
         Ics > 3 && "C_s rms is " + eng(Ics, "A") + " — plan on several ceramics or a film cap.",
@@ -1715,7 +2074,7 @@ const TA = [
   pros: ["Low output ripple — good for noise-sensitive loads", "Non-inverting", "No RHP zero in the output-side path"],
   cons: ["Pulsating input current needs a good input filter", "High-side switch drive", "Same C1 rms burden as the SEPIC"],
   use: ["Precision analog rails from a varying input", "LED drivers where flicker matters"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "r", "dvout", "eff", "vf", "rds", "lsag"],
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
     const du = (v) => (Vo + s.vf) / (v + Vo + s.vf);
@@ -1734,7 +2093,11 @@ const TA = [
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
       loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "v_SW", vhi: "V_in" },
+      /* The Zeta's output inductor faces the load, so the plotted current is
+         already the one the capacitor sees — which is the whole reason this
+         topology's output is quieter than the SEPIC's. */
+      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_SW", vhi: "V_in",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       groups: [
         G("Operating point", [
           R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
@@ -1835,7 +2198,7 @@ const TB = [
   pros: ["Cheapest isolated topology: one switch, one magnetic", "Multiple isolated outputs almost free", "Very wide input range (universal mains)"],
   cons: ["Large rms currents; output cap works hard", "Leakage energy must be dissipated or recovered", "RHP zero in CCM makes the loop slow"],
   use: ["Phone and laptop adapters", "Auxiliary/bias supplies", "Isolated industrial rails"],
-  fields: ["vinMin", "vinMax", "vout", "iout", "fsw", "dmax", "krp", "vf", "dvout", "esr", "eff", "llk", "vclamp", "rds"],
+  fields: ["vinMin", "vinMax", "vout", "iout", "fsw", "dmax", "krp", "vf", "dvout", "esr", "eff", "llk", "vclamp", "rds", "lsag"],
   defs: { vinMin: 120, vinMax: 375, vout: 19, iout: 3.5, fsw: 65, dvout: 200, vf: 0.5, esr: 20, eff: 0.87 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, D = s.dmax, K = Math.min(Math.max(s.krp, 0.05), 1);
@@ -1866,8 +2229,25 @@ const TB = [
         ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],
         ["Output rectifier", Pdo, "V_F·I_out"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
-      wave: { D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "i_pri",
-        vlabel: "v_DS", vhi: "V_in+V_R", vinv: true },
+      /* The plotted trace is the PRIMARY current, which stops dead at
+         turn-off. The capacitor is on the other side of the transformer: it
+         sees the reflected secondary current, N·I_pk decaying to N·I_v, and
+         only during the off-time. So the two panes are genuinely different
+         currents on the same figure, and neither is derivable from the other
+         without the turns ratio. */
+      wave: { sat: s.lsag / 100, D, dI: Ipk - Iv, iavg: (Ipk + Iv) / 2, pulse: true, ilabel: "i_pri",
+        vlabel: "v_DS", vhi: "V_in+V_R", vinv: true,
+        cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
+          /* The secondary's peak and valley, at the level that delivers
+             exactly I_out. I_spk = N·I_pk above is derived from INPUT power,
+             so it carries the efficiency allowance — the right thing for
+             rectifier stress, and the wrong thing here. Whatever the
+             converter loses, the charge arriving at the output node still has
+             to equal the charge the load removes, or the rail would walk away
+             cycle after cycle. So the flux ramp sets the shape, I_v/I_pk =
+             1 − K, and the load sets the level. */
+          i0: 2 * Io / ((1 - D) * (2 - K)),
+          i1: 2 * Io * (1 - K) / ((1 - D) * (2 - K)) } },
       warn: [
         s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R.",
         Vds > 600 && "V_DS reaches " + eng(Vds, "V") + " before the leakage spike. That is 900 V+ silicon territory; lower N or use active clamp.",
@@ -1939,7 +2319,13 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series"],
         ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
+      /* An output inductor sits between the rectifier and the load, so output
+         current is continuous and the capacitor takes the ripple alone — a
+         buck filter behind a transformer, which is what a forward is. One
+         power pulse per switching period, so C_out is sized at f_sw and the
+         pane draws one ripple per drawn period to match. */
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time.",
         Dm < 0.1 && "Duty falls to " + f3(Dm) + " at V_in max; check the controller's minimum on-time and the transformer's utilisation.",
@@ -2003,6 +2389,23 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against 2·V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
+      /* No capacitor pane here, deliberately — see the note below.
+
+         DOUBLE-PULSE OUTPUT FILTERS. A push-pull, half-bridge, phase-shifted
+         bridge or centre-tapped rectifier delivers TWO power pulses per
+         switching period, so its choke ramps up over D·T and back down over
+         (½ − D)·T, twice. The trace drawn here is the older simplification:
+         one ramp per period, rising over D and falling over the whole of
+         (1 − D). Peak, valley and ΔI are all right — which is why the sizing
+         numbers beside it are right — but the falling ramp is stretched, so
+         the TIME proportions are wrong.
+
+         A capacitor pane is a charge integral over exactly those proportions.
+         Drawing one from this shape would produce a ripple that disagrees
+         with the C_out printed in the same table, and the pane exists to
+         agree with it. The fix is to draw these four at 2·f_sw, which changes
+         the voltage pane, the on-time bracket and the flow phase windows too
+         — its own piece of work, not a rider on this one. */
       wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
       warn: [
         s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
@@ -2042,7 +2445,7 @@ const TB = [
   pros: ["Switch stress equals V_in", "Series blocking cap prevents flux walking", "Good transformer utilisation"],
   cons: ["Primary current is twice the full bridge for the same power", "High-side drive required", "Divider caps carry large ripple current"],
   use: ["Off-line 200 W–1 kW supplies", "Welding and industrial supplies", "LLC precursor"],
-  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff", "rds", "tsw"],
+  fields: ["vinMin", "vinNom", "vinMax", "vout", "iout", "fsw", "dmax", "r", "dvout", "vf", "eff", "rds", "tsw", "lsag"],
   defs: { vinMin: 330, vinNom: 390, vinMax: 420, vout: 48, iout: 12, fsw: 100, dvout: 150, dmax: 0.45 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout;
@@ -2065,7 +2468,9 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2" },
+      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
+         period. See the note on the push-pull above. */
+      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2" },
       warn: [
         s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
       ].filter(Boolean),
@@ -2127,6 +2532,8 @@ const TB = [
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
       loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
+      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
+         period. See the note on the push-pull above. */
       wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
       warn: [
         dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
@@ -2796,7 +3203,7 @@ const TD = [
   pros: ["Only one diode drop in the output path", "Two devices instead of four", "Both rectifiers share a common ground — easy to drive if synchronous"],
   cons: ["Needs twice the secondary copper", "Diodes block twice the winding voltage", "Centre tap must be accurately placed or the halves imbalance"],
   use: ["Low-voltage secondaries of forward and push-pull converters", "Linear supply secondaries", "Anywhere V_F costs real efficiency"],
-  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "esr", "dvout"],
+  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "esr", "dvout", "lsag"],
   defs: { vsec: 12, dnom: 0.4, iout: 20, fsw: 150, r: 0.3, vf: 0.45, esr: 3, dvout: 30 },
   design(s) {
     const fs = s.fsw * 1e3, D = s.dnom, Io = s.iout;
@@ -2812,7 +3219,9 @@ const TD = [
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
       loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
         ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
-      wave: { D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf" },
+      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
+         period. See the note on the push-pull above. */
+      wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf" },
       warn: [
         D > 0.5 && "D = " + f2(D) + " exceeds 0.5. Each half-cycle can occupy at most half the period or the two halves overlap and short the secondary.",
         Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified.",
@@ -2918,7 +3327,7 @@ const TD = [
   pros: ["Single secondary winding — best transformer utilisation", "Two smaller inductors instead of one large one", "Output ripple partly cancels and sits at 2·f_sw"],
   cons: ["Two inductors to wind and place", "Current sharing depends on matched inductors", "Marginal benefit below about 10 A"],
   use: ["High-current low-voltage secondaries", "Phase-shifted full-bridge outputs", "Server VRM front ends"],
-  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "dvout"],
+  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "dvout", "lsag"],
   defs: { vsec: 14, dnom: 0.35, iout: 60, fsw: 200, r: 0.4, vf: 0.45, dvout: 30 },
   design(s) {
     const fs = s.fsw * 1e3, D = s.dnom, Io = s.iout;
@@ -2938,7 +3347,13 @@ const TD = [
     return {
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
       loss: [["Rectifiers", Pd, "V_F·I_out"]],
-      wave: { D: D, dI: dI, iavg: IL, vlabel: "v_sec", vhi: "V_sec", ilabel: "i_L1" },
+      /* One inductor is plotted; the capacitor sees both, half a period apart.
+         Handing the model the phase count rather than the cancelled ripple
+         means the pane derives K from the two waveforms — so the drawn ripple
+         is a consequence of the interleaving rather than a restatement of the
+         published factor above it. */
+      wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: IL, vlabel: "v_sec", vhi: "V_sec", ilabel: "i_L1",
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, n: 2 } },
       warn: [
         D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period.",
         Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation.",
@@ -4032,7 +4447,9 @@ function Results({ res, hideWave }) {
       ))}
       <LossBar items={res.loss} />
       {res.wave && !hideWave ? <div style={{ margin: "14px 0" }}>
-        <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>Idealised waveforms</span>
+        <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
+          Idealised waveforms · one cycle, drawn three times
+        </span>
         <Wave {...res.wave} />
       </div> : null}
       {res.chart ? <div style={{ margin: "14px 0" }}>
@@ -4093,6 +4510,7 @@ const FLOW = {
   ]},
   buck: { w: 660, h: 250, sw: [[170, 70, "Q1", -90], [215, 135, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    pol: [241, 88, 301, 88],              /* L, between the switch node and the output */
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch connects the input to the inductor. With V_in − V_out across it the current ramps up, and the difference between that current and the load current charges C_out.",
       d: ["M 40 70 H 480 V 200 H 40"] },
@@ -4101,6 +4519,7 @@ const FLOW = {
   ]},
   boost: { w: 660, h: 250, sw: [[230, 145, "Q1", 0], [288, 70, "D1"]],
     emc: { loop: "M 230 70 H 390 V 200 H 230 Z", node: [230, 70] },
+    pol: [116, 88, 176, 88],              /* L, fed from the input */
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The switch shorts the inductor to ground. Current ramps up storing energy, and the output is supplied entirely by C_out — which is why boost output ripple is so much worse than buck.",
       d: ["M 40 70 H 230 V 200 H 40"], dim: ["M 390 70 H 480 V 200 H 390"] },
@@ -4109,6 +4528,7 @@ const FLOW = {
   ]},
   buckboost: { w: 660, h: 250, sw: [[170, 70, "Q1", -90], [290, 70, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    pol: [197, 98, 197, 158],              /* L, from the switch node down to the return */
     ph: [
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The full input voltage sits across the inductor and current ramps up. Nothing reaches the output during this interval — the load lives on C_out.",
       d: ["M 40 70 H 215 V 200 H 40"], dim: ["M 400 70 H 480 V 200 H 400"] },
@@ -4151,6 +4571,7 @@ const FLOW = {
   ]},
   ctrect: { w: 680, h: 270, sw: [[300, 60, "D1"], [300, 140, "D2"]],
     emc: { loop: "M 214 60 H 340 V 140 H 214 Z", node: [340, 100] },
+    pol: [346, 118, 406, 118],              /* L_f, the output choke */
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
       d: ["M 214 60 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
@@ -4159,6 +4580,7 @@ const FLOW = {
   ]},
   doubler: { w: 700, h: 300, sw: [[250, 170, "D1"], [290, 230, "D2"]],
     emc: { loop: "M 214 80 H 250 V 260 H 290 V 200 H 214 Z", node: [250, 80] },
+    pol: [316, 98, 376, 98],              /* L1, the winding the pane plots */
     ph: [
     { on: [0,1], t: "Winding positive", f: (D) => [0, D], n: "D2 clamps the lower terminal to the return, so L1 sees the winding voltage and charges while L2 freewheels. Both inductors feed the output continuously.",
       d: ["M 214 80 H 470 V 140 H 595 V 260 H 290 V 200 H 214 V 160"] },
@@ -4202,6 +4624,7 @@ const FLOW = {
   ]},
   zeta: { w: 700, h: 250, sw: [[170, 70, "Q1", -90], [340, 135, "D1"]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    pol: [366, 88, 426, 88],              /* L2, the output winding the pane plots */
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The high-side switch connects the input to both the coupling capacitor and L1. C1 delivers its charge onward to L2 and the load, and L1 magnetises from the input.",
       d: ["M 40 70 H 600 V 200 H 40", "M 215 70 V 200"] },
@@ -4211,6 +4634,7 @@ const FLOW = {
   fsbb: { w: 700, h: 250,
     sw: [[170, 70, "Q1", -90], [215, 145, "Q2", 0], [330, 145, "Q3", 0], [400, 70, "Q4", -90]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    pol: [241, 88, 301, 88],              /* L, between the two half bridges */
     ph: [
     { on: [1,0,0,1], t: "Q1 on (buck mode)", f: (D) => [0, D], n: "In buck mode the boost leg is static: Q4 stays on, Q3 stays off, and the converter is an ordinary buck. The input feeds the inductor through Q1 and the current ramps up.",
       d: ["M 40 70 H 600 V 200 H 40"], dim: ["M 330 70 V 200"] },
@@ -4235,6 +4659,7 @@ const FLOW = {
 
   syncbuck: { w: 660, h: 250, sw: [[170, 70, "Q_HS", -90], [215, 145, "Q_LS", 0]],
     emc: { loop: "M 88 70 H 215 V 200 H 88 Z", node: [215, 70] },
+    pol: [241, 88, 301, 88],              /* L, between the switch node and the output */
     ph: [
     { on: [1,0], t: "High side on", f: (D) => [0, D], n: "Identical to a plain buck: the input feeds the inductor and its current ramps up. The low-side FET is held off, and the dead time before this instant was covered by its body diode.",
       d: ["M 40 70 H 480 V 200 H 40"] },
@@ -4243,6 +4668,7 @@ const FLOW = {
   ]},
   sepic: { w: 700, h: 250, sw: [[160, 145, "Q1", 0], [343, 70, "D1"]],
     emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
+    pol: [76, 88, 136, 88],              /* L1, the input winding the pane plots */
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "Both inductors charge: L1 straight from the input, L2 from the coupling capacitor, which is why C_s carries the full load current in rms terms. The diode is reverse biased and the output runs on C_out alone.",
       d: ["M 40 70 H 160 V 200 H 40", "M 160 70 H 280 V 200 H 160"], dim: ["M 385 70 H 600 V 200 H 385"] },
@@ -4251,6 +4677,7 @@ const FLOW = {
   ]},
   cuk: { w: 700, h: 250, sw: [[160, 145, "Q1", 0], [280, 135, "D1"]],
     emc: { loop: "M 70 70 H 160 V 200 H 70 Z", node: [160, 70] },
+    pol: [76, 88, 136, 88],              /* L1, the input winding the pane plots */
     ph: [
     { on: [1,0], t: "Switch on", f: (D) => [0, D], n: "The transfer capacitor discharges through the switch into the output side. Energy crosses this converter through C1's electric field rather than through a magnetic field — which is exactly why C1 sees the full load current and is the reliability limit.",
       d: ["M 40 70 H 160 V 200 H 40", "M 160 70 H 600 V 200 H 160"] },
@@ -4259,6 +4686,7 @@ const FLOW = {
   ]},
   halfbridge: { w: 780, h: 295, sw: [[230, 102, "Q1", 0], [230, 192, "Q2", 0], [465, 80, "D1"], [465, 205, "D2"]],
     emc: { loop: "M 110 45 H 230 V 250 H 110 Z", node: [230, 147] },
+    pol: [536, 158, 596, 158],              /* L, the output choke */
     ph: [
     { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "The primary sees +V_in/2, because the capacitor divider holds the return at half the bus. That halving is the reason each device blocks only V_in, against 2·V_in for a push-pull.",
       d: ["M 110 45 H 230 V 147 H 290 V 105 H 340", "M 340 169 H 320 V 200 H 110 V 45",
@@ -4444,29 +4872,79 @@ const Chevron = (m, i) => (
 const DevMark = (x, y, label, on, rot) => {
   if (isDiode(label)) {
     const r = 12;
+    /* The bar is drawn in both states and faded, not added and removed. A
+       mounting element cannot run a CSS transition, so a conditional bar
+       snapped in rather than appearing. */
     return (
       <g key={nk()} className={"devr" + (on ? " on" : "") + " di"}>
         <circle className="halo" cx={x} cy={y} r={r + 3} />
         <circle className="ring" cx={x} cy={y} r={r} />
-        {!on ? <path className="bar" d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} /> : null}
+        <path className="bar" opacity={on ? 0 : 1}
+          d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />
       </g>
     );
   }
-  /* The MOSFET primitive draws its gate lead from local (−10,0) to (−22,0)
-     inside a rotate(rot) group, so the same transform locates it here. */
+  /* The MOSFET primitive draws itself inside a rotate(rot) group, so the same
+     transform relocates any of its own features here. */
   const a = ((rot || 0) * Math.PI) / 180;
   const ca = Math.cos(a), sa = Math.sin(a);
   const at = (px, py) => [x + px * ca - py * sa, y + px * sa + py * ca];
   const [ix, iy] = at(-10, 0);
   const [ox, oy] = at(-23, 0);
+  /* The channel, at local x = −5, running the length of the device. A
+     translucent disc centred on the FET used to be the conducting mark, but
+     the glyph is a tall, left-heavy 22×40 shape and a circle cuts straight
+     through its channel, its gate plate and both power leads. It works on a
+     diode only because a diode body is nearly round.
+
+     Marking the channel says what the symbol is already there to say. An
+     enhancement MOSFET is drawn with a BROKEN channel line precisely because
+     there is no channel until the gate makes one, so this is one path whose
+     dashes reproduce the symbol's own three segments when off and close into
+     a single conducting bar when on. Drawn over a dark casing, or at 3 px of
+     green it merges with the flow dashes running past it. */
+  const [c1x, c1y] = at(-5, -13), [c2x, c2y] = at(-5, 13);
+  const chan = `M ${c1x.toFixed(1)} ${c1y.toFixed(1)} L ${c2x.toFixed(1)} ${c2y.toFixed(1)}`;
   return (
     <g key={nk()} className={"devg" + (on ? " on" : "")}>
-      <circle className="halo" cx={x} cy={y} r={14} />
+      <path className="chanbg" d={chan} />
+      <path className="chan" d={chan} />
+      {/* The drive pip sits on the gate TERMINAL, well outside the device
+          body, so the commanded state carries at a glance without anything
+          being drawn over the symbol. */}
+      <circle className="gglow" cx={ox.toFixed(1)} cy={oy.toFixed(1)} r={7.5} />
       <path className="glead" d={`M ${ox.toFixed(1)} ${oy.toFixed(1)} L ${ix.toFixed(1)} ${iy.toFixed(1)}`} />
       <circle className="gdot" cx={ox.toFixed(1)} cy={oy.toFixed(1)} r={2.8} />
     </g>
   );
 };
+
+/* ---------------------------------------------------------------------
+   Which way the inductor is being driven, right now.
+
+   v_L = L·di/dt. The terminal the current ENTERS is the positive one while the
+   current is rising and the negative one while it is falling — and that is the
+   whole reason the trace is a triangle rather than a line. The marks flip at
+   the commutation, the slope changes sign at the same instant, and both are
+   read off the one cycle model, so they cannot disagree with each other or
+   with the waveform beside them.
+
+   Note that this depends on di/dt and not on i, so it stays correct where a
+   synchronous rectifier's current runs backwards at light load — the sign of
+   the current changes and the polarity marks do not.
+
+   Both strokes of the plus are always drawn and only the vertical one's
+   opacity changes, which makes the flip a cross-fade: a plus losing its
+   upright IS a minus. Swapping one path's `d` for another cannot be
+   transitioned at all, and at sixty frames a second an instant substitution
+   reads as a glitch rather than as a commutation. */
+const PolMark = (x, y, plus) => (
+  <g key={nk()} className="polm">
+    <circle cx={x} cy={y} r={8} />
+    <path d={`M ${x - 3.6} ${y} H ${x + 3.6}`} />
+    <path d={`M ${x} ${y - 3.6} V ${y + 3.6}`} style={{ opacity: plus }} />
+  </g>
+);
 
 /* =====================================================================
    Design-space map.
@@ -4906,35 +5384,28 @@ function FlowCard({ topo, res, spec }) {
     [topo.sch]
   );
   const wv = res && res.wave ? res.wave : null;
-  const D = wv && isFinite(wv.D) ? Math.min(Math.max(wv.D, 0.03), 0.97) : 0.5;
-  const iLo = wv ? (wv.pulse ? 0 : Math.max(wv.iavg - wv.dI / 2, 0)) : 0;
-  const iHi = wv ? wv.iavg + wv.dI / 2 : 1;
 
-  /* i(u) over one period, then its running integral */
-  const M = useMemo(() => {
-    if (!F) return null;
-    const f = F.iShape
-      ? (u) => Math.max(F.iShape(u, D), 0)
-      : (u) => (u < D ? iLo + (iHi - iLo) * (u / D) : iHi - (iHi - iLo) * ((u - D) / (1 - D)));
-    const N = 240, q = new Array(N + 1).fill(0);
-    let acc = 0, pk = 0;
-    for (let k = 0; k < N; k++) {
-      const a = f(k / N), b = f((k + 1) / N);
-      pk = Math.max(pk, a); acc += ((a + b) / 2) / N; q[k + 1] = acc;
-    }
-    return { f, q, tot: acc || 1, pk: pk || 1, N };
-  }, [F, D, iLo, iHi]);
+  /* The same cycle the waveform pane draws — not a second implementation of
+     it. The flow used to run its own 240-point quadrature over its own idea
+     of the current shape, which is how the dashes came to keep flowing
+     through a flyback's off-time, when no primary current exists. */
+  const M = useMemo(
+    () => (F ? buildCycle(wv, F.iShape) : null),
+    [F, cycleKey(wv, F && F.iShape)]
+  );
 
   if (!F || !M) return null;
+  const D = M.D;
   /* p sweeps the whole plot; tPer is the position inside the current
      switching period, which is what every circuit-state calculation wants. */
   const tPer = (p * WAVE_CYCLES) % 1;
-  const qOf = (u) => {
-    const t = u * M.N, k = Math.min(Math.floor(t), M.N - 1);
-    return M.q[k] + (M.q[k + 1] - M.q[k]) * (t - k);
-  };
-  const iNow = M.f(tPer);
-  const flowOff = -(qOf(tPer) / M.tot) * 240;
+  /* The overlay animates the CONDUCTING path, so it reads the flow current,
+     which for a pulse topology is not the plotted trace. See cycle.js. */
+  const iNow = M.flowAt(tPer);
+  /* Peak drives stroke weight and opacity, so it must never be zero — an
+     idle topology would divide the whole overlay away. */
+  const iPk = M.flowPk > 1e-9 ? M.flowPk : 1;
+  const flowOff = -(M.qFlowAt(tPer) / (M.flowTot || 1)) * 240;
 
   /* Phase lookup. Some topologies define windows that do not tile the
      cycle (a rectifier conducts for a slice and idles for the rest), so
@@ -4955,7 +5426,21 @@ function FlowCard({ topo, res, spec }) {
     const b = F.ph[k].f ? F.ph[k].f(D) : [0, 1];
     setPlay(false); setP(((b[0] + b[1]) / 2) / WAVE_CYCLES);
   };
-  const rising = M.f(Math.min(tPer + 0.01, 0.999)) > iNow;
+  const rising = M.flowAt(Math.min(tPer + 0.01, 0.999)) > iNow;
+
+  /* Inductor polarity, from the slope of the trace the reader can see.
+
+     Only where the topology has a real `wave` spec: without one buildCycle
+     falls back to a placeholder triangle, and marking a placeholder's polarity
+     would be asserting something about the circuit that nothing computed.
+     Where the current genuinely sits still — the dead interval of a
+     discontinuous cycle — v_L is zero and neither terminal is positive, so the
+     pair fades rather than picking a side. */
+  const slope = wv ? M.slopeAt(tPer) : 0;
+  const pol = F.pol && wv
+    ? { plus: slope > 0 ? 1 : 0,
+      live: Math.abs(slope) < (M.iPeak - M.iValley) * 0.02 ? 0.2 : 1 }
+    : null;
 
   const devs = (F.sw || []).map((q, j) => ({
     label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
@@ -4968,7 +5453,9 @@ function FlowCard({ topo, res, spec }) {
 
   return (
     <div className="card">
-      <span className="eyebrow">How it works · current path, at the real rate</span>
+      <span className="eyebrow">
+        How it works · current path and inductor polarity, at the real rate
+      </span>
       <PlayBar
         play={play} onPlay={() => setPlay(!play)}
         spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
@@ -5006,15 +5493,24 @@ function FlowCard({ topo, res, spec }) {
             <>
               {(ph.dim || []).map((d, j) => <path key={"m" + j} d={d} className="flowdim" />)}
               {ph.d.map((d, j) => <path key={"g" + j} d={d} className="flowglow"
-                style={{ strokeWidth: 5 + 6 * (iNow / M.pk) }} />)}
+                style={{ strokeWidth: 5 + 6 * (iNow / iPk) }} />)}
               {ph.d.map((d, j) => <path key={"f" + j} d={d} className="flowp"
-                style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / M.pk) }} />)}
+                style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / iPk) }} />)}
               {/* which way the charge is going — travelling with it */}
               {arrows.map((set, j) => (
-                <g key={"ar" + j} style={{ opacity: 0.55 + 0.45 * (iNow / M.pk) }}>
+                <g key={"ar" + j} style={{ opacity: 0.55 + 0.45 * (iNow / iPk) }}>
                   {set.map(Chevron)}
                 </g>
               ))}
+              {/* and which way the inductor is being driven */}
+              {pol ? (
+                <g style={{ opacity: pol.live }}>
+                  {drawScope("pl", () => [
+                    PolMark(F.pol[0], F.pol[1], pol.plus),
+                    PolMark(F.pol[2], F.pol[3], 1 - pol.plus),
+                  ])}
+                </g>
+              ) : null}
             </>
           )}
           {drawScope("db", () => (F.sw || []).map((q, j) =>
@@ -5032,6 +5528,14 @@ function FlowCard({ topo, res, spec }) {
                 : (d.on ? "commanded on by the gate driver" : "commanded off by the gate driver")}
             </span>
           ))}
+          {/* One row in the legend rather than a paragraph of its own: the
+              marks use the same vocabulary as the device rings above them, so
+              they belong in the same list. */}
+          {pol ? (
+            <span className="pol"><i /><b>+ −</b>
+              <Sub t="the inductor's own voltage, v_L = L·di/dt — the terminal the current enters is the positive one while the current rises" />
+            </span>
+          ) : null}
         </div>
       ) : null}
       <p className="flownote">
@@ -5233,7 +5737,15 @@ export default function App() {
               <div className="chips" style={{ marginBottom: 14 }}>
                 {topo.chips.map((c, i) => <span key={i} className={"chip " + ["cu", "cy", "vi"][i % 3]}>{c}</span>)}
               </div>
-              {SCH[topo.sch] ? SCH[topo.sch]() : null}
+              {/* The same schematic, twice, was the single most confusing thing
+                  on the page. Where a topology has a traced conduction path,
+                  the card below draws this exact circuit again — with devices
+                  that light up, current that moves and polarity marks that
+                  flip — and a reader scrolling past two identical drawings
+                  reasonably assumes they are two different circuits and starts
+                  looking for the difference. So the static copy only appears
+                  where nothing better follows it. */}
+              {!FLOW[topo.id] && SCH[topo.sch] ? SCH[topo.sch]() : null}
               <p style={{ margin: "14px 0 0" }}><Sub t={topo.what} /></p>
             </div>
 

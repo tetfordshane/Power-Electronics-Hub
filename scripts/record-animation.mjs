@@ -40,11 +40,14 @@ const samples = await page.evaluate(async (secs) => {
     const step = () => {
       /* every marker of the cursor rake, with the opacity of its group, so
          the hand-off at a period boundary can be measured the same way the
-         arrow belt is */
-      const curs = [...document.querySelectorAll("svg path")]
-        .filter((p) => /^M [\d.]+ 18 V 168$/.test(p.getAttribute("d") || ""))
-        .map((p) => [+p.getAttribute("d").match(/^M ([\d.]+)/)[1],
-          +(p.parentElement.style.opacity || 1)]);
+         arrow belt is. Selected by class rather than by matching the exact
+         path data, so the figure's geometry can change without this going
+         quietly blind. */
+      const curs = [...document.querySelectorAll('[data-fig="wave"] .rake')]
+        .map((g) => {
+          const p = g.querySelector("path");
+          return [+(p.getAttribute("d").match(/^M ([\d.]+)/)[1]), +(g.style.opacity || 1)];
+        });
       const cur = document.querySelector(".flowp");
       const arrows = [...document.querySelectorAll(".carrow")].map((a) => {
         const m = (a.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);

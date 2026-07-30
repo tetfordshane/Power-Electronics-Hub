@@ -44,10 +44,7 @@ const paused = await page.evaluate(() => {
 console.log(paused);
 
 const pick = (kind) => page.evaluateHandle((k) => {
-  if (k === "wave") {
-    return [...document.querySelectorAll("svg")]
-      .find((s) => /244$/.test(s.getAttribute("viewBox") || "")) || null;
-  }
+  if (k === "wave") return document.querySelector('[data-fig="wave"]');
   return document.querySelector(".flowwrap") || document.querySelector(".flowov");
 }, kind);
 

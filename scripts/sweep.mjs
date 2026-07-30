@@ -37,7 +37,8 @@ for (const id of topoIds) {
   await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 700));
   const r = await page.evaluate(() => {
-    const out = { clipped: [], overlaps: 0, rake: null, cycles: null, svgs: 0 };
+    const out = { clipped: [], overlaps: 0, rake: null, svgs: 0,
+      cards: document.querySelectorAll(".card").length };
     for (const svg of document.querySelectorAll("svg")) {
       const vb = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
       if (vb.length !== 4 || !vb[2]) continue;
@@ -65,17 +66,21 @@ for (const id of topoIds) {
        only those pass a playhead to the waveform. The rest render the same
        component as a static reference trace, which correctly has no cursor,
        so asking them for a rake would report a gap that is not one. */
-    const wave = [...document.querySelectorAll("svg")]
-      .find((s) => /244$/.test(s.getAttribute("viewBox") || ""));
+    const wave = document.querySelector('[data-fig="wave"]');
     out.animated = !!document.querySelector(".flowov");
     if (wave && out.animated) {
-      out.rake = [...wave.querySelectorAll("path")]
-        .filter((p) => /^M [\d.]+ 18 V 168$/.test(p.getAttribute("d") || ""))
+      out.rake = [...wave.querySelectorAll(".rake path")]
         .map((p) => +p.getAttribute("d").match(/^M ([\d.]+)/)[1]);
     }
     return out;
   });
   const bad = [];
+  /* A page that fails to compile renders nothing at all, and every check
+     below is vacuously satisfied by an empty document — this reported "all
+     clear" across all 30 topologies while the app was a blank screen. Assert
+     something was actually drawn before believing any of the rest. */
+  if (!r.cards) bad.push("page rendered nothing — no cards (build error?)");
+  else if (!r.svgs) bad.push("no figures rendered on the page");
   if (errs.length) bad.push(`${errs.length} console error(s): ${errs[0].slice(0, 90)}`);
   if (r.clipped.length) bad.push(`text outside viewBox: ${r.clipped.slice(0, 3).join(" | ")}`);
   if (r.overlaps) bad.push(`${r.overlaps} overlapping label pair(s)`);
