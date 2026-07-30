@@ -69,9 +69,73 @@ const tilePulses = (one, P) => {
    in one place, and the caches cannot disagree with the function they cache. */
 export const cycleKey = (wv, iShape) => {
   const w = wv || {}, c = w.cap || {};
-  return [w.D, w.dI, w.iavg, w.pulse, w.pulses, w.vbi, w.rect, w.sat, w.L, w.fsw,
+  return [w.D, w.dI, w.iavg, w.pulse, w.pulses, w.vbi, w.rect, w.sat,
     c.kind, c.C, c.esr, c.Vdc, c.Io, c.iavg, c.dI, c.n, c.sub, c.i0, c.i1, c.fsw,
     iShape ? "s" : ""].join("|");
+};
+
+/* ---- lookups over a polyline ----
+
+   Module scope, because the capacitor's current is a polyline in exactly the
+   same sense the inductor's is and wants exactly the same three questions
+   asked of it: what is the value here, how steep is it, and how much charge
+   has passed. Anything that animates from a current reads it through this.
+
+   Segments of zero width are the vertical edges; they are skipped when
+   scanning, so a lookup at an edge returns the value arriving at it. */
+const lookups = (P) => {
+  const seg = (t) => {
+    for (let k = 0; k < P.length - 1; k++) {
+      if (P[k + 1].u <= P[k].u) continue;
+      if (t <= P[k + 1].u) return k;
+    }
+    return P.length - 2;
+  };
+  const at = (u) => {
+    const t = clamp(u, 0, 1);
+    const k = seg(t), a = P[k], b = P[k + 1];
+    if (b.u <= a.u) return b.i;
+    return a.i + (b.i - a.i) * ((t - a.u) / (b.u - a.u));
+  };
+  /* di/du, in amps per period — multiply by f_sw for amps per second */
+  const slope = (u) => {
+    const k = seg(clamp(u, 0, 1)), a = P[k], b = P[k + 1];
+    return b.u <= a.u ? 0 : (b.i - a.i) / (b.u - a.u);
+  };
+  /* running charge. Exact on straight segments, which is all of them
+     unless the ramp is bent by saturation. */
+  const qc = [0];
+  for (let k = 0; k < P.length - 1; k++) {
+    const a = P[k], b = P[k + 1];
+    qc.push(qc[k] + (b.u > a.u ? ((a.i + b.i) / 2) * (b.u - a.u) : 0));
+  }
+  const qAt = (u) => {
+    const t = clamp(u, 0, 1);
+    const k = seg(t), a = P[k];
+    return qc[k] + ((a.i + at(t)) / 2) * Math.max(t - a.u, 0);
+  };
+  return { at, slope, qAt, qTot: qc[qc.length - 1] };
+};
+
+/* Is this spec running discontinuously?
+
+   Exported because the page has to SAY so, not only draw it. The CCM ratio,
+   the ripple formula and the capacitor sizing printed above the figure all
+   stop holding once the current hits zero and rests there, and for a long
+   time only the buck admitted it — every other converter redrew itself as a
+   discontinuous triangle with the continuous-conduction equations stated as
+   fact beside it. One definition, used by buildCycle for the shape and by the
+   app for the sentence, so the two cannot disagree.
+
+   A current shape supplied by the topology, a pulse waveform and a
+   synchronous rectifier are all excluded: the first two are not ramps, and a
+   synchronous rectifier genuinely pulls its current negative rather than
+   sitting at zero. */
+export const isDCM = (wv, iShape) => {
+  const w = wv || {};
+  const iavg = num(w.iavg, 0.5), dI = num(w.dI, 1);
+  return !iShape && !w.pulse && w.rect !== "sync" && dI > 1e-12 && iavg > 0
+    && iavg < dI / 2 - 1e-12;
 };
 
 /* The current that actually charges the capacitor, and the voltage it makes.
@@ -305,7 +369,27 @@ function buildCap(pts, Dsub, cap, nPulse) {
     if (b.u > a.u) irms += ((a.i * a.i + a.i * b.i + b.i * b.i) / 3) * (b.u - a.u);
   }
 
+  /* What the SCHEMATIC needs to animate this branch.
+
+     `at` is i_C at an instant, for the width and opacity of the marks; `qAt`
+     is the charge that has flowed into the capacitor since the start of the
+     period, which is what the dashes ride on. That integral is the whole
+     trick: it rises while the capacitor is charging and FALLS while it is
+     discharging, so a dash offset driven by it reverses of its own accord at
+     the zero crossing, with no sign test anywhere in the drawing. It also
+     returns to where it started after one period — charge balance, which this
+     model has already enforced above — so the animation loops seamlessly for
+     the same reason the physics does.
+
+     `qAbs` is the total charge moved in the period, positive and negative
+     halves added as magnitudes. Dividing by it normalises the travel, so a
+     0.3 A ripple and a 30 A ripple both sweep the dashes a comfortable
+     distance rather than one crawling and the other blurring. */
+  const CL = lookups(iC);
+  const qAbs = absArea(iC);
+
   return { iC, vCap, vTot, vMin, vMax, vPP: vMax - vMin, qErr, cross, kq, esr, C,
+    at: CL.at, qAt: CL.qAt, qAbs,
     ctrl, ctrlCap, capPP: cMax - cMin, iCmin, iCmax, iCrms: Math.sqrt(Math.max(irms, 0)),
     /* The switching frequency, so a caller can state the ripple frequency as a
        number rather than as a multiple of a symbol. n·sub·P·f_sw is what the
@@ -364,8 +448,7 @@ export function buildCycle(wv, iShape) {
      Keeping the two ramp slopes and solving ½·I_pk·(D₁+D₂) = I_avg gives a
      shape that carries the right average and meets the continuous case
      exactly at the boundary, so there is no seam as the load is swept. */
-  const dcm = !iShape && !pulse && w.rect !== "sync" && dI > 1e-12 && iavg > 0
-    && iavg < dI / 2 - 1e-12;
+  const dcm = isDCM(w, iShape);
   const kD = dcm ? Math.sqrt((2 * iavg) / dI) : 1;   /* 0 < kD < 1 in DCM */
   const D1 = Dsub * kD, D2 = (1 - Dsub) * kD;
 
@@ -481,44 +564,6 @@ export function buildCycle(wv, iShape) {
     ? tilePulses([{ u: 0, i: iLo }, { u: Dsub, i: iHi }, { u: 1, i: iLo }], nPulse)
     : pts;
 
-  /* ---- lookups over a polyline ---- */
-
-  /* Segments of zero width are the vertical edges; they are skipped when
-     scanning, so a lookup at an edge returns the value arriving at it. */
-  const lookups = (P) => {
-    const seg = (t) => {
-      for (let k = 0; k < P.length - 1; k++) {
-        if (P[k + 1].u <= P[k].u) continue;
-        if (t <= P[k + 1].u) return k;
-      }
-      return P.length - 2;
-    };
-    const at = (u) => {
-      const t = clamp(u, 0, 1);
-      const k = seg(t), a = P[k], b = P[k + 1];
-      if (b.u <= a.u) return b.i;
-      return a.i + (b.i - a.i) * ((t - a.u) / (b.u - a.u));
-    };
-    /* di/du, in amps per period — multiply by f_sw for amps per second */
-    const slope = (u) => {
-      const k = seg(clamp(u, 0, 1)), a = P[k], b = P[k + 1];
-      return b.u <= a.u ? 0 : (b.i - a.i) / (b.u - a.u);
-    };
-    /* running charge. Exact on straight segments, which is all of them
-       unless the ramp is bent by saturation. */
-    const qc = [0];
-    for (let k = 0; k < P.length - 1; k++) {
-      const a = P[k], b = P[k + 1];
-      qc.push(qc[k] + (b.u > a.u ? ((a.i + b.i) / 2) * (b.u - a.u) : 0));
-    }
-    const qAt = (u) => {
-      const t = clamp(u, 0, 1);
-      const k = seg(t), a = P[k];
-      return qc[k] + ((a.i + at(t)) / 2) * Math.max(t - a.u, 0);
-    };
-    return { at, slope, qAt, qTot: qc[qc.length - 1] };
-  };
-
   const T = lookups(pts);
   const iAt = T.at, slopeAt = T.slope, qAt = T.qAt, qTot = T.qTot;
   const FL = flowPts === pts ? T : lookups(flowPts);
@@ -534,20 +579,63 @@ export function buildCycle(wv, iShape) {
   const iValley = iShape ? iMin : vLo;
   const iPeak = iShape ? iMax : vHi;
 
-  /* v_L = L·di/dt. Its mean over the period is zero by construction, which is
-     volt-second balance — so the live polarity marks cannot disagree with the
-     duty the rest of the figure is drawn from. */
-  const L = num(w.L, NaN), fsw = num(w.fsw, NaN);
-  const vL = Number.isFinite(L) && Number.isFinite(fsw)
-    ? (u) => L * slopeAt(u) * fsw : null;
-
   let flowPk = 0;
   for (const p of flowPts) if (p.i > flowPk) flowPk = p.i;
+
+  /* ---- the INPUT capacitor ----
+
+     The most under-appreciated waveform in a buck, and the reason its input
+     cap is so much bigger than a beginner expects. The source delivers a
+     smooth average; the switch demands the full inductor current for D of the
+     period and nothing at all for the rest. The input capacitor makes up the
+     entire difference, so it is the part that actually chops.
+
+     KCL at the input node, with current INTO the capacitor positive — the
+     same convention the output capacitor and the i_C pane use:
+
+         I_in = i_sw(u) + i_Cin(u),  so  i_Cin(u) = I_in − i_sw(u)
+
+     which is NEGATIVE while the switch conducts (the capacitor is emptying
+     itself into the switch, because the source alone cannot keep up) and
+     positive while it does not (the source refills it). Getting this
+     backwards draws a capacitor that charges hardest exactly when it is in
+     fact being drained, which is the opposite of the lesson.
+
+     It steps by the whole inductor current at both edges, which is why input
+     ripple is a step and output ripple is a gentle triangle, and why input
+     capacitors are chosen by rms current rather than by capacitance.
+
+     Derived here from the switch current the model already has, so it needs
+     no new input and cannot describe a different converter than the one being
+     drawn. Only for a series switch fed from the input — the family whose
+     `wave` spec carries no `vinv`, since that flag marks the topologies whose
+     switch returns to ground and whose input current is the continuous
+     inductor current instead. */
+  const inCap = (() => {
+    if (iShape || w.vinv || w.pulses > 1) return null;
+    /* the switch conducts for the on-fraction of each sub-interval */
+    const swPts = [];
+    for (const p of flowPts) swPts.push({ u: p.u, i: p.u <= Dsub + 1e-12 ? p.i : 0 });
+    swPts.push({ u: Dsub, i: 0 }, { u: 1, i: 0 });
+    swPts.sort((a, b) => a.u - b.u);
+    const SL = lookups(swPts);
+    const Iin = SL.qTot;                      /* the smooth part the source supplies */
+    const cPts = swPts.map((p) => ({ u: p.u, i: Iin - p.i }));
+    const CI = lookups(cPts);
+    let pk = 0, abs = 0;
+    for (const p of cPts) if (Math.abs(p.i) > pk) pk = Math.abs(p.i);
+    for (let k = 0; k < cPts.length - 1; k++) {
+      if (cPts[k + 1].u > cPts[k].u) {
+        abs += ((Math.abs(cPts[k].i) + Math.abs(cPts[k + 1].i)) / 2) * (cPts[k + 1].u - cPts[k].u);
+      }
+    }
+    return { pts: cPts, at: CI.at, qAt: CI.qAt, qAbs: abs, ipk: pk, iavg: Iin };
+  })();
 
   return { D, mode, pts, iAt, slopeAt, iMin, iMax, iValley, iPeak, qAt, qTot,
     /* the animated schematic drives itself from these, not from the trace */
     flowPts, flowAt: FL.at, qFlowAt: FL.qAt, flowTot: FL.qTot, flowPk,
     /* Dsub, not D: the capacitor's own shape is built per sub-interval and
        tiled, exactly as the inductor current above it was. */
-    vL, cap: w.cap ? buildCap(pts, Dsub, w.cap, nPulse) : null, BEND };
+    cap: w.cap ? buildCap(pts, Dsub, w.cap, nPulse) : null, inCap, BEND };
 }

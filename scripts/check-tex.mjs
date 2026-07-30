@@ -22,9 +22,31 @@ const patterns = [
   new RegExp("\\bl:\\s*" + QUOTED, "g"),
   new RegExp("R2?\\(\\s*" + QUOTED, "g"),
   new RegExp("G\\(\\s*" + QUOTED, "g"),
+  /* The prose fields. These render through <Sub>, which is <Mx>, which is
+     KaTeX — so a stray formula in a sentence falls back to plain text exactly
+     the way a bad equation does, and used to do it unwatched. `what` and the
+     three trade-off lists carry symbols routinely (M = D, i_out, R_DS(on)). */
+  new RegExp("\\bwhat:\\s*" + QUOTED, "g"),
+  new RegExp("\\btag:\\s*" + QUOTED, "g"),
+  new RegExp("\\bfam:\\s*" + QUOTED, "g"),
 ];
+/* Array-valued prose fields: grab the literal, then every string inside it. */
+const ARRAYS = ["chips", "pros", "cons", "use"];
 const strs = new Set();
 for (const re of patterns) for (const m of ps.matchAll(re)) strs.add(m[1]);
+for (const key of ARRAYS) {
+  for (const m of ps.matchAll(new RegExp("\\b" + key + ":\\s*\\[([^\\]]*)\\]", "g"))) {
+    for (const q of m[1].matchAll(new RegExp(QUOTED, "g"))) strs.add(q[1]);
+  }
+}
+/* Objects whose VALUES are prose keyed by topology id, rather than prose on a
+   named field. FAMILY is one line per converter and every line of it goes
+   through the typesetter, so it needs watching for the same reason `what`
+   does — they carry symbols (±V_in/2, I²R, 120°) as a matter of course. */
+for (const key of ["FAMILY"]) {
+  const m = ps.match(new RegExp("const " + key + " = \\{([\\s\\S]*?)\\n\\};"));
+  if (m) for (const q of m[1].matchAll(new RegExp(QUOTED, "g"))) strs.add(q[1]);
+}
 
 const fails = [];
 for (const s of strs) {

@@ -1,8 +1,14 @@
 # Power Stage
 
-An interactive designer and reference for 30 power-electronics topologies —
+An interactive designer and reference for 32 power-electronics topologies —
 buck through class DE, with animated operation figures, live design
 calculators, loss budgets, an efficiency map and a switching-noise spectrum.
+
+Every topology traces its own conducting path over its own schematic. There
+used to be a generic "family figure" for the eight bridge-derived ones, with a
+note admitting the drawing was not the circuit above it; that is gone, and
+what it was good for — placing a converter among its relatives — is now one
+sentence per topology in `FAMILY`.
 
 ```bash
 npm install
@@ -26,7 +32,9 @@ npm run dev
 frame. `drawScope(prefix, fn)` gives each drawing surface its own key
 namespace so React can diff instead of remounting. If you add a new drawing
 surface, wrap it — without that, the CSS transitions silently stop working
-and the animation gets choppy.
+and the animation gets choppy. Prefixes in use: `sc` schematic, `wv` waveform,
+`pl` polarity, `db` devices, `cf` capacitor flow, `lc` line chart, `sp`
+spectrum. They must not collide.
 
 **Do not name anything `Math`.** A hoisted `function Math` shadows the global
 `Math` object for the whole module. The math component is `TeXSpan`.
@@ -42,6 +50,18 @@ against them before any `design()` runs, so design functions may assume
 finite, positive, in-range inputs. A value the clamp had to rewrite is
 flagged red in its input box.
 
+Ranges cannot see each other, though, and a minimum input above the maximum
+input is inside both of them and still nonsense — it reached the design
+functions and divided by a zero energy gap, or picked a duty from the wrong
+corner. `ORDERED` lists the field groups that only mean anything in sequence
+(`vinMin ≤ vinNom ≤ vinMax`, and so on) and `order()` restores it right after
+the range clamp. Add a relational assumption to a design function and it
+belongs there instead, once, rather than in thirty design functions.
+
+`Fields` decides what to flag by comparing the box against the value `design()`
+actually received, so it catches both kinds of rewrite and cannot drift out of
+step with either.
+
 **Infeasible operating points.** When a topology cannot reach the requested
 conversion ratio, return `infeasible("why, and what to change")` rather than
 letting a duty above 1 produce a negative inductance.
@@ -49,6 +69,20 @@ letting a duty above 1 produce a negative inductance.
 **Loss models.** A `loss:` array on the design result feeds both the loss
 breakdown bar and the design-space heatmap. Every topology has one; keep it
 that way when adding a topology, or both features vanish from that page.
+
+Because the heat map reads the bar, a bar that double-counts becomes an
+efficiency surface that is wrong everywhere. Where two loss mechanisms combine
+in quadrature — the charge pump's two limits do — the bar has to apportion the
+real total between them, not list both in full. Hard-switched topologies carry
+`½·C_oss·V²·f_sw` and `Q_rr·V·f_sw` terms; `qrr` defaults to zero, which is the
+honest value for a Schottky or a wide-bandgap diode and the wrong one for
+silicon. Core loss is still absent everywhere.
+
+**Output power.** The heat map divides by `outPower()`, which guesses from the
+input fields. A design whose output voltage is a *result* rather than a
+specification — a charge pump, a centre-tapped rectifier at `2·D·(V_sec − V_F)`
+— must publish `pout` on its result, or its whole efficiency surface is
+computed against the wrong denominator.
 
 **Desktop only.** There are deliberately no width breakpoints. Don't add
 responsive CSS speculatively: the last attempt put `overflow-x:auto` on the
@@ -59,10 +93,19 @@ and verify it on desktop afterwards.
 
 **One cycle model.** `src/cycle.js` owns the shape of a switching cycle, and
 everything that draws one reads it: the waveform panes, the animated
-schematic's flow dashes, the arrows, the polarity marks. It used to be three
-implementations, and they disagreed — a flyback's dashes kept moving through
-the off-time, when no primary current exists. If you need the current
-somewhere new, call `buildCycle`; do not reconstruct it.
+schematic's flow dashes, the arrows, the polarity marks, the capacitor
+branches. It used to be three implementations, and they disagreed — a
+flyback's dashes kept moving through the off-time, when no primary current
+exists. If you need the current somewhere new, call `buildCycle`; do not
+reconstruct it. `lookups()` is at module scope so a new polyline can be asked
+the same three questions (value, slope, accumulated charge) as any other.
+
+That rule extends to statements about the cycle, not only drawings of it.
+`isDCM` is exported and used both by `buildCycle` to pick the shape and by the
+results panel to say so in words — for a long time only the buck admitted it
+had fallen into discontinuous conduction, while every other converter redrew
+itself as a discontinuous triangle with continuous-conduction equations stated
+as fact beside it.
 
 Its memo key comes from `cycleKey(wave)`, not from the wave object, whose
 identity changes on every render. Add an input to a `wave` spec and `cycleKey`
@@ -75,6 +118,24 @@ polyline in cycle-relative time — then one layout pass stacks them and one
 drawing pass draws them. To add a pane, add an entry. Do not reintroduce
 hardcoded y coordinates; the reason the capacitor panes could be added at all
 is that nothing outside the descriptor knows where a pane sits.
+
+A pane's `unit` is a unit, optionally followed by ` · ` and the sign
+convention a reader needs to make sense of the trace (`amps · + into C`). It
+is not a subtitle. Labels are symbols throughout, including the fallbacks —
+a spec that forgets `ilabel` gets `i`, not the word "current", because a
+column reading *i_L, i_C, v_C, current* changes register for no reason.
+
+**Bare panes.** A topology with no design-derived `wave` still gets a figure:
+`FlowCard` builds a `{ bare: true, iShape }` spec from its `FLOW` entry and
+`Wave` plots the current alone, scaled to its own peak. Fourteen topologies
+had a moving schematic and nothing underneath it before this.
+
+Bare mode deliberately draws less, and the omissions are the point: no switch-
+node pane (a class-E drain rings and an LLC node is swung by its tank — a
+square wave there would be invented), no `D·T` bracket (there is no duty
+behind a supplied shape), and no capacitor pane. Scale reads `1.00×` of peak,
+because a closure returns a shape and printing it as amps would be claiming a
+measurement nothing computed.
 
 Panes draw in layers, not pane by pane: all the gridlines, then the reference
 lines, then the traces, then the scales. A trace has to sit over its
@@ -128,6 +189,42 @@ slope of the shared cycle model, so it cannot disagree with the trace. Because
 it depends on d*i*/d*t* and not on *i*, it stays correct where a synchronous
 rectifier's current runs backwards at light load.
 
+**Capacitor flow.** A `FLOW` entry animates a capacitor branch with
+`capFlow: [{ d, src }]`, where `d` is drawn in the direction positive current
+travels *into* the capacitor and `src` is `"out"` (the design's own `cap`
+spec) or `"in"` (the input capacitor, which the model derives from the switch
+current — no new input fields).
+
+The dashes ride on `qAt`, the charge integral, not on time. That is what makes
+this work: the integral rises while the capacitor charges and falls while it
+discharges, so the dashes and arrowheads reverse by themselves at the zero
+crossing, with no sign test in the drawing. It also returns to where it
+started after one period, because the model already enforces charge balance —
+so the animation loops seamlessly for the same reason the physics does. The
+reversal lands exactly where `|i_C|` is smallest and the marks are faintest,
+so it is never seen happening.
+
+Sign conventions are the trap here. Current into the capacitor is positive
+everywhere, including the input cap, where KCL gives `i_Cin = I_in − i_sw` —
+*negative* while the switch conducts, because the capacitor is emptying itself
+into a switch the source alone cannot feed. Getting that backwards draws a
+capacitor charging hardest exactly when it is being drained, which is the
+opposite of the lesson. Measure it rather than reasoning about it: scrub the
+figure and check the arrows turn where the `i_C` pane crosses zero.
+
+**Text that changes as the animation runs** goes through `Swap`, which renders
+every alternative into one grid cell and hides all but one by `visibility`.
+The box then keeps the height of its tallest option. Without it, phase notes
+of two and four lines made the waveform below them jump twice a cycle — the
+figure you are reading moving because of the caption beside it.
+
+**The glossary.** `TERMS` is a list of `[name, pattern, definition]`, and each
+topology page shows the entries whose pattern matches its own prose. Nothing
+is maintained per topology: write an interval note that mentions dead time and
+the definition appears by itself. Keep the patterns tight — a term that
+matches too eagerly defines something the page never discussed, which is worse
+than leaving it out.
+
 **Grid tracks.** Use `minmax(0, 1fr)`, never bare `1fr`. This is not
 narrow-screen support — the automatic minimum of `1fr` is the track's
 max-content width, so one wide results table will push the layout past its
@@ -139,9 +236,15 @@ The dev server plus a browser is the real test. Beyond that:
 
 - `node scripts/check-tex.mjs` — every formula still typesets
 - `npm run build` — production build succeeds
-- `node scripts/sweep.mjs` — walks all 30 topologies with the dev server up
+- `node scripts/sweep.mjs` — walks all 32 topologies with the dev server up
   and reports console errors, text escaping its viewBox, overlapping labels,
   and the cursor rake's spacing. Replaces doing that walk by hand.
+
+  Run from a git worktree it also reports a handful of 403s on KaTeX's font
+  files. That is `node_modules` resolving outside the worktree root, where
+  Vite's `server.fs.allow` will not serve it — a dev-server artifact of the
+  worktree, not a fault in the page, and the production build bundles those
+  fonts normally. Check the message before chasing it.
 
 ### Checking the physics
 
@@ -164,6 +267,16 @@ in under a second — there is no reason not to run them.
   own charge, that the charge term fits the `ΔV` budget `C_out` was sized
   against, and that the trace closes on itself. This is the one that catches a
   hand-derived spec belonging to the wrong converter.
+
+  It also asserts which topologies are *expected* to have no capacitor pane,
+  via `NO_PANE` — the bare-mode set. Add a `wave` spec to something on that
+  list and it must gain a `cap` spec with it and come off the list, in the
+  same commit, or the check quietly stops covering it. A bare pane cannot
+  carry a capacitor: there are no amps behind a shape, and the ones that do
+  have an output capacitor ripple at a frequency the figure does not span —
+  a PFC bulk cap swings at twice the *line* frequency, hundreds of switching
+  periods wide, so drawing it on a switching-period axis would be a different
+  waveform wearing this one's axis.
 
 ### Refactoring the drawing without changing the drawing
 

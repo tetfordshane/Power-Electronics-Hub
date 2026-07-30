@@ -26,13 +26,30 @@
 import puppeteer from "puppeteer";
 import { readFileSync } from "fs";
 
-/* Every topology with a waveform figure now gets a capacitor pane. The four
-   double-pulse output filters — push-pull, half-bridge, phase-shifted bridge,
-   centre-tapped rectifier — were excluded while their choke was drawn as one
-   ramp per switching period; `pulses: 2` draws them honestly, so they are in.
-   Kept as an empty list rather than deleted, because "which topologies are
-   expected to have no pane" is the question this file has to keep answering. */
-const NO_PANE = [];
+/* Which topologies are expected to have a waveform figure but NO capacitor
+   pane, and why. Everything not listed here must have one.
+
+   Every design that publishes a `wave` spec still gets a capacitor pane —
+   that has not changed and is what this file mostly exists to police. What
+   changed is that the fourteen topologies which publish no `wave` at all now
+   draw a BARE pane instead of nothing: their current comes from a shape the
+   FLOW entry supplies, scaled to its own peak, because a resonant tank or a
+   rectifier conduction pulse is not a ramp any design equation produced.
+
+   A bare pane cannot carry a capacitor, and should not pretend to:
+
+     - a shape has no amps behind it, so there is no charge to integrate;
+     - the ones that DO have an output capacitor ripple at a frequency this
+       figure does not cover. A boost PFC's bulk cap ripples at twice the
+       LINE frequency, hundreds of switching periods wide; drawing it on a
+       switching-period axis would be a different waveform entirely.
+
+   So the list is exactly the bare-mode set. If a topology here ever gains a
+   real `wave` spec, it must gain a `cap` spec with it and come off this list. */
+const NO_PANE = [
+  "chargepump", "llc", "dab", "pfcboost", "ilpfc", "totempole", "hbridge", "vsi3", "npc3",
+  "halfwave", "bridgerect", "syncrect", "classe", "classepp", "classde",
+];
 
 const src = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
 const ids = [...src.matchAll(/^\s*id: "([a-z0-9]+)", name: "/gm)].map((x) => x[1]);

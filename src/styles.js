@@ -209,6 +209,7 @@ export const CSS = `
    the animation. Easing them would make the current lag the waveform and
    smear the wrap at the end of the cycle. */
 .ps .fig .flow,.ps .fig .flowp,.ps .fig .flowglow,.ps .fig .flowdim,
+.ps .fig .capp,.ps .fig .capglow,
 .ps .fig .dflow,.ps .hmgrid rect{transition:none !important}
 .ps .flow{
   fill:none; stroke:var(--cu); stroke-width:2.8; stroke-linecap:round;
@@ -295,6 +296,15 @@ export const CSS = `
 .ps .flowp{fill:none; stroke:var(--gn); stroke-linecap:round; stroke-linejoin:round;
   stroke-dasharray:7 13}
 .ps .flowdim{fill:none; stroke:var(--faint); stroke-width:2; opacity:.4; stroke-dasharray:2 8}
+/* The capacitor branches. Violet, matching the i_C waveform pane exactly, so
+   the schematic and the plot below it name the same current the same way.
+   A shorter dash than the conducting path, because this current reverses
+   twice a period and a long dash makes the reversal hard to read. */
+.ps .capglow{fill:none; stroke:var(--vi); stroke-width:7; opacity:.14;
+  stroke-linecap:round; stroke-linejoin:round}
+.ps .capp{fill:none; stroke:var(--vi); stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:5 11}
+.ps .capfl .carrow{stroke:var(--vi); stroke-width:1.8; opacity:.95}
 .ps .ird{display:inline-flex; align-items:center; gap:8px; margin-left:auto;
   font-family:var(--num); font-size:var(--t-small); color:var(--dim);
   font-variant-numeric:tabular-nums}
@@ -364,6 +374,14 @@ export const CSS = `
 .ps .scrub input[type=range]::-moz-range-thumb{width:13px; height:13px; border-radius:50%;
   background:var(--cu); cursor:pointer; border:2px solid var(--bg)}
 
+/* Alternatives stacked in one cell: the box keeps the height of its tallest
+   option, so text that changes with the animation cannot move the figure
+   below it. Hidden by visibility and not by display, because a display:none
+   copy contributes no height and the whole point is that it does. */
+.ps .swap{display:grid}
+.ps .swap>*{grid-area:1/1}
+.ps .swap>.off{visibility:hidden}
+
 /* direction of charge flow, carried along with it */
 .ps .carrow{fill:none; stroke:#0C1017; stroke-width:3.4; stroke-linecap:round;
   stroke-linejoin:round; paint-order:stroke}
@@ -403,6 +421,21 @@ export const CSS = `
 .ps .wflow{fill:none; stroke:var(--gn); stroke-width:2.6; stroke-linecap:round;
   stroke-linejoin:round; stroke-dasharray:7 13; opacity:.9}
 
+/* Which family this converter belongs to — one muted line under the eyebrow,
+   so a reader landing on an unfamiliar page knows what they are looking at
+   before the animation starts moving. */
+.ps .fam{margin:2px 0 12px; font-size:var(--t-small); color:var(--faint); line-height:1.5}
+
+/* The glossary under each topology. Two columns of term-and-definition, the
+   term set in the number face so it reads as a label rather than as more
+   prose, and the definition in the body face beside it. */
+.ps .terms{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:10px 26px; margin:0}
+.ps .terms > div{display:grid; grid-template-columns:minmax(0,auto); gap:2px}
+.ps .terms dt{font-family:var(--num); font-size:var(--t-fine); font-weight:600;
+  color:var(--cy); letter-spacing:.01em}
+.ps .terms dd{margin:0; font-size:var(--t-small); color:var(--dim); line-height:1.55}
+
 /* device state legend under the figure */
 .ps .devleg{display:flex; flex-wrap:wrap; gap:6px 18px; margin:11px 0 0;
   font-size:var(--t-fine); color:var(--faint)}
@@ -417,6 +450,10 @@ export const CSS = `
    rather than the on/off green and red */
 .ps .devleg .pol i{background:var(--cy)}
 .ps .devleg .pol b{color:var(--cy); letter-spacing:.08em}
+/* the capacitor branches, in the violet they are drawn in and the same violet
+   the i_C waveform pane uses */
+.ps .devleg .cap i{background:var(--vi)}
+.ps .devleg .cap b{color:var(--vi)}
 
 /* --------------------------------- instantaneous inductor polarity marks
    Cyan, because on this page cyan is voltage — the same hue as the switch-node
