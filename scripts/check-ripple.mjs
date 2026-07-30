@@ -26,11 +26,13 @@
 import puppeteer from "puppeteer";
 import { readFileSync } from "fs";
 
-/* The four double-pulse output filters. Their choke is drawn as one ramp per
-   switching period when it really ripples twice, so a charge integral over
-   the drawn shape would not match the C_out printed beside it. See the long
-   comment above the push-pull's `wave` spec in src/PowerStage.jsx. */
-const NO_PANE = ["pushpull", "halfbridge", "psfb", "ctrect"];
+/* Every topology with a waveform figure now gets a capacitor pane. The four
+   double-pulse output filters — push-pull, half-bridge, phase-shifted bridge,
+   centre-tapped rectifier — were excluded while their choke was drawn as one
+   ramp per switching period; `pulses: 2` draws them honestly, so they are in.
+   Kept as an empty list rather than deleted, because "which topologies are
+   expected to have no pane" is the question this file has to keep answering. */
+const NO_PANE = [];
 
 const src = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
 const ids = [...src.matchAll(/^\s*id: "([a-z0-9]+)", name: "/gm)].map((x) => x[1]);

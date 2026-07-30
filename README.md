@@ -96,11 +96,31 @@ wrong family, a rectifier current that does not average to the load, or a
 missing phase count; none of those are visible in the drawing, which stays
 perfectly smooth and belongs to a different converter.
 
-Four topologies deliberately have no capacitor pane — `pushpull`,
-`halfbridge`, `psfb`, `ctrect`. Their output filter sees two power pulses per
-switching period but is drawn as one ramp, so a charge integral over the drawn
-shape would not match the `C_out` printed beside it. The full explanation sits
-above the push-pull's `wave` spec.
+**Pulses per period.** A push-pull, half-bridge, phase-shifted bridge or
+centre-tapped rectifier delivers two power pulses per switching period, so its
+output choke ramps up and back down twice. Those say `pulses: 2`.
+
+`D` keeps meaning what it means everywhere else — the duty of *one* switch
+measured against the whole period — because the on-time bracket, the `FLOW`
+phase windows and every design equation read it. What `pulses` changes is the
+interval that duty sits in: `buildCycle` builds one sub-interval with an
+on-fraction of `D·P` and then tiles it, so discontinuous conduction, core
+saturation and the mean restoration all work unchanged instead of needing a
+second version each. A half-bridge at `D = 0.38` therefore spends 76 % of each
+half-period charging its choke, which is why these ramps are far more lopsided
+than a buck's.
+
+`vbi: true` additionally makes the voltage pane bipolar, for a transformer
+primary that genuinely swings both ways. Its mean is then zero — and that is
+not decoration: a mean that is *not* zero is flux walking, which is what the
+blocking capacitor in a half-bridge is for. A rectified node behind a centre
+tap gets `pulses: 2` without `vbi`, because both its half-cycles arrive
+positive and its mean is `2·D` × swing.
+
+The ripple identity `ΔV = ΔI/(8·f·C)` is usually derived from a symmetric
+triangle, but the positive lobe of `i_C` spans half the sub-period whatever
+the duty, so it holds at any asymmetry — `check-cap.mjs` asserts that across
+the duty range rather than trusting it.
 
 **Polarity marks.** A `FLOW` entry opts in with `pol: [ax, ay, bx, by]`, where
 A is the terminal the inductor's current *enters*. The sign comes from the

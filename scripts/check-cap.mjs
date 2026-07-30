@@ -168,5 +168,40 @@ console.log("\nhow much of the ripple is ESR");
     `I_C(rms) = ${(a.iCrms * 1e3).toFixed(1)} mA matches ΔI/√12 = ${((dI / Math.sqrt(12)) * 1e3).toFixed(1)} mA`);
 }
 
+/* ---------- two power pulses per switching period ---------- */
+/* A push-pull, half-bridge, phase-shifted bridge or centre-tapped rectifier
+   ripples its output at 2·f_sw, and its design function sizes C_out from
+   ΔI/(8·2·f_sw·ΔV) accordingly. That factor of two has to fall out of the
+   drawn waveform rather than being asserted separately, or the pane and the
+   table are two independent claims that happen to agree today. */
+console.log("\ntwo power pulses per switching period");
+{
+  const fsw = 1e5, Io = 6, dI = 1.8, C = 7.5e-6, D = 0.35;
+  const M = buildCycle({ D, dI, iavg: Io, pulses: 2,
+    cap: { kind: "buck", C, esr: 0, Vdc: 48, Io, fsw } });
+  const c = M.cap;
+  ok(rel(c.qErr, 0) < 1e-9, `charge balances (qErr ${c.qErr.toExponential(1)})`);
+  const want = dI / (8 * 2 * fsw * C);
+  ok(rel(c.vPP, want) < 1e-9,
+    `ripple ${(c.vPP * 1e3).toFixed(3)} mV matches ΔI/(8·2·f·C) = ${(want * 1e3).toFixed(3)} mV`);
+  ok(c.fRipple === 2 * fsw, `ripple frequency is 2·f_sw = ${(c.fRipple / 1e3).toFixed(0)} kHz`);
+  /* Half the ripple of the same converter drawn as one pulse — which is the
+     whole reason these filters are smaller than the switch timing suggests. */
+  const single = buildCycle({ D, dI, iavg: Io,
+    cap: { kind: "buck", C, esr: 0, Vdc: 48, Io, fsw } }).cap;
+  ok(rel(single.vPP / c.vPP, 2) < 1e-9,
+    `and exactly half the single-pulse ripple (${(single.vPP * 1e3).toFixed(3)} → ${(c.vPP * 1e3).toFixed(3)} mV)`);
+
+  /* The asymmetry of the ramp must not matter. ΔV = ΔI/(8·f·C) is usually
+     derived from a symmetric triangle, but the positive lobe of i_C spans half
+     the sub-period whatever the duty, so the result is duty-independent — and
+     these converters run at very lopsided sub-duties (2·D = 0.7 here). */
+  for (const d of [0.1, 0.25, 0.35, 0.45]) {
+    const m = buildCycle({ D: d, dI, iavg: Io, pulses: 2,
+      cap: { kind: "buck", C, esr: 0, Vdc: 48, Io, fsw } }).cap;
+    ok(rel(m.vPP, want) < 1e-9, `D = ${d} (sub-duty ${(2 * d).toFixed(2)}) gives the same ripple`);
+  }
+}
+
 console.log(`\n${fails === 0 ? "the capacitor model agrees with the printed design" : fails + " FAILING"}`);
 process.exit(fails ? 1 : 0);

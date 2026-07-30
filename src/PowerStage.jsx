@@ -882,6 +882,40 @@ function Wave(props) {
      The pane's scale is [0,1] and the ticks are named, because most of these
      topologies know what the node swings between by name and not by value. */
   const lOn = vinv ? 0 : 1, lOff = vinv ? 1 : 0;
+  /* The node, as a list of the flat intervals it actually sits at.
+
+     One list covers three quite different pictures, which is why it is a list
+     and not a formula:
+
+       one pulse per period   the classic switch node — a rail for D, the other
+                              rail for the rest. What this pane always drew.
+       two pulses, unipolar   a rectified node behind a centre tap: two positive
+                              pulses of width D with freewheel between them, so
+                              its mean is 2·D × swing rather than D × swing.
+       two pulses, bipolar    a transformer primary driven by a bridge. It sees
+                              +V, then nothing, then −V, then nothing. Its mean
+                              is zero by symmetry — and it had better be, or the
+                              core walks into saturation a little further every
+                              cycle. That is what the blocking capacitor in a
+                              half-bridge and the flux-walking warning on a
+                              push-pull are both about.
+
+     Deriving the trace, the mean and the volt-second lobes from this one list
+     means those three cases share a code path instead of having three. */
+  const vPulses = Math.max(1, Math.round(props.pulses || 1));
+  const vbi = !!props.vbi;
+  const vSpan = vbi ? [-1, 1] : [0, 1];
+  const vFlats = [];
+  if (vPulses === 1) {
+    vFlats.push({ u0: 0, u1: D, v: lOn }, { u0: D, u1: 1, v: lOff });
+  } else {
+    for (let k = 0; k < vPulses; k++) {
+      /* alternate polarity on a bipolar drive; every pulse positive otherwise */
+      const lvl = vbi && k % 2 ? -1 : 1;
+      const a = k / vPulses, b = Math.min(a + D, (k + 1) / vPulses);
+      vFlats.push({ u0: a, u1: b, v: lvl }, { u0: b, u1: (k + 1) / vPulses, v: 0 });
+    }
+  }
   /* Volt-second balance, drawn rather than asserted.
 
      The inductor tied to this node cannot support a mean voltage: whatever it
@@ -911,19 +945,29 @@ function Wave(props) {
      DCM. Shading two lobes and calling them equal would assert the opposite,
      on the one operating point where it is false. */
   const vsOK = M.mode !== "dcm";
-  const vRef = D * lOn + (1 - D) * lOff;
+  /* The mean is the list's own weighted average, so it cannot disagree with the
+     trace drawn from the same list. */
+  let vRef = 0;
+  for (const f of vFlats) vRef += f.v * (f.u1 - f.u0);
+  /* Exactly `cycles` whole periods, and not one edge more. The leading point is
+     the level the trace ARRIVES at u = 0 with — the last interval's — so the
+     opening vertical edge is drawn; without it the trace would begin already at
+     the rail it is about to jump to. */
+  const vPts = [{ u: 0, v: vFlats[vFlats.length - 1].v }];
+  for (const f of vFlats) vPts.push({ u: f.u0, v: f.v }, { u: f.u1, v: f.v });
+  /* A bipolar node's mean is zero, which is the same place as its zero rail, so
+     the tick says both rather than stacking two labels on one line. */
+  const vTicks = vbi
+    ? [[1, vhi], [0, vsOK ? "0 · mean" : "0"], [-1, "−" + vhi]]
+    : vsOK ? [[1, vhi], [vRef, "mean"], [0, "0"]] : [[1, vhi], [0, "0"]];
   panes.push({
     key: "v", name: vlabel || "voltage", unit: "volts", c: "#5AD1DE",
-    h: 42, span: [0, 1], inset: 8, axUp: 2, rules: [0, 1],
-    /* Exactly `cycles` whole periods, and not one edge more. The leading
-       duplicate at u = 0 is the opening vertical edge; without it the trace
-       would begin already at the rail it is about to jump to. */
-    pts: [{ u: 0, v: lOff }, { u: 0, v: lOn }, { u: D, v: lOn },
-      { u: D, v: lOff }, { u: 1, v: lOff }],
+    h: vbi ? 54 : 42, span: vSpan, inset: 8, axUp: 2, rules: [0, 1],
+    pts: vPts,
     ref: vRef,
-    lobes: vsOK ? [{ u0: 0, u1: D, v: lOn }, { u0: D, u1: 1, v: lOff }] : null,
+    lobes: vsOK ? vFlats : null,
     dash: vsOK ? [{ v: vRef, da: "3 4" }] : [],
-    ticks: vsOK ? [[1, vhi], [vRef, "mean"], [0, "0"]] : [[1, vhi], [0, "0"]],
+    ticks: vTicks,
     fmt: null, dot: { c: "#5AD1DE", r: 3.2 },
   });
 
@@ -1087,9 +1131,13 @@ function Wave(props) {
   if (iavg > 0 && Number.isFinite(dISpan)) {
     facts.push({ k: "ripple", v: pct(dISpan / iavg) + " of mean" });
   }
-  facts.push(vsOK
-    ? { k: "volt-seconds", v: "balanced about " + f3(vRef) + " × swing" }
-    : { k: "volt-seconds", v: "M ≠ D — third node level not drawn" });
+  /* On a bipolar drive the number is always zero, and saying "balanced about
+     0.000 × swing" wastes the one line available to say why that matters. */
+  facts.push(!vsOK
+    ? { k: "volt-seconds", v: "M ≠ D — third node level not drawn" }
+    : vbi
+      ? { k: "volt-seconds", v: "mean zero — the core cannot walk" }
+      : { k: "volt-seconds", v: "balanced about " + f3(vRef) + " × swing" });
   if (props.sat > 0) {
     facts.push({ k: "core softening", v: pct(props.sat) + " roll-off at peak" });
   }
@@ -2389,24 +2437,25 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against 2·V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      /* No capacitor pane here, deliberately — see the note below.
-
-         DOUBLE-PULSE OUTPUT FILTERS. A push-pull, half-bridge, phase-shifted
+      /* DOUBLE-PULSE OUTPUT FILTERS. A push-pull, half-bridge, phase-shifted
          bridge or centre-tapped rectifier delivers TWO power pulses per
          switching period, so its choke ramps up over D·T and back down over
-         (½ − D)·T, twice. The trace drawn here is the older simplification:
-         one ramp per period, rising over D and falling over the whole of
-         (1 − D). Peak, valley and ΔI are all right — which is why the sizing
-         numbers beside it are right — but the falling ramp is stretched, so
-         the TIME proportions are wrong.
+         (½ − D)·T, twice. This used to be drawn as one ramp per period, rising
+         over D and falling over the whole of (1 − D): peak, valley and ΔI were
+         right — which is why the sizing numbers beside it were right — but the
+         falling ramp was stretched, so the TIME proportions were wrong, and a
+         capacitor pane is a charge integral over exactly those proportions.
 
-         A capacitor pane is a charge integral over exactly those proportions.
-         Drawing one from this shape would produce a ripple that disagrees
-         with the C_out printed in the same table, and the pane exists to
-         agree with it. The fix is to draw these four at 2·f_sw, which changes
-         the voltage pane, the on-time bracket and the flow phase windows too
-         — its own piece of work, not a rider on this one. */
-      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
+         `pulses: 2` builds one sub-interval and tiles it, so the on-fraction
+         within each half-period is 2·D and both the ripple frequency and the
+         charge integral come out right. `vbi` makes the primary pane bipolar,
+         which it genuinely is — the winding sees +V_in, nothing, −V_in,
+         nothing. Its mean is zero by symmetry, and that is not a decoration:
+         a mean that is NOT zero is flux walking, which is what the warning
+         below this line is about. */
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
+        pulses: 2, vbi: true,
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
         2 * s.vinMax > 200 && "2·V_in max = " + eng(2 * s.vinMax, "V") + " before the spike. Consider a half-bridge instead.",
@@ -2468,9 +2517,12 @@ const TB = [
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
         ["Primary switching", Psw, "hard switched against V_in"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
-         period. See the note on the push-pull above. */
-      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2" },
+      /* Two power pulses per period and a bipolar primary — see the note on
+         the push-pull. The series blocking capacitor exists precisely because
+         the mean this pane draws has to be zero. */
+      wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2",
+        pulses: 2, vbi: true,
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
       ].filter(Boolean),
@@ -2532,9 +2584,12 @@ const TB = [
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
       loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
         ["Output rectifiers", Pdo, "V_F·I_out"]],
-      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
-         period. See the note on the push-pull above. */
-      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in" },
+      /* Two power pulses per period and a bipolar primary — see the note on
+         the push-pull. The duty loss above is a separate effect: it shortens
+         the pulses without changing how many there are. */
+      wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
+        pulses: 2, vbi: true,
+        cap: { kind: "buck", C: Cout, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
         zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load.",
@@ -3194,7 +3249,7 @@ const TD = [
   chips: ["secondary side", "one V_F", "choke input"],
   what: "A centre-tapped secondary lets each half-winding supply one half-cycle through a single diode, so only one forward drop sits in the output path instead of two. That matters enormously at 3.3 or 5 V. The cost is transformer utilisation: each half-winding works only half the time, so the secondary needs about twice the copper of a bridge.",
   eqs: [
-    { e: "V_out = D·(V_sec − V_F)", n: "choke input; D is the duty of each half-cycle" },
+    { e: "V_out = 2·D·(V_sec − V_F)", n: "two pulses per period, each of width D·T — so D is measured against the whole period and stays under 0.5" },
     { e: "L_f = (V_sec − V_F − V_out)·D/(f_sw·ΔI)", n: "filter choke from the ripple you allow" },
     { e: "PIV = 2·V_sec", n: "the idle diode sees both half-windings in series" },
     { e: "I_D(avg) = I_out/2", n: "independent of duty — the freewheel period splits evenly" },
@@ -3207,7 +3262,21 @@ const TD = [
   defs: { vsec: 12, dnom: 0.4, iout: 20, fsw: 150, r: 0.3, vf: 0.45, esr: 3, dvout: 30 },
   design(s) {
     const fs = s.fsw * 1e3, D = s.dnom, Io = s.iout;
-    const Vo = D * (s.vsec - s.vf);
+    /* Two power pulses per period, each of width D·T, so the choke's input
+       averages 2·D·(V_sec − V_F) and not D·(V_sec − V_F).
+
+       This page carried the factor-of-two error until the double-pulse timing
+       was drawn honestly, and the error was findable because three of its own
+       formulas disagreed with the fourth. L_f = (V_sec − V_F − V_out)·D/(f·ΔI)
+       puts the rise over D·T; I_D(rms) = I_out·√(D + (1 − 2D)/4) and
+       I_D(avg) = I_out/2 both split the freewheel over (1 − 2D); and the
+       warning below says D must stay under 0.5. All four only agree if D is
+       one pulse measured against the WHOLE period — which is the same
+       convention the push-pull, half-bridge and phase-shifted bridge use, and
+       under it volt-second balance on the choke gives
+       (V_sec − V_F − V_out)·D = V_out·(½ − D), i.e. V_out = 2·D·(V_sec − V_F).
+       V_out was the odd one out, so V_out is what moved. */
+    const Vo = 2 * D * (s.vsec - s.vf);
     const dI = s.r * Io;
     const L = (s.vsec - s.vf - Vo) * D / (fs * dI);
     const Ipk = Io + dI / 2;
@@ -3219,9 +3288,13 @@ const TD = [
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
       loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
         ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
-      /* No capacitor pane: double-pulse output filter, drawn as one ramp per
-         period. See the note on the push-pull above. */
-      wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf" },
+      /* Two power pulses per period — but NOT bipolar. This node is behind
+         the rectifiers, so both half-cycles arrive positive and its mean is
+         2·D × V_sec rather than zero. The primary that feeds it is the bipolar
+         one; that pane lives on the push-pull and bridge pages. */
+      wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf",
+        pulses: 2,
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: [
         D > 0.5 && "D = " + f2(D) + " exceeds 0.5. Each half-cycle can occupy at most half the period or the two halves overlap and short the secondary.",
         Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified.",
@@ -3229,8 +3302,8 @@ const TD = [
       groups: [
         G("Operating point", [
           R("Output voltage", eng(Vo, "V")),
-          R("Required V_sec for " + eng(Vo, "V"), eng(Vo / D + s.vf, "V")),
-          R("Duty per half-cycle", f2(D), "≤ 0.5 by construction"),
+          R("Required V_sec for " + eng(Vo, "V"), eng(Vo / (2 * D) + s.vf, "V")),
+          R("Duty of each pulse", f2(D), "of the whole period — two pulses, so ≤ 0.5"),
           R("Ripple frequency", eng(2 * fs, "Hz")),
         ]),
         G("Filter", [
@@ -4571,12 +4644,26 @@ const FLOW = {
   ]},
   ctrect: { w: 680, h: 270, sw: [[300, 60, "D1"], [300, 140, "D2"]],
     emc: { loop: "M 214 60 H 340 V 140 H 214 Z", node: [340, 100] },
-    pol: [346, 118, 406, 118],              /* L_f, the output choke */
+    /* Above the choke, not below it: the V_rect node label sits directly under
+       the left-hand terminal. Set here the two marks flank the L_f label. */
+    pol: [346, 82, 406, 82],                /* L_f, the output choke */
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
       d: ["M 214 60 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
+    /* The freewheel intervals. These used to be left uncovered, and the phase
+       lookup filled the gap by holding whichever phase had started last — so
+       one diode stayed lit through an interval in which both conduct. It was
+       invisible while the choke was drawn as a single ramp; with the current
+       falling twice per period it sits right next to the trace that shows it.
+       Both windings are undriven here and the choke's current splits between
+       the two rectifiers, which is exactly why each one averages I_out/2
+       regardless of duty. */
+    { on: [1,1], t: "Freewheel", f: (D) => [D, 0.5], n: "The secondary is undriven and the choke sustains its own current, which splits between both rectifiers. This is the interval that makes each diode average I_out/2 whatever the duty, and it is when the output ripple falls.",
+      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], dim: ["M 214 60 H 340", "M 214 140 H 340"] },
     { on: [0,1], t: "Lower half conducts", f: (D) => [0.5, 0.5 + D], n: "The transformer reverses and the bottom half-winding takes over through D2. Each half-winding works only half the time — which is why this secondary needs roughly twice the copper of a bridge.",
       d: ["M 214 140 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
+    { on: [1,1], t: "Freewheel", f: (D) => [0.5 + D, 1], n: "The second freewheel interval, identical to the first. Two power pulses and two freewheels per switching period is why the output ripple sits at 2·f_sw and the filter is smaller than the switch timing alone suggests.",
+      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], dim: ["M 214 60 H 340", "M 214 140 H 340"] },
   ]},
   doubler: { w: 700, h: 300, sw: [[250, 170, "D1"], [290, 230, "D2"]],
     emc: { loop: "M 214 80 H 250 V 260 H 290 V 200 H 214 Z", node: [250, 80] },

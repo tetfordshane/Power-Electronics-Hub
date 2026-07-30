@@ -106,5 +106,64 @@ sect("pulse (flyback)");
   }
 }
 
+/* ---- two power pulses per period ---- */
+/* A push-pull, half-bridge, phase-shifted bridge or centre-tapped rectifier
+   delivers two pulses per switching period, so its choke ramps twice. The
+   thing to get wrong is the on-fraction: the on-time is still D·T, but the
+   interval it sits in is only T/2 long, so within it the rise takes 2·D. */
+sect("two pulses per period");
+{
+  const one = buildCycle({ D: 0.35, dI: 1.8, iavg: 6 });
+  const two = buildCycle({ D: 0.35, dI: 1.8, iavg: 6, pulses: 2 });
+  near(mean(two), 6, 1e-12, "mean is still I_avg");
+  near(two.iPeak, one.iPeak, 1e-12, "peak is unchanged — only the timing moved");
+  near(two.iValley, one.iValley, 1e-12, "valley is unchanged");
+  near(two.D, 0.35, 1e-12, "D still reads as the duty of ONE switch over the whole period");
+  /* the peaks land at the end of each on-time, D into each half-period */
+  near(two.iAt(0.35), two.iPeak, 1e-12, "first peak sits at u = D");
+  near(two.iAt(0.85), two.iPeak, 1e-12, "second peak sits at u = ½ + D");
+  near(two.iAt(0.5), two.iValley, 1e-12, "the trace is back at the valley by the half-period");
+  /* Twice as many ramps. Counted strictly inside the period, so the reversal
+     at the wrap itself is not among them: one pulse turns over once (at D),
+     two pulses turn over three times (at D, at ½ and at ½ + D). */
+  const flips = (M) => {
+    let n = 0;
+    for (let k = 1; k < 400; k++) if ((M.slopeAt((k - 1) / 400) > 0) !== (M.slopeAt(k / 400) > 0)) n++;
+    return n;
+  };
+  const f1 = flips(one), f2 = flips(two);
+  if (f1 !== 1 || f2 !== 3) {
+    console.log(`  FAIL  expected 1 then 3 slope reversals inside the period, got ${f1} then ${f2}`);
+    fails++;
+  } else console.log("  ok    one ramp becomes two — 1 slope reversal inside the period becomes 3");
+
+  /* the on-time itself is untouched: the rise still lasts D·T */
+  const riseEnds = 0.35;
+  near(two.iAt(riseEnds / 2), (two.iPeak + two.iValley) / 2, 1e-9,
+    "half way up the first ramp is half way between valley and peak");
+}
+
+/* Discontinuous conduction and core saturation both have to survive the
+   tiling, because the sub-interval goes through exactly the same code. */
+sect("two pulses, discontinuous");
+{
+  const M = buildCycle({ D: 0.35, dI: 20, iavg: 3, pulses: 2 });
+  near(mean(M), 3, 1e-12, "mean is still I_avg in DCM");
+  near(M.iValley, 0, 1e-12, "valley sits at zero");
+  if (M.mode !== "dcm") { console.log("  FAIL  expected discontinuous conduction"); fails++; }
+  else console.log("  ok    detected as discontinuous");
+  let below = 0;
+  for (let k = 0; k <= 400; k++) if (M.iAt(k / 400) < -1e-12) below++;
+  if (below) { console.log(`  FAIL  ${below} samples went negative`); fails++; }
+  else console.log("  ok    never goes negative");
+}
+sect("two pulses, saturating");
+{
+  const M = buildCycle({ D: 0.35, dI: 1.8, iavg: 6, pulses: 2, sat: 0.3 });
+  near(mean(M), 6, 1e-9, "mean is held at I_avg through the bend");
+  if (!(M.iPeak > 6.9)) { console.log(`  FAIL  peak should float above 6.90 A, got ${M.iPeak}`); fails++; }
+  else console.log(`  ok    peak floats up to ${M.iPeak.toFixed(3)} A as the core softens`);
+}
+
 console.log(`\n${fails === 0 ? "all cycle-model assertions hold" : fails + " FAILING"}`);
 process.exit(fails ? 1 : 0);
