@@ -7,6 +7,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { CSS } from "./styles.js";
 import { Eq, Mx, Sub, Mixed } from "./tex.jsx";
 import { buildCycle, cycleKey, isDCM } from "./cycle.js";
+import { polySegs, arrowsAt, coilSplice } from "./flowgeo.js";
 
 /* ---------------------------- numbers ---------------------------- */
 function eng(v, unit) {
@@ -20,6 +21,11 @@ function eng(v, unit) {
   const s = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
   return (neg ? "−" : "") + s + " " + p + (unit || "");
 }
+/* Axis ticks get eng() with the trailing zeros trimmed: "2 µs / 4 µs", not
+   "2.00 µs / 4.00 µs". A tick row is the ruler, not the measurement — the
+   captions that state a measured value keep the full eng(). */
+const engAx = (v, unit) =>
+  eng(v, unit).replace(/(\d)\.0+ /, "$1 ").replace(/(\.\d*[1-9])0+ /, "$1 ");
 const pct = (x) => (isFinite(x) ? (100 * x).toFixed(1) + " %" : "—");
 const f2 = (x) => (isFinite(x) ? x.toFixed(2) : "—");
 const f3 = (x) => (isFinite(x) ? x.toFixed(3) : "—");
@@ -124,8 +130,25 @@ const Tx = (x, y, t, o = {}) => {
   );
 };
 
+/* ---------------------------------------------------------------------
+   The coil registry.
+
+   The flow overlay needs to know where every winding sits so it can route
+   its dashes over the arcs instead of under them (see coilSplice in
+   flowgeo.js). Listing those extents by hand in FLOW would be a second
+   copy of the schematic that drifts; instead the inductor helpers record
+   themselves while the schematic draws. FlowCard opens the capture around
+   its one SCH call, so the registry is exactly what is on screen —
+   transformer windings included, which is right: a path that genuinely
+   traverses a winding end-to-end (a push-pull primary half) should climb
+   through it, and one that stops at a winding terminal (every isolated
+   secondary) never satisfies the splice's full-containment rule anyway. */
+const COILS = {};
+let coilCapture = null;
+
 /* inductor: horizontal (n arcs of radius r) */
 const Lh = (x, y, n = 4, r = 9, b = 1) => {
+  if (coilCapture) coilCapture.push({ axis: "h", y, x0: x, x1: x + 2 * n * r, r, n, bulge: b });
   let d = `M ${x} ${y}`;
   for (let i = 0; i < n; i++) d += ` a ${r} ${r} 0 0 ${b > 0 ? 1 : 0} ${2 * r} 0`;
   return <path key={nk()} d={d} style={WS} />;
@@ -147,6 +170,7 @@ const VW = (x, y1, y2, hops = []) => {
 };
 /* inductor: vertical. bulge=+1 right, -1 left */
 const Lv = (x, y, n = 4, r = 9, bulge = 1) => {
+  if (coilCapture) coilCapture.push({ axis: "v", x, y0: y, y1: y + 2 * n * r, r, n, bulge });
   let d = `M ${x} ${y}`;
   for (let i = 0; i < n; i++) d += ` a ${r} ${r} 0 0 ${bulge > 0 ? 1 : 0} 0 ${2 * r}`;
   return <path key={nk()} d={d} style={WS} />;
@@ -319,7 +343,7 @@ ctrect: () => <SV w={680} h={270}>
   {W("M 214 140 H 260")}{Dh(260, 340, 140)}{P(286, 128, "D2")}
   {W("M 340 60 V 140")}{Dot(340, 100)}{N(348, 116, "V_rect")}
   {W("M 214 100 H 240")}{VW(240, 100, 220, [140])}{W("M 240 220 H 560")}
-  {Lh(340, 100)}{P(364, 84, "L_f")}
+  {Lh(340, 100)}{P(364, 80, "L_f")}
   {W("M 412 100 H 620")}{Dot(470, 100)}{Dot(560, 100)}
   {Cv(470, 100, 220)}{P(484, 166, "C_out")}
   {Rv(560, 100, 220)}{P(574, 166, "R_L")}
@@ -424,7 +448,7 @@ syncbuck: () => <SV h={250}>
   {W("M 307 70 H 500")}{Dot(380, 70)}{Cv(380, 70, 200)}{P(394, 139, "C_out")}
   {Rv(480, 70, 200)}{P(494, 139, "R_L")}{N(430, 56, "V_out")}
   {W("M 40 200 H 480")}{Gnd(300, 200)}
-  {Tx(150, 232, "body diode conducts only during the dead time", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "body diode conducts only during the dead time", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 multiphase: () => <SV w={700} h={270}>
@@ -439,7 +463,7 @@ multiphase: () => <SV w={700} h={270}>
   {W("M 520 120 V 150")}{Dot(520, 135)}{W("M 520 150 H 640")}
   {Cv(560, 150, 235)}{P(574, 200, "C_out")}{Rv(640, 150, 235)}{P(654, 200, "R_L")}
   {W("M 30 235 H 640")}{Gnd(460, 235)}{N(560, 138, "V_out")}
-  {Tx(150, 262, "phases interleaved by 360°/N — ripple cancels at the output", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 262, "phases interleaved by 360°/N — ripple cancels at the output", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 boost: () => <SV h={250}>
@@ -462,7 +486,7 @@ buckboost: () => <SV h={250}>
   {W("M 330 70 H 500")}{Dot(400, 70)}{Cv(400, 70, 200)}{P(414, 139, "C_out")}
   {Rv(480, 70, 200)}{P(494, 139, "R_L")}{N(412, 56, "−V_out")}
   {W("M 40 200 H 480")}{Gnd(310, 200)}
-  {Tx(150, 232, "output is negative with respect to the input return", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "output is negative with respect to the input return", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 fsbb: () => <SV w={700} h={250}>
@@ -477,7 +501,7 @@ fsbb: () => <SV w={700} h={250}>
   {W("M 420 70 H 620")}{Dot(500, 70)}{Cv(500, 70, 200)}{P(514, 139, "C_out")}
   {Rv(600, 70, 200)}{P(614, 139, "R_L")}{N(548, 56, "V_out")}
   {W("M 40 200 H 600")}{Gnd(280, 200)}
-  {Tx(150, 232, "buck mode: Q3 off, Q4 on   ·   boost mode: Q1 on, Q2 off", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "buck mode: Q3 off, Q4 on · boost mode: Q1 on, Q2 off", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 cuk: () => <SV w={700} h={250}>
@@ -491,7 +515,7 @@ cuk: () => <SV w={700} h={250}>
   {W("M 372 70 H 620")}{Dot(430, 70)}{Cv(430, 70, 200)}{P(444, 139, "C_out")}
   {Rv(600, 70, 200)}{P(614, 139, "R_L")}{N(520, 56, "−V_out")}
   {W("M 40 200 H 600")}{Gnd(360, 200)}
-  {Tx(150, 232, "continuous current at both ports · C1 carries the energy transfer", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "continuous current at both ports · C1 carries the energy transfer", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 sepic: () => <SV w={700} h={250}>
@@ -505,7 +529,7 @@ sepic: () => <SV w={700} h={250}>
   {W("M 385 70 H 620")}{Dot(460, 70)}{Cv(460, 70, 200)}{P(474, 139, "C_out")}
   {Rv(600, 70, 200)}{P(614, 139, "R_L")}{N(520, 56, "V_out")}
   {W("M 40 200 H 600")}{Gnd(370, 200)}
-  {Tx(150, 232, "non-inverting step up/down · C_s blocks DC, L1+L2 may share one core", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "non-inverting step up/down · C_s blocks DC, L1+L2 may share one core", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 zeta: () => <SV w={700} h={250}>
@@ -520,7 +544,7 @@ zeta: () => <SV w={700} h={250}>
   {W("M 432 70 H 620")}{Dot(490, 70)}{Cv(490, 70, 200)}{P(504, 139, "C_out")}
   {Rv(600, 70, 200)}{P(614, 139, "R_L")}{N(530, 56, "V_out")}
   {W("M 40 200 H 600")}{Gnd(410, 200)}
-  {Tx(150, 232, "non-inverting, low output ripple, pulsating input current", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "non-inverting, low output ripple, pulsating input current", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 chargepump: () => <SV w={700} h={250}>
@@ -536,7 +560,7 @@ chargepump: () => <SV w={700} h={250}>
   {W("M 420 70 H 620")}{Dot(480, 70)}{Cv(480, 70, 200)}{P(494, 139, "C_out")}
   {Rv(600, 70, 200)}{P(614, 139, "R_L")}{N(530, 56, "V_out")}
   {W("M 420 200 H 600")}{Gnd(520, 200)}
-  {Tx(120, 232, "no magnetics · φ1/φ2 are antiphase clocks at f_sw", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 232, "no magnetics · φ1/φ2 are antiphase clocks at f_sw", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 flyback: () => <SV w={700} h={275}>
@@ -650,7 +674,7 @@ llc: () => <SV w={780} h={290}>
   {Rv(740, 150, 255)}{P(690, 136, "R_L")}
   {W("M 424 151 H 460")}{VW(460, 151, 255, [212])}{W("M 460 255 H 740")}{Gnd(560, 255)}
   {Gnd(400, 250)}
-  {Tx(100, 282, "frequency-controlled · L_m is the magnetising inductance, part of the tank", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 282, "frequency-controlled · L_m is the magnetising inductance, part of the tank", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 dab: () => <SV w={820} h={290}>
@@ -667,7 +691,7 @@ dab: () => <SV w={820} h={290}>
   {Leg(560, 45, 250, 148, "S5", "S6")}{Leg(680, 45, 250, 148, "S7", "S8")}
   {W("M 560 45 H 790")}{W("M 560 250 H 790")}{Cv(750, 45, 250)}
   {Port(790, 45, "V2", "r")}{Gnd(660, 250)}
-  {Tx(100, 282, "power flows toward the lagging bridge — reverse the phase shift to reverse the flow", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 282, "power flows toward the lagging bridge — reverse the phase shift to reverse the flow", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 pfcboost: () => <SV w={780} h={280}>
@@ -683,7 +707,7 @@ pfcboost: () => <SV w={780} h={280}>
   {W("M 470 105 H 700")}{Dot(560, 105)}{Cv(560, 105, 195)}{P(574, 158, "C_bulk")}
   {Rv(660, 105, 195)}{P(674, 158, "R_L")}{N(600, 92, "V_bus ≈ 390 V")}
   {Gnd(300, 195)}
-  {Tx(90, 268, "current loop shapes i_L to follow |v_ac|; the slow voltage loop holds V_bus", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 268, "current loop shapes i_L to follow |v_ac|; the slow voltage loop holds V_bus", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 /* Two boost stages sharing one bridge and one bulk capacitor, switched half a
@@ -711,7 +735,7 @@ ilpfc: () => <SV w={780} h={320}>
   {Rv(660, 105, 195)}{P(674, 158, "R_L")}{N(600, 92, "V_bus")}
   {Q(360, 220, 0, 25)}{P(375, 216, "Q2")}{W("M 360 195 V 195")}{W("M 360 245 V 195")}
   {Gnd(300, 195)}
-  {Tx(90, 308, "the two legs run half a period apart, so their ripple currents partly cancel", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 308, "the two legs run half a period apart, so their ripple currents partly cancel", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 /* A flyback that waits for the ringing to reach a trough before turning on
@@ -731,7 +755,7 @@ qrflyback: () => <SV w={700} h={285}>
   {Rv(620, 60, 215)}{P(634, 142, "R_L")}{N(520, 46, "V_out")}
   {W("M 274 155 V 215 H 620")}{Gnd(380, 215)}
   {Port(620, 60, "V_out", "r")}
-  {Tx(90, 273, "C_res is the drain capacitance, used on purpose: turn on at the bottom of the ring", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 273, "C_res is the drain capacitance, used on purpose: turn on at the bottom of the ring", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 totempole: () => <SV w={720} h={280}>
@@ -743,7 +767,7 @@ totempole: () => <SV w={720} h={280}>
   {W("M 300 50 H 640")}{W("M 300 240 H 640")}{Dot(420, 50)}{Dot(420, 240)}
   {Cv(560, 50, 240)}{P(574, 150, "C_bulk")}{Rv(640, 50, 240)}{P(654, 150, "R_L")}
   {N(500, 40, "V_bus")}{Gnd(490, 240)}
-  {Tx(90, 268, "no bridge diodes — needs zero-reverse-recovery devices (GaN / SiC) in CCM", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 268, "no bridge diodes — needs zero-reverse-recovery devices (GaN / SiC) in CCM", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 hbridge: () => <SV w={760} h={280}>
@@ -756,7 +780,7 @@ hbridge: () => <SV w={760} h={280}>
   {Cv(560, 120, 175)}{P(574, 152, "C_f")}{Dot(560, 120)}{Dot(560, 175)}
   {Rv(620, 120, 175)}{P(634, 152, "load")}
   {N(600, 108, "v_ac")}
-  {Tx(90, 268, "unipolar PWM: the two legs switch out of phase, so the filter sees 2·f_sw", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 268, "unipolar PWM: the two legs switch out of phase, so the filter sees 2·f_sw", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 vsi3: () => <SV w={760} h={290}>
@@ -769,7 +793,7 @@ vsi3: () => <SV w={760} h={290}>
   {W("M 420 170 H 545")}{N(500, 162, "c")}
   <circle key="mtr" cx={610} cy={150} r={46} style={WS} />
   {Tx(610, 156, "M", { a: "middle", s: 20, c: "#8296AB" })}
-  {Tx(90, 282, "six devices, two levels · SVPWM reaches V_LL = 0.707·m·V_dc", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 282, "six devices, two levels · SVPWM reaches V_LL = 0.707·m·V_dc", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 
 npc3: () => <SV w={700} h={300}>
@@ -787,7 +811,7 @@ npc3: () => <SV w={700} h={300}>
   {Dh(150, 300, 107)}{P(222, 96, "D1")}
   {Dh(300, 150, 213)}{P(222, 232, "D2")}
   {W("M 300 160 H 470")}{Port(470, 160, "phase", "r")}
-  {Tx(90, 288, "each device blocks only V_dc/2 · three output levels: +V_dc/2, 0, −V_dc/2", { c: "#5C6E82", s: 10.5 })}
+  {Tx(110, 288, "each device blocks only V_dc/2 · three output levels: +V_dc/2, 0, −V_dc/2", { c: "#5C6E82", s: 10.5 })}
 </SV>,
 };
 
@@ -1086,7 +1110,10 @@ function Wave(props) {
       /* The sign convention belongs in the header, once. On the ticks it read
          "out of C −1.33 A", which is sixteen characters of right-aligned mono
          in an 88-pixel margin — it ran off the left edge of the figure. */
-      key: "ic", name: "i_C", unit: "amps · + into C", c: "#A88BF0",
+      /* Named for the output capacitor specifically: the schematic above
+         this pane often draws a C_in as well, and a bare "i_C" left the
+         reader to guess which one the trace belongs to. */
+      key: "ic", name: "i_Cout", unit: "amps · + into C_out", c: "#A88BF0",
       h: 60, span: [C.iCmin - iSpan, C.iCmax + iSpan], inset: 0, axUp: -4, rules: [1],
       pts: C.iC.map((p) => ({ u: p.u, v: p.i })),
       dash: [{ v: 0, da: "2 3", lab: "0" }],
@@ -1100,15 +1127,18 @@ function Wave(props) {
       u: C.iC[k].u, v, q: k > 0 && C.ctrl[k - 1] ? C.ctrl[k - 1] : null,
     }));
     panes.push({
-      key: "vc", name: "v_C", unit: "volts · about V_out", c: "#F0796C",
+      key: "vc", name: "v_Cout", unit: "volts · about V_out", c: "#F0796C",
       h: 60, span: [C.vMin - vPad, C.vMax + vPad], inset: 0, axUp: -4, rules: [1],
       pts: ripple,
       /* The charge-only parabola, under the real trace. The gap between them
          is the ESR term, which is the reason a measured ripple peak never
-         sits where the textbook parabola says it should. */
+         sits where the textbook parabola says it should. `underLab` names it
+         on the plot itself — a dashed curve with no name reads as an error
+         band, and nothing below the figure explains a line on it. */
       under: C.esr > 0 ? C.vCap.map((v, k) => ({
         u: C.iC[k].u, v, q: k > 0 && C.ctrlCap[k - 1] ? C.ctrlCap[k - 1] : null,
       })) : null,
+      underLab: "without ESR",
       dash: [{ v: 0, da: "2 3", lab: "V_out" }],
       ticks: [[C.vMax, "peak"], [C.vMin, "valley"]],
       fmt: (v) => eng(v, "V"), dot: { c: "#F58E82", r: 3.4 },
@@ -1178,6 +1208,21 @@ function Wave(props) {
     p.tickY = layoutLabels(p.ticks.map(([v]) => p.y(v) + 3.5), 13, p.y0 - 2, p.y1 + 4);
     p.d = tile(p.pts, p.y);
     p.dUnder = p.under ? tile(p.under, p.y) : null;
+    /* The right gutter — the dashed references' names, and the ESR-free
+       underlay's — through the same collision pass as the left scale. At low
+       ripple "V_out" and "without ESR" want the same few pixels. */
+    const gut = (p.dash || []).filter((r) => r.lab)
+      .map((r) => ({ y: p.y(r.v) + 3.5, lab: r.lab, c: "#5C6E82", s: 9, o: 1 }));
+    if (p.dUnder && p.underLab) {
+      gut.push({
+        y: p.y(p.under[p.under.length - 1].v) + 3.5,
+        /* The curve's own colour at the curve's own weight, so the name
+           reads as belonging to the dashed line and not the solid trace. */
+        lab: p.underLab, c: p.c, s: 8.5, o: 0.55,
+      });
+    }
+    const gy = layoutLabels(gut.map((g) => g.y), 11, p.y0 - 2, p.y1 + 4);
+    p.gutter = gut.map((g, i) => ({ ...g, y: gy[i] }));
   }
   /* Where the ripple turns, and why. The capacitor's voltage peaks where its
      CURRENT crosses zero — not where the inductor current peaks — so join the
@@ -1185,7 +1230,10 @@ function Wave(props) {
   const cx = C && panes.length === 4
     ? C.cross.map((p) => ({ u: p.u, yi: panes[2].y(0), yv: panes[3].y(p.v) }))
     : [];
-  const tUnit = period ? (v) => eng(v * period, "s") : (v) => (v ? v + "T" : "0");
+  /* Zero is "0" on either ruler — "0 s" dresses the origin up as a reading. */
+  const tUnit = period
+    ? (v) => (v ? engAx(v * period, "s") : "0")
+    : (v) => (v ? v + "T" : "0");
 
   /* What this figure knows and the tables do not say out loud.
 
@@ -1256,8 +1304,8 @@ function Wave(props) {
      an interleaving factor that is not there — the model corrects it and
      records how big the correction was. It is the one number that catches
      every way the wiring between a design and this pane can be wrong, so
-     scripts/check-ripple.mjs asserts on it for all 30 topologies rather than
-     trusting thirty hand-derived specs to be right. */
+     scripts/check-ripple.mjs asserts on it for all 32 topologies rather than
+     trusting thirty-two hand-derived specs to be right. */
   return (
     <div>
     {/* 700 wide, not 660. The plotting area still ends at PX1 = 640 and no
@@ -1291,7 +1339,9 @@ function Wave(props) {
         {panes.map((p) => (
           <g key={"ti" + p.key}>
             {Tx(6, p.y0 - 6, p.name, { c: p.c, s: 10.5, b: 1 })}
-            {Tx(6 + txWidth(p.name, 10.5) + 6, p.y0 - 6, p.unit, { c: "#5C6E82", s: 8.5 })}
+            {/* Half a pixel down: an 8.5 pt run sharing a 10.5 pt baseline
+                sits visibly high in this mono face. */}
+            {Tx(6 + txWidth(p.name, 10.5) + 6, p.y0 - 5.5, p.unit, { c: "#5C6E82", s: 8.5 })}
           </g>
         ))}
         {/* horizontal rules: each pane says which of its own edges it wants */}
@@ -1309,13 +1359,12 @@ function Wave(props) {
             y={+Math.min(ya, yr).toFixed(2)} width={+(xb - xa).toFixed(2)}
             height={+Math.abs(yr - ya).toFixed(2)} fill={p.c} opacity={0.13} />;
         })))}
-        {/* reference levels — the mean, and zero wherever the trace crosses it */}
+        {/* reference levels — the mean, and zero wherever the trace crosses it.
+            Their names draw with the gutter block below, which lays the whole
+            right margin out together instead of label by label. */}
         {panes.map((p) => (p.dash || []).map((r, i) => (
-          <g key={"dl" + p.key + i}>
-            <path d={`M ${x0} ${+p.y(r.v).toFixed(2)} H ${x1}`} stroke="#3E5266"
-              strokeWidth={1} strokeDasharray={r.da} fill="none" />
-            {r.lab ? Tx(x1 + 4, p.y(r.v) + 3.5, r.lab, { c: "#5C6E82", s: 9 }) : null}
-          </g>
+          <path key={"dl" + p.key + i} d={`M ${x0} ${+p.y(r.v).toFixed(2)} H ${x1}`}
+            stroke="#3E5266" strokeWidth={1} strokeDasharray={r.da} fill="none" />
         )))}
         {/* the axis rules themselves, one subpath per pane */}
         <path d={panes.map((p) => `M ${x0} ${p.y0 + p.axUp} V ${p.y1}`).join(" ")}
@@ -1342,6 +1391,12 @@ function Wave(props) {
           <path key={"tr" + p.key} data-trace={p.key} d={p.d} stroke={p.c} strokeWidth={1.8}
             fill="none" strokeLinejoin="round" />
         ))}
+        {/* the right gutter, collision-laid-out per pane above */}
+        {panes.map((p) => (p.gutter || []).map((g, i) => (
+          <g key={"gu" + p.key + i} opacity={g.o}>
+            {Tx(x1 + 3, g.y, g.lab, { c: g.c, s: g.s })}
+          </g>
+        )))}
         {/* The same charge-driven dashes that run round the circuit, laid
             along the current trace. The schematic's flow accelerates and
             eases with the instantaneous current; without this the trace
@@ -1383,7 +1438,7 @@ function Wave(props) {
             <path d={`M ${x0} ${bot + 30} H ${x0 + per * D}`} stroke="#6FD39B" strokeWidth={1.4} fill="none" />
             <path d={`M ${x0} ${bot + 27} V ${bot + 33} M ${x0 + per * D} ${bot + 27} V ${bot + 33}`}
               stroke="#6FD39B" strokeWidth={1.4} fill="none" />
-            {Tx(x0 + per * D / 2, bot + 45, "on-time  D·T = " + f3(D) + "·T",
+            {Tx(x0 + per * D / 2, bot + 45, "on-time · D·T = " + f3(D) + "·T",
               { a: "middle", c: "#6FD39B", s: 9.5 })}
           </>
         )}
@@ -1392,8 +1447,8 @@ function Wave(props) {
             "on-time D·T" just above it undefined on exactly the pages that
             had the number to define it with. */}
         {Tx((x0 + x1) / 2, bot + 62, period
-          ? "time  ·  T = 1/f_sw = " + eng(period, "s")
-          : "time  ·  T = 1/f_sw",
+          ? "time · T = 1/f_sw = " + eng(period, "s")
+          : "time · T = 1/f_sw",
           { a: "middle", c: "#8DA0B4", s: 10.5 })}
         {/* One dot per pane, all at the same instant — which is the point of
             stacking the panes in the first place. Each is read off its own
@@ -1489,8 +1544,11 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vma
   return (
     <div className="sch"><svg viewBox="0 0 660 218" style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("lc", () => (<>
-        {/* the y-axis caption sits above the plot, clear of the top tick */}
-        {Tx(x0 - 7, y1 - 13, ylab, { a: "start", c: "#8DA0B4", s: 11 })}
+        {/* the y-axis caption sits above the plot, clear of the top tick.
+            One type scale across every plotting surface: captions 10.5,
+            word labels 9.5, numeric ticks 9 — the same ladder the waveform
+            panes use, so the figures read as one instrument. */}
+        {Tx(x0 - 7, y1 - 13, ylab, { a: "start", c: "#8DA0B4", s: 10.5 })}
         {xt.map((v, i) => <path key={"gx" + i} d={`M ${X(v)} ${y0} V ${y1}`} {...gl} />)}
         {yt.map((v, i) => <path key={"gy" + i} d={`M ${x0} ${Y(v)} H ${x1}`} {...gl} />)}
         {(vmarks || []).map((m, i) => (
@@ -1517,12 +1575,12 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vma
               <path d={`M ${l.x - 4} ${l.want + 2} L ${l.x - 1} ${l.y - 3}`}
                 stroke={l.c} strokeWidth={0.9} fill="none" opacity={0.55} />
             ) : null}
-            {Tx(l.x, l.y, l.t, { a: l.a || "start", c: l.c, s: 10 })}
+            {Tx(l.x, l.y, l.t, { a: l.a || "start", c: l.c, s: 9.5 })}
           </g>
         ))}
-        {xt.map((v, i) => Tx(X(v), y0 + 16, xf(v), { a: "middle", c: "#5C6E82", s: 10 }))}
-        {yt.map((v, i) => Tx(x0 - 7, Y(v) + 3.5, yf(v), { a: "end", c: "#5C6E82", s: 10 }))}
-        {Tx((x0 + x1) / 2, y0 + 33, xlab, { a: "middle", c: "#8DA0B4", s: 11 })}
+        {xt.map((v, i) => Tx(X(v), y0 + 16, xf(v), { a: "middle", c: "#8DA0B4", s: 9 }))}
+        {yt.map((v, i) => Tx(x0 - 7, Y(v) + 3.5, yf(v), { a: "end", c: "#8DA0B4", s: 9 }))}
+        {Tx((x0 + x1) / 2, y0 + 33, xlab, { a: "middle", c: "#8DA0B4", s: 10.5 })}
       </>))}
     </svg></div>
   );
@@ -4900,7 +4958,7 @@ const FLOW = {
     { on: [1,0], t: "Q1 on", f: (D) => [0, D], n: "The full input voltage sits across the inductor and current ramps up. Nothing reaches the output during this interval — the load lives on C_out.",
       d: ["M 40 70 H 215 V 200 H 40"], dim: ["M 400 70 H 480 V 200 H 400"] },
     { on: [0,1], t: "Q1 off", f: (D) => [D, 1], n: "The inductor reverses its terminal voltage to keep current flowing, pulling the output node below ground through D1. That polarity inversion is inherent, not a wiring choice.",
-      d: ["M 215 200 H 480 V 70 H 215"] },
+      d: ["M 215 70 V 200 H 480 V 70 H 215"] },
   ]},
   flyback: { w: 700, h: 275, sw: [[250, 185, "Q1", 0], [327, 60, "D1"]],
     emc: { loop: "M 90 55 H 250 V 235 H 90 Z", node: [250, 144] },
@@ -4946,8 +5004,10 @@ const FLOW = {
   ctrect: { w: 680, h: 270, sw: [[300, 60, "D1"], [300, 140, "D2"]],
     emc: { loop: "M 214 60 H 340 V 140 H 214 Z", node: [340, 100] },
     /* Above the choke, not below it: the V_rect node label sits directly under
-       the left-hand terminal. Set here the two marks flank the L_f label. */
-    pol: [346, 82, 406, 82],                /* L_f, the output choke */
+       the left-hand terminal. Set here the two marks flank the L_f label —
+       and clear of the feed wire at x 340 and the coil crest at y 91, which
+       the dashes now climb; an opaque disc any closer notches them. */
+    pol: [352, 76, 406, 76],                /* L_f, the output choke */
     capFlow: [{ d: "M 470 100 V 220", src: "out" }],
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
@@ -4973,9 +5033,9 @@ const FLOW = {
     capFlow: [{ d: "M 530 140 V 260", src: "out" }],
     ph: [
     { on: [0,1], t: "Winding positive", f: (D) => [0, D], n: "D2 clamps the lower terminal to the return, so L1 sees the winding voltage and charges while L2 freewheels. Both inductors feed the output continuously.",
-      d: ["M 214 80 H 470 V 140 H 595 V 260 H 290 V 200 H 214 V 160"] },
+      d: ["M 214 80 H 470 V 140 H 595 V 260 H 290 V 200 H 214 V 160", "M 290 200 H 470 V 140"] },
     { on: [1,0], t: "Winding negative", f: (D) => [0.5, 0.5 + D], n: "The roles swap: D1 clamps and L2 charges. Each inductor carries only half the load current, and their ripples partly cancel at the output node.",
-      d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214"] },
+      d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214", "M 250 80 H 470 V 140"] },
   ]},
   classe: { w: 660, h: 250, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
     ilabel: "i_sw",
@@ -4985,7 +5045,7 @@ const FLOW = {
     { on: [1], t: "Switch on", f: () => [0, 0.5], n: "The drain is held at zero volts. The choke current ramps up and the tank current flows through the switch — but the device turned on at zero voltage, so nothing was dissipated in the transition.",
       d: ["M 40 60 H 230 V 205 H 430"], dim: ["M 230 60 H 590 V 205 H 430"] },
     { on: [0], t: "Switch off", f: () => [0.5, 1], n: "Choke and tank current now flow into C_sh, and the drain rings up to 3.56 times the supply and back. The tuning makes it arrive at exactly zero, with zero slope, as the switch closes again.",
-      d: ["M 162 60 H 310 V 205 H 430"], dim: ["M 310 60 H 590 V 205 H 430"] },
+      d: ["M 40 60 H 310 V 205 H 430"], dim: ["M 310 60 H 590 V 205 H 430"] },
   ]},
 
   /* ---- extended coverage --------------------------------------------
@@ -5166,7 +5226,9 @@ const FLOW = {
   pushpull: { w: 740, h: 300,
     sw: [[230, 240, "Q1", 0], [270, 240, "Q2", 0], [435, 70, "D1"], [435, 190, "D2"]],
     emc: { loop: "M 95 40 H 230 V 275 H 95 Z", node: [300, 70] },
-    pol: [506, 148, 566, 148],              /* L, the output choke */
+    /* Above the choke: below it the B disc sat 6 px off the secondary return
+       and notched the conducting dashes with its opaque fill. */
+    pol: [506, 106, 566, 106],              /* L, the output choke */
     capFlow: [{ d: "M 620 130 V 250", src: "out" }],
     ph: [
     { on: [1,0,1,0], t: "Q1 on", f: (D) => [0, D], n: "Q1 pulls one half of the primary down, so that half sees the whole input voltage and the core is driven one way. D1 carries the resulting secondary current into the choke.",
@@ -5207,6 +5269,7 @@ const FLOW = {
           "M 454 186 V 215 H 585 V 150 H 770 V 265 H 490 V 153"] },
     { on: [0,1,0,0,0,1], t: "ZVS transition", f: (D) => [0.5 + D, Math.min(0.5 + D + 0.04, 0.99)], n: "The mirror image of the first transition. This is the leg that loses zero-voltage switching first as the load falls, because it relies on energy stored in L_r alone — with less current there is less energy, and below some load it simply cannot swing the node in time.",
       d: ["M 430 184 H 410 V 200 H 180 V 150 H 170 V 255 H 40",
+          "M 300 150 H 398 V 120 H 430",
           "M 585 150 H 770 V 265 H 490 V 153"],
       dim: ["M 40 45 H 300 V 150"] },
     { on: [1,0,1,0,1,1], t: "Freewheel", f: (D) => [Math.min(0.5 + D + 0.04, 0.99), 1], n: "The second circulating interval, this time around the upper rail. Notice the primary current does not stop between pulses the way a forward converter's does — it keeps going round, which is what keeps the switches soft but also what makes light load inefficient.",
@@ -5381,78 +5444,10 @@ const isDiode = (label) => /^D/.test(String(label));
    the very first paint, the figure says nothing about which way the charge
    is going. These chevrons say it statically.
 
-   The flow paths are polylines built from M/H/V/L, so the geometry is
-   parsed directly rather than measured through the DOM: no layout, no ref,
-   and the result can be memoised per phase instead of recomputed a frame
-   at a time. */
-function polyPoints(d) {
-  const segs = String(d).match(/[MLHV][^MLHV]*/gi) || [];
-  const pts = []; let x = 0, y = 0;
-  for (const seg of segs) {
-    const c = seg[0].toUpperCase();
-    const n = seg.slice(1).trim().split(/[\s,]+/).filter((s) => s !== "").map(Number);
-    if (c === "M" || c === "L") {
-      for (let i = 0; i + 1 < n.length; i += 2) { x = n[i]; y = n[i + 1]; pts.push([x, y]); }
-    } else if (c === "H") { for (const v of n) { x = v; pts.push([x, y]); } }
-    else if (c === "V") { for (const v of n) { y = v; pts.push([x, y]); } }
-  }
-  return pts;
-}
-
-/* Measure a path once, per phase. */
-function polySegs(d) {
-  const pts = polyPoints(d);
-  const segs = [];
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
-    const len = Math.hypot(dx, dy);
-    if (len < 1e-6) continue;
-    segs.push({ x: pts[i - 1][0], y: pts[i - 1][1], dx: dx / len, dy: dy / len, len, at: total });
-    total += len;
-  }
-  return { segs, total };
-}
-
-/* Place arrowheads along a measured path, advanced by how far the charge has
-   travelled. They ride with the dashes rather than sitting still beside
-   them: a fixed arrow next to a moving dash reads as a diagram annotation,
-   and looks inert the moment anything else on the figure changes.
-
-   A fixed number of arrows, spaced evenly, each position taken modulo the
-   path length — a treadmill. The earlier version placed them at base + k·step
-   and dropped any that ran past the end or landed near a corner, so the count
-   swung between six and ten and arrows blinked in and out about four times a
-   second. Measured, that flicker was a large part of what made the motion
-   feel rough, and it was worst at a commutation, where the route is changing
-   anyway and every other thing in the figure is moving too. */
-function arrowsAt({ segs, total }, travel, spacing = 104) {
-  if (!total || !segs.length) return [];
-  const n = Math.max(1, Math.round(total / spacing));
-  const step = total / n;
-  const base = ((travel % step) + step) % step;
-  const out = [];
-  /* A conducting path has two ends, so on a moving belt of arrows one has to
-     enter at the start whenever one leaves at the finish. Appearing at full
-     strength, that entry is a pop — measured at roughly a hundred pixels,
-     several times a second, and it was the last thing making the motion feel
-     unsteady. Each arrow instead dissolves over the first and last stretch of
-     its path, so it arrives and departs rather than blinking. */
-  const FADE = 26;
-  for (let k = 0; k < n; k++) {
-    const s = (base + k * step) % total;
-    let seg = segs[segs.length - 1];
-    for (const g of segs) { if (s >= g.at && s <= g.at + g.len) { seg = g; break; } }
-    const t = clamp(s - seg.at, 0, seg.len);
-    const edge = clamp(Math.min(s, total - s) / FADE, 0, 1);
-    out.push({
-      x: seg.x + seg.dx * t, y: seg.y + seg.dy * t,
-      a: Math.atan2(seg.dy, seg.dx) * 180 / Math.PI,
-      o: edge * edge * (3 - 2 * edge),
-    });
-  }
-  return out;
-}
+   The geometry itself — the M/H/V/L parser, the per-phase measurement, the
+   arrowhead treadmill and the coil splice — lives in flowgeo.js, a plain
+   module with no React in it, so check-flow.mjs can assert against the same
+   code the figures draw with. */
 
 /* `flip` turns the head through 180° for a branch whose current has reversed.
    Only the capacitor branches use it: a conducting path carries current one
@@ -5873,19 +5868,22 @@ function Spectrum({ fsw, D, tr, amp }) {
               which made one tick wider than the rest and left a reader
               scanning for the unit if that tick was off screen. */}
           {Tx(x0 - 7, y0 - 12, "dBµV", { c: "#8DA0B4", s: 10.5, a: "start" })}
+          {/* Numeric ticks at 9 in the default ink, the same rung of the type
+              ladder the waveform panes' scale numbers sit on. */}
           {[0, 40, 80, 120, 160].map((d) => (
             <g key={"h" + d}>
               <path d={`M ${x0} ${ly(d)} H ${x1}`} {...gl} />
-              {Tx(x0 - 7, ly(d) + 3.5, String(d), { c: "#5C6E82", s: 9.5, a: "end" })}
+              {Tx(x0 - 7, ly(d) + 3.5, String(d), { c: "#8DA0B4", s: 9, a: "end" })}
             </g>
           ))}
           {dec.map((f, i) => (
             <g key={"v" + f}>
               <path d={`M ${lx(f)} ${y0} V ${y1}`} {...gl} />
               {/* the first is pushed right of the y-axis numbers; the last is
-                  anchored at its end so it stays inside the frame */}
-              {Tx(lx(f) + (i === 0 ? 2 : 0), y1 + 16, eng(f, "Hz"),
-                { c: "#5C6E82", s: 9.5,
+                  anchored at its end so it stays inside the frame. engAx, so a
+                  decade reads "1 MHz", not "1.00 MHz". */}
+              {Tx(lx(f) + (i === 0 ? 2 : 0), y1 + 16, engAx(f, "Hz"),
+                { c: "#8DA0B4", s: 9,
                   a: i === 0 ? "start" : i === dec.length - 1 ? "end" : "middle" })}
             </g>
           ))}
@@ -5904,7 +5902,7 @@ function Spectrum({ fsw, D, tr, amp }) {
               {Tx(a.x, ys[i], a.t, { c: a.c, s: 9.5, a: a.a })}
             </g>
           ))}
-          {Tx((x0 + x1) / 2, y1 + 30, "frequency", { c: "#5C6E82", s: 10.5, a: "middle" })}
+          {Tx((x0 + x1) / 2, y1 + 30, "frequency", { c: "#8DA0B4", s: 10.5, a: "middle" })}
         </>))}
       </svg>
     </div>
@@ -6013,9 +6011,16 @@ function FlowCard({ topo, res, spec }) {
   }, [play, spd, F, topo.id]);
 
   /* The schematic underneath never changes while the animation runs, so it
-     is built once per topology and kept out of the per-frame path. */
+     is built once per topology and kept out of the per-frame path. The draw
+     is also when the inductors record themselves into COILS — the flow
+     overlay routes its dashes over those windings, and taking the extents
+     from the drawing itself is what keeps the two from drifting apart. */
   const sch = useMemo(
-    () => drawScope("sc", () => (SCH[topo.sch] ? SCH[topo.sch]() : null)),
+    () => drawScope("sc", () => {
+      if (!SCH[topo.sch]) return null;
+      coilCapture = COILS[topo.sch] = [];
+      try { return SCH[topo.sch](); } finally { coilCapture = null; }
+    }),
     [topo.sch]
   );
   const wv = res && res.wave ? res.wave : null;
@@ -6088,11 +6093,104 @@ function FlowCard({ topo, res, spec }) {
   const devs = (F.sw || []).map((q, j) => ({
     label: q[2], on: ph.on ? !!ph.on[j] : false, diode: isDiode(q[2]),
   }));
-  /* Measure the conducting paths once per phase; the arrowheads themselves
-     are then placed each frame from how far the charge has moved, so they
-     travel with the dashes at the same rate. */
-  const geo = useMemo(() => (ph.d || []).map(polySegs), [ph.d]);
-  const arrows = geo.map((g) => arrowsAt(g, -flowOff));
+  /* Every phase's drawable geometry at once: the authored polylines spliced
+     through the windings they cross (coilSplice — so the dashes climb the
+     coils instead of sliding under them on the chord), then measured. All
+     phases together rather than the active one, because a commutation needs
+     two phases' geometry in the same frame to cross-fade between them. */
+  const phGeo = useMemo(() => {
+    const coils = COILS[topo.sch] || [];
+    return F.ph.map((q) => {
+      const d = (q.d || []).map((s) => coilSplice(s, coils));
+      return {
+        d,
+        dim: (q.dim || []).map((s) => coilSplice(s, coils)),
+        geo: d.map(polySegs),
+      };
+    });
+  }, [F, topo.sch]);
+
+  /* ---- commutation cross-fade ----
+
+     A phase change used to swap every path's `d` in a single frame, so at
+     each commutation whole branches teleported — the one remaining pop in a
+     figure where everything else dissolves. Instead, inside a short window
+     around each phase boundary, both phases render at once: the outgoing
+     route fades down as the incoming one fades up.
+
+     The window is clamped to a fraction of the adjacent phases' widths so
+     the psfb's 4 %-wide ZVS slivers are not all fade, and the opacities are
+     computed here, per frame, never CSS-transitioned — the same rule as the
+     rest of the overlay (see styles.js), and it means scrubbing shows the
+     fade deterministically instead of only while playing. */
+  const starts = bounds.map((b) => b[0]);
+  const phaseAt = (t) => {
+    t = ((t % 1) + 1) % 1;
+    let ix = 0;
+    for (let k = 0; k < bounds.length; k++) {
+      if (t >= bounds[k][0] && t < bounds[k][1]) { ix = k; break; }
+      if (t >= bounds[k][0]) ix = k;
+    }
+    return ix;
+  };
+  /* Nearest boundary, cyclically, so the wrap at t = 0 fades like any other. */
+  let nearK = 0, nearD = Infinity;
+  for (let k = 0; k < starts.length; k++) {
+    let dd = tPer - starts[k];
+    dd -= Math.round(dd);
+    if (Math.abs(dd) < Math.abs(nearD)) { nearD = dd; nearK = k; }
+  }
+  const inIdx = phaseAt(starts[nearK] + 1e-4);
+  const outIdx = phaseAt(starts[nearK] - 1e-4);
+  const wOf = (k) => Math.max(bounds[k][1] - bounds[k][0], 1e-3);
+  const fw = Math.min(0.02, 0.4 * Math.min(wOf(inIdx), wOf(outIdx)));
+  /* 0 = outgoing phase fully present, 1 = incoming fully arrived. Cubic
+     ease-in-out, not smoothstep: the narrowest windows span only three or
+     four frames at 1×, so the first rendered sample can land a third of the
+     way in — a curve that is still nearly flat there keeps a mounting layer
+     under sight (measured ≤ 0.1) however the frames quantise it. */
+  let blend = 1;
+  if (outIdx !== inIdx && Math.abs(nearD) < fw / 2) {
+    const u = (nearD + fw / 2) / fw;
+    blend = u < 0.5 ? 4 * u * u * u : 1 - 4 * (1 - u) * (1 - u) * (1 - u);
+  }
+  const fading = blend < 1;
+
+  /* The frame's draw lists. Keys carry the phase index, so a commutation
+     mounts the incoming routes and unmounts the outgoing ones instead of
+     morphing a persistent element's `d`. Shared copper must not dip: a
+     branch present in both phases renders once, fully opaque, on the
+     incoming side. */
+  const flows = [];   /* { d, segs, o, key } */
+  const dims = [];
+  if (!fading) {
+    phGeo[idx].d.forEach((d, j) =>
+      flows.push({ d, segs: phGeo[idx].geo[j], o: 1, key: "f" + idx + "_" + j }));
+    phGeo[idx].dim.forEach((d, j) =>
+      dims.push({ d, o: 1, key: "m" + idx + "_" + j }));
+  } else {
+    const inD = new Set(phGeo[inIdx].d), inM = new Set(phGeo[inIdx].dim);
+    const outD = new Set(phGeo[outIdx].d), outM = new Set(phGeo[outIdx].dim);
+    phGeo[outIdx].d.forEach((d, j) => {
+      if (!inD.has(d)) flows.push({ d, segs: phGeo[outIdx].geo[j], o: 1 - blend, key: "f" + outIdx + "_" + j });
+    });
+    phGeo[inIdx].d.forEach((d, j) =>
+      flows.push({ d, segs: phGeo[inIdx].geo[j], o: outD.has(d) ? 1 : blend, key: "f" + inIdx + "_" + j }));
+    phGeo[outIdx].dim.forEach((d, j) => {
+      if (!inM.has(d)) dims.push({ d, o: 1 - blend, key: "m" + outIdx + "_" + j });
+    });
+    phGeo[inIdx].dim.forEach((d, j) =>
+      dims.push({ d, o: outM.has(d) ? 1 : blend, key: "m" + inIdx + "_" + j }));
+  }
+  /* Brightness rides |i|: a synchronous rectifier running backwards at light
+     load is carrying real current, and dimming it for its sign would say
+     otherwise. Direction is the dashes' and arrows' job. */
+  const mag = Math.min(Math.abs(iNow) / iPk, 1);
+  /* A discontinuous cycle's rest interval should visibly rest — the dashes
+     hold at a floor rather than vanishing, and everything is continuous in
+     t, so nothing ever appears at a visible opacity. */
+  const flowLive = 0.30 + 0.70 * mag;
+  const arrows = flows.map((fl) => arrowsAt(fl.segs, -flowOff));
 
   /* ---- the capacitor branches ----
 
@@ -6183,14 +6281,18 @@ function FlowCard({ topo, res, spec }) {
             </g>
           ) : (
             <>
-              {(ph.dim || []).map((d, j) => <path key={"m" + j} d={d} className="flowdim" />)}
-              {ph.d.map((d, j) => <path key={"g" + j} d={d} className="flowglow"
-                style={{ strokeWidth: 5 + 6 * (iNow / iPk) }} />)}
-              {ph.d.map((d, j) => <path key={"f" + j} d={d} className="flowp"
-                style={{ strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * (iNow / iPk) }} />)}
+              {dims.map((m) => <path key={m.key} d={m.d} className="flowdim"
+                style={{ opacity: (0.4 * m.o).toFixed(3) }} />)}
+              {flows.map((fl) => <path key={"g" + fl.key} d={fl.d} className="flowglow"
+                style={{ opacity: ((0.07 + 0.09 * mag) * fl.o).toFixed(3),
+                  strokeWidth: 5 + 6 * mag }} />)}
+              {flows.map((fl) => <path key={fl.key} d={fl.d} className="flowp"
+                style={{ opacity: (flowLive * fl.o).toFixed(3),
+                  strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * mag }} />)}
               {/* which way the charge is going — travelling with it */}
               {arrows.map((set, j) => (
-                <g key={"ar" + j} style={{ opacity: 0.55 + 0.45 * (iNow / iPk) }}>
+                <g key={"ar" + flows[j].key}
+                  style={{ opacity: ((0.55 + 0.45 * mag) * flowLive * flows[j].o).toFixed(3) }}>
                   {set.map((m, i) => Chevron(m, i))}
                 </g>
               ))}

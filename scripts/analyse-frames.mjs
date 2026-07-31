@@ -40,11 +40,23 @@ for (let i = 1; i < f.length; i++) {
 }
 const same = field.filter((x) => x[2]);
 console.log("arrow field, worst displacement per frame:", JSON.stringify(stats(same.map((x) => x[1]))));
-const rough = same.filter((x) => x[1] > 6);
-const atCommutation = rough.filter((x) => f[x[0]].ph !== f[x[0] - 1].ph);
-console.log("frames where the field jumped >6px:", rough.length,
-  "| of those, at a phase commutation:", atCommutation.length,
-  atCommutation.length === rough.length ? "(all of them — the conducting route genuinely changes there)" : "*** SOME ARE NOT COMMUTATIONS ***");
+/* An arrow may enter anywhere — a commutation mounts a whole new route, and
+   the cross-fade mounts it a little BEFORE the device marks flip — but never
+   at an opacity you could see. Same rule the cursor rake is held to below,
+   and it is stricter than the old "was it a commutation?" excuse: since the
+   overlay cross-fades, even a commutation has no right to pop. */
+let orphanA = 0, orphanN = 0;
+for (let i = 1; i < f.length; i++) {
+  const A = f[i - 1].arrows, B = f[i].arrows;
+  if (!A || !A.length || !B) continue;
+  for (const b of B) {
+    let best = Infinity;
+    for (const a of A) best = Math.min(best, Math.hypot(b[0] - a[0], b[1] - a[1]));
+    if (best > 6) { orphanN++; orphanA = Math.max(orphanA, b[2] === undefined ? 1 : b[2]); }
+  }
+}
+console.log(`arrows appearing with no near predecessor: ${orphanN}, brightest: ${orphanA.toFixed(3)}`,
+  orphanA > 0.12 ? "*** A VISIBLE POP ***" : "(all faint — they dissolve in)");
 
 /* dash travel actually reaches a whole number of dash periods */
 const dmag = stats(f.map((s) => Math.abs(s.dash || 0)));

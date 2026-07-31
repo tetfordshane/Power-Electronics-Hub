@@ -290,13 +290,19 @@ export const CSS = `
 
 /* ------------------------------------------------------- flow overlay */
 .ps .flowwrap{position:relative}
-.ps .flowov{position:absolute; left:8px; right:8px; top:8px; bottom:8px; pointer-events:none}
+/* 9px, not 8: the schematic under this overlay is inset by its own 1px
+   border plus 8px padding (box-sizing:border-box), and the overlay has no
+   border. At 8px every dash sat one pixel up-left of the copper it rides. */
+.ps .flowov{position:absolute; left:9px; right:9px; top:9px; bottom:9px; pointer-events:none}
+/* Glow and dash opacity are set inline, per frame: the glow breathes with
+   the current and the dash train rests at a floor through a discontinuous
+   interval. The values here are the static fallbacks. */
 .ps .flowglow{fill:none; stroke:var(--gn); stroke-width:8; opacity:.12;
   stroke-linecap:round; stroke-linejoin:round}
 .ps .flowp{fill:none; stroke:var(--gn); stroke-linecap:round; stroke-linejoin:round;
   stroke-dasharray:7 13}
 .ps .flowdim{fill:none; stroke:var(--faint); stroke-width:2; opacity:.4; stroke-dasharray:2 8}
-/* The capacitor branches. Violet, matching the i_C waveform pane exactly, so
+/* The capacitor branches. Violet, matching the i_Cout waveform pane exactly, so
    the schematic and the plot below it name the same current the same way.
    A shorter dash than the conducting path, because this current reverses
    twice a period and a long dash makes the reversal hard to read. */

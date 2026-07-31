@@ -51,7 +51,16 @@ const samples = await page.evaluate(async (secs) => {
       const cur = document.querySelector(".flowp");
       const arrows = [...document.querySelectorAll(".carrow")].map((a) => {
         const m = (a.getAttribute("transform") || "").match(/translate\(([-\d.]+),([-\d.]+)\)/);
-        return m ? [+m[1], +m[2], +(a.getAttribute("opacity") || 1)] : null;
+        if (!m) return null;
+        /* EFFECTIVE opacity: the chevron's own end fade times every ancestor
+           group's — the commutation cross-fade and the current dimming live
+           on the parent <g>, and an "invisible" arrow only counts as
+           invisible if the whole product says so. */
+        let o = +(a.getAttribute("opacity") || 1);
+        for (let g = a.parentElement; g && g.tagName === "g"; g = g.parentElement) {
+          o *= +((g.style && g.style.opacity) || g.getAttribute("opacity") || 1);
+        }
+        return [+m[1], +m[2], +o.toFixed(3)];
       }).filter(Boolean);
       out.push({
         t: +(performance.now() - t0).toFixed(2),

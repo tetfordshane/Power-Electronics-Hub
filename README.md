@@ -212,6 +212,32 @@ capacitor charging hardest exactly when it is being drained, which is the
 opposite of the lesson. Measure it rather than reasoning about it: scrub the
 figure and check the arrows turn where the `i_C` pane crosses zero.
 
+**Flow geometry and the coil registry.** The overlay's path maths —
+`polyPoints`, `polySegs`, `arrowsAt`, `coilSplice` — live in `src/flowgeo.js`,
+a plain module like `cycle.js`, so `check-flow.mjs` asserts against the code
+the figures draw with. `Lh`/`Lv` record every winding they draw into `COILS`
+while `FlowCard` renders the schematic; `coilSplice` then reroutes each flow
+path over the arcs of any coil it runs straight through, which is what makes
+the current visibly climb through a winding instead of sliding under it on
+the chord. Never hand-list an inductor's extent anywhere — the registry is
+derived from the drawing precisely so the two cannot drift.
+
+Two numbers in that file are load-bearing. Arrow spacing is exactly 120
+because one switching period advances the dash travel by 240 and the belt's
+phase is `travel mod spacing`: a spacing that divides 240 makes the
+period-boundary wrap land every arrow on another's slot, where the old
+per-path spacing teleported the whole field by up to 29 px. The dash pattern
+(`7 13`) and the capacitor dash (`5 11`) divide 240 for the same reason.
+
+**Commutations cross-fade, numerically.** Near a phase boundary FlowCard
+renders both phases at once, keyed by phase index so React mounts and
+unmounts routes rather than morphing a path's `d`. A path string present in
+both phases draws once at full opacity — shared copper must not dip. All of
+these opacities (and the DCM rest floor, and the glow breathing) are computed
+per frame; the `transition:none` rule on the flow classes in `styles.js`
+stands, and the blend is a cubic ease-in-out because the narrowest windows
+span three or four frames and the first rendered sample must still be faint.
+
 **Text that changes as the animation runs** goes through `Swap`, which renders
 every alternative into one grid cell and hides all but one by `visibility`.
 The box then keeps the height of its tallest option. Without it, phase notes
@@ -252,6 +278,14 @@ These import `src/cycle.js` directly, so they need no browser and no dev
 server. They are assertions about the model, not snapshots of it, and they run
 in under a second — there is no reason not to run them.
 
+- `node scripts/check-flow.mjs` — the animated overlay against the schematic
+  under it, for all 32 topologies: every winding carries dashes in some phase
+  (or is on the reviewed never-animated list), the pol-marked inductor
+  carries them in **every** phase, no opaque polarity disc sits within 11 px
+  of a drawn path, `coilSplice` preserves endpoints and adds exactly the arc
+  length it should, and the overlay's inset still matches the schematic's
+  border + padding. `--report` lists never-animated coils instead of failing,
+  for reviewing a new topology.
 - `node scripts/check-cycle.mjs` — the properties the drawing depends on: the
   mean equals `I_avg`, `ΔI` is exact, discontinuous conduction carries the
   right average and meets the continuous case exactly at the boundary, a
@@ -295,7 +329,7 @@ because this said all sixteen were unmoved to within a hundredth of a pixel.
 ideal against saturating against discontinuous — side by side, driving each
 case through the real inputs and reading the values back, so a case that
 silently failed to apply cannot pass as one that legitimately looks unchanged.
-- Walk the 30 topologies and watch the console; the design panel should never
+- Walk the 32 topologies and watch the console; the design panel should never
   show an em-dash, a NaN, or a negative component value
 - Numbers here are first-pass estimates from idealised models. If you change
   an equation, check it by hand at the defaults before trusting the display.
