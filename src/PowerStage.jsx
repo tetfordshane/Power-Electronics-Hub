@@ -6351,7 +6351,7 @@ function FlowCard({ topo, res, spec }) {
               path: those show where current goes, these show which way it has
               turned. */}
           {capFlows.length ? (
-            <span className="cap"><i /><b>{capFlows.map((c) => c.label).join(" · ")}</b>
+            <span className="cap"><i /><b><Sub t={capFlows.map((c) => c.label).join(" · ")} /></b>
               <Swap active={capFlows[0].i >= 0 ? 0 : 1} items={[
                 "the capacitor is charging — current runs into it, and its voltage is rising",
                 "the capacitor is discharging — the arrows have turned, and it is now supplying the circuit",

@@ -216,15 +216,6 @@ export const CSS = `
   stroke-dasharray:3 15; opacity:.95; pointer-events:none;
 }
 .ps .flow.b{stroke:var(--cy)}
-.ps .cap{
-  font-size:var(--t-body); line-height:1.62; color:var(--dim); margin:12px 0 0;
-  min-height:40px; border-left:2px solid var(--line2); padding-left:13px; max-width:82ch;
-}
-.ps .cap b{
-  color:var(--cu); font-family:var(--ui); font-size:var(--t-fine); font-weight:650;
-  letter-spacing:.06em; text-transform:uppercase;
-}
-
 /* --------------------------------------------------------- control bars */
 .ps .ctl,.ps .flowctl{display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin:14px 0 0}
 .ps .flowctl{margin:10px 0 13px}
