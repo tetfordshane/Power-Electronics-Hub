@@ -19,14 +19,73 @@ npm run dev
 
 | File | What it holds |
 |---|---|
-| `src/PowerStage.jsx` | The app: topology data, design equations, schematics, figures, cards |
+| `src/App.jsx` | The shell: tabs, routing, input sanitising, card order |
+| `src/topologies/` | The catalogue. One module per category, plus `flow.js` (animation geometry), `family.js`, and `index.js`, which assembles them |
+| `src/topologies/sim/` | Netlists for the topologies the simulator drives |
+| `src/schematic/` | `parts.jsx` (the primitives and the registries they fill as they draw) and `sch.jsx` (32 schematics) |
+| `src/ui/` | One file per surface: `Wave`, `FlowCard`, `Results`, `Fields`, `HeatCard`, `SpecCard`, `LossBar`, `PlayBar`, `marks` |
+| `src/content/` | Cheat sheet, glossary, selector table |
+| `src/engine/` | The circuit simulator — see below |
 | `src/cycle.js` | One description of a switching cycle — the current, the capacitor, the polarity. Plain module: no React, no DOM, importable by the checks |
+| `src/fields.js`, `src/format.js`, `src/hooks.js` | The input registry, number formatting, the reduced-motion hook |
 | `src/tex.jsx` | Maths typesetting — parses the linear notation used in the data and emits LaTeX for KaTeX |
 | `src/styles.js` | The stylesheet and the type system |
-| `scripts/check-tex.mjs` | Pushes every literal formula through the parser and fails on anything that would fall back to plain text |
+| `scripts/check-tex.mjs` | Walks every source file AND runs every `design()`, pushing the result through the parser; fails on anything that would fall back to plain text |
+| `scripts/check-registry.mjs` | Asserts that every topology has all of its parts, in every registry |
 | `scripts/probe.mjs` | Stresses the prose/maths splitter against every long string in the app |
 
+**Everything under `src/topologies/`, `src/content/`, `src/fields.js` and
+`src/format.js` is JSX-free**, so node imports it directly with no build step.
+That is what lets the checks and the tests read the real data instead of
+scraping it. Keep it that way.
+
+## The simulator
+
+`src/engine/` solves the circuit rather than describing it. A topology in
+`src/topologies/sim/` supplies a netlist; `mna.js` compiles each switching
+configuration into `ẋ = Ax + Bu` by modified nodal analysis; `linalg.js`
+steps it with a matrix exponential, which is exact at any step size and
+stable at any stiffness; `solver.js` locates diode events by bisection;
+`limitcycle.js` finds the periodic steady state by shooting — measuring the
+Jacobian of the period map and solving for the state that repeats, which
+turns ~2900 periods of settling into about seven.
+
+`adapter.js` is the seam. `engineFor(topo, spec, res)` returns a simulated
+cycle where a topology has a netlist and the closed-form `buildCycle` cycle
+where it does not, in the same shape, so no drawing surface knows which it
+got. A topology without a netlist is not degraded — it is the app as it was.
+
+Which devices conduct is **not** authored for simulated topologies. Commanded
+switches come from a modulator; diodes conduct when the circuit forward-biases
+them and stop when their own current reaches zero. Discontinuous conduction
+emerges from that rather than being declared, and the sign that it has is an
+interval where nothing conducts (`run.idle`), not a flat stretch at zero — a
+real converter in DCM rings rather than sitting still.
+
+Two things a netlist must respect: a switch node needs its own capacitance
+(`C_oss`), or dead time drives it to tens of kilovolts because an inductor is
+being forced into an open circuit; and a flyback secondary is **anti-phase**,
+which is the whole difference between a flyback and a forward converter —
+wired in phase it still converges, still regulates, and reads about 20 % high.
+
+Pilots: buck, sync buck, boost, buck-boost, flyback. Adding another means a
+netlist, a `sim: { L, C }` on the design result so the simulation and the
+printed numbers cannot describe different converters, and a case in
+`test/sim-steady.test.mjs`.
+
 ## Conventions worth knowing before editing
+
+**Opacity on anything drawn per frame.** Set it inline
+(`style={{opacity: …}}`), never as an SVG `opacity` attribute and never
+through a CSS transition. A stylesheet rule outranks a presentation
+attribute, so an attribute is silently ignored wherever a rule sets the same
+property; and a transition on an element that is redrawn sixty times a second
+restarts before it travels anywhere, holding the value near where it started.
+Both faults hid for a long time — the diode's blocking bar stayed struck
+through while the device conducted, and every flow arrowhead rendered at full
+strength so the end-fades that stop arrows popping did nothing. Neither is
+visible in the code, which reads correctly in each place separately. Check it
+with `getComputedStyle(el).opacity` at several scrub positions.
 
 **Element keys.** Figures re-run their draw functions on every animation
 frame. `drawScope(prefix, fn)` gives each drawing surface its own key
@@ -279,8 +338,25 @@ own container at any window size, including a half-screen desktop window.
 
 ## Verifying a change
 
-The dev server plus a browser is the real test. Beyond that:
+`npm run check` runs every gate that needs no browser: typesetting, the
+registry, the cycle model, the capacitor model, the flow geometry, and the
+tests. Start there.
 
+The dev server plus a browser is still the real test — on port **5273**, not
+Vite's default; `PS_PORT` overrides it and `scripts/lib/env.mjs` is what the
+browser-driven scripts read. Beyond that:
+
+- `npm test` — the numeric harness. `test/golden/design.json` pins all 32
+  design functions at four operating points each, to 1e-9 relative; a change
+  of one part in ten million fails. If a diff is intended, read it, then
+  regenerate with `node scripts/gen-golden.mjs` **in the same commit**.
+  Alongside it: the matrix kernel, the MNA compiler against hand-derived
+  state equations, and the simulator against the closed forms.
+- `node scripts/check-registry.mjs` — every topology has a schematic, a FLOW
+  entry, a family line, fields that exist, and a `design()` that runs at its
+  own defaults without printing a NaN, a blank or a negative watt. The
+  catalogue is assembled from parallel registries that cannot see each other,
+  and this is the only thing that looks across them.
 - `node scripts/check-tex.mjs` — every formula still typesets
 - `npm run build` — production build succeeds
 - `node scripts/sweep.mjs` — walks all 32 topologies with the dev server up
