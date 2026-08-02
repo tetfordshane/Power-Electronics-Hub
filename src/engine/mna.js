@@ -37,7 +37,7 @@ const resistOf = (b, on) => (on ? b.ron : b.roff);
    Returns the matrices plus the machinery to read any node voltage or branch
    current back out, because the animation needs volts on nodes and amps
    through devices — the two things the old model never had. */
-export function compile(branches, condIn) {
+export function compile(branches, condIn, lmap) {
   /* Take a copy of the conduction state.
 
      The probe builders below are lazy — a node voltage or a branch current
@@ -87,6 +87,12 @@ export function compile(branches, condIn) {
     if (a >= 0) M[a][col] -= c;
     if (b >= 0) M[b][col] += c;
   };
+
+  /* An inductor's value can be overridden per configuration, which is how a
+     saturating core is modelled: the solver buckets the winding current and
+     asks for the incremental inductance at that level, so each bucket is its
+     own linear circuit. Absent an override this is simply b.value. */
+  const Lval = (b) => (lmap && lmap[b.id] !== undefined ? lmap[b.id] : b.value);
 
   let xi = 0, ui = 0, ei = 0;
   const stateOf = new Map(), extraOf = new Map(), inputOf = new Map();
@@ -195,7 +201,7 @@ export function compile(branches, condIn) {
     const a = row(b.n[0]), c = row(b.n[1]);
     if (s.kind === "L") {
       /* di/dt = (v_a − v_b)/L */
-      const gain = 1 / b.value;
+      const gain = 1 / Lval(b);
       for (let j = 0; j < nx; j++) {
         A[i][j] = gain * ((a >= 0 ? Zx[j][a] : 0) - (c >= 0 ? Zx[j][c] : 0));
       }

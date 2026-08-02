@@ -92,15 +92,40 @@ The current pane's axis freezes across a settle (`spanI`). Letting it scale
 per period grows the axis underneath a climbing current, and the waveform
 appears not to move.
 
-### Known gap: the simulated inductor is linear
+### Saturating cores
 
-`lsag` — inductance roll-off at peak current — bends the ramp in `cycle.js`
-and does nothing on the five simulated topologies, because their netlists
-carry a constant inductance. `wave-cases.mjs` shows it: identical peak and
-valley at 0 %, 20 % and 60 % roll-off, while the capacitor pane beside them
-still responds, since that model is still the closed-form one. Fixing it
-means a piecewise-linear inductor — bucket L(i) and let the configuration key
-carry the bucket, the same way it carries the conduction state.
+`lsag` bends the simulated ramp too. Same model as `cycle.js` —
+`L(i) = L₀/(1 + κ(i/I_ref)²)`, `κ = s/(1−s)` — so the two cannot describe
+different magnetics. A netlist opts in with `sat` and `iref` on an `L`.
+
+A current-dependent inductance is not linear, and every configuration above
+`solver.js` assumes linearity, so it is made piecewise linear: the winding
+current is bucketed, each bucket takes the inductance at its own level, and
+the configuration key carries the bucket alongside the conduction state.
+Crossing a boundary is then just another configuration change. Buckets are
+spaced by √i so they crowd where L is moving fastest, and they are compiled
+lazily — a fine grid costs only the handful a run actually visits.
+
+**The two models disagree here, deliberately.** `cycle.js` bends a ramp whose
+endpoints are already fixed: it preserves ΔI exactly and restores the mean,
+showing the shape against a ripple the design equations chose. The simulator
+has no endpoints to preserve — it is handed a falling inductance and
+integrates what follows, so the ripple grows. That is what really happens: a
+part quoted at "−20 % at 12 A" ripples more than its nameplate inductance
+predicts, and the ideal equation cannot tell you so. `sim-saturation.test.mjs`
+asserts the disagreement, so it stays a known difference rather than getting
+quietly "fixed" by making the simulator preserve a ripple it has no reason to.
+
+Two consequences worth knowing. Piecewise linearity puts a floor under the
+convergence residual — the fixed point can sit astride a bucket boundary —
+so `converge` stops when the residual stops improving rather than grinding
+out its whole budget, and the adapter accepts up to 1e-4. And past about
+70 % roll-off some converters have no clean periodic solution at fixed duty;
+those fall back to the closed form, which the missing "simulated" badge says.
+
+A test that isolates one effect must turn the others off: `lsag: 0` belongs
+in any comparison against a constant-inductance formula, next to `vf: 0` and
+the rest.
 
 ## Conventions worth knowing before editing
 

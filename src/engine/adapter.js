@@ -182,7 +182,11 @@ export function engineFor(topo, spec, res) {
      form that did. Falling back silently is right here: the reader is owed a
      figure, and the honest signal is the absent "simulated" mark rather than
      an empty pane. */
-  if (!run || !(run.residual < 1e-5)) {
+  /* 1e-4 is a hundredth of a per cent of change from one period to the next,
+     which is far below anything a drawn waveform can express. The looser
+     bound exists because a saturating winding is piecewise linear, so its
+     residual bottoms out at the width of a bucket rather than at zero. */
+  if (!run || !(run.residual < 1e-4)) {
     return { kind: "closed", cycle: closed, run: null };
   }
   return { kind: "sim", cycle: () => simView(closed(), run), run };

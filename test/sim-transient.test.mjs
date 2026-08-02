@@ -23,9 +23,9 @@ const rel = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-9);
    is deliberately NOT recomputed: a real inductor does not change value
    because the load did, and design() re-sizing it would describe a different
    converter rather than a disturbed one. */
-function loadStep(id, k) {
+function loadStep(id, k, over = {}) {
   const topo = topoOf(id);
-  const spec = defaultSpec(topo);
+  const spec = defaultSpec(topo, over);
   const res = topo.design(spec);
   const before = runSteady(topo, spec, res);
   const stepped = { ...spec, iout: spec.iout * k };
@@ -116,7 +116,10 @@ test("buck — a load step is the output filter's own ringing, at its own freque
      natural frequency, ω_0√(1−ζ²) with ω_0 = 1/√(LC) and ζ set by the load.
      Nothing in the engine was told about any of this; it comes out of two
      energy-storage elements and a resistor. */
-  const { topo, spec, res, before, tr } = loadStep("buck", 2);
+  /* Linear core: the frequency being predicted below is √(LC) with one L,
+     and a winding whose inductance falls with current rings faster than its
+     nameplate value says. That is a real effect and a different test. */
+  const { topo, spec, res, before, tr } = loadStep("buck", 2, { lsag: 0 });
   const v = tr.env.map((e) => e.vMean);
   const end = v[v.length - 1];
   const dip = Math.min(...v);

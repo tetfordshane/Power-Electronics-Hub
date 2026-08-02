@@ -133,11 +133,23 @@ export function converge(S, x0, u, mod, {
   }
 
   let shots = 0;
+  /* A piecewise-linear element puts a floor under the residual.
+
+     A saturating winding is modelled as a stack of linear buckets, so the
+     period map has a small step at every boundary and the fixed point can
+     sit astride one — the iteration then oscillates between two states a
+     bucket apart and the residual stops falling. That is not a failure to
+     converge, it is convergence to the resolution the model has, and
+     grinding out four thousand periods to discover it wastes a second and a
+     half. Stop when it stops improving, and report the best state found. */
+  let best = x, bestRes = Infinity, stale = 0;
   for (let outer = 0; outer < maxPeriods; outer++) {
     const base = x;
     const mapped = step(base);
     noteScale(mapped.x);
     residual = resid(mapped.x, base);
+    if (residual < bestRes * 0.9) { bestRes = residual; best = mapped.x; stale = 0; }
+    else if (++stale > 40) { x = best; residual = bestRes; break; }
     if (residual < tol) { x = mapped.x; cond = mapped.cond; break; }
 
     let advanced = false;

@@ -61,6 +61,14 @@ export function validate(branches) {
       case "V": case "I": case "R": need(b, "value"); break;
       case "L": case "C":
         if (!(need(b, "value") > 0)) throw new Error(`branch ${b.id}: value must be positive`);
+        /* A saturating winding needs both halves of the claim: how much
+           inductance is lost, and the current it is lost at. One without the
+           other describes nothing. */
+        if (b.sat !== undefined && b.sat !== 0) {
+          if (b.type !== "L") throw new Error(`branch ${b.id}: only an inductor saturates`);
+          if (!(b.sat > 0 && b.sat < 1)) throw new Error(`branch ${b.id}: sat must be between 0 and 1`);
+          if (!(b.iref > 0)) throw new Error(`branch ${b.id}: sat needs a reference current`);
+        }
         break;
       case "SW": case "D":
         if (!(b.ron > 0)) throw new Error(`branch ${b.id}: needs a positive ron`);

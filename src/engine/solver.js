@@ -37,7 +37,7 @@ const KEY = (cond, ids) => ids.map((id) => (cond[id] ? "1" : "0")).join("");
    clock it is holding. Getting this wrong does not fail loudly: a step of
    1/512 is read as a fraction of a second, the inductor charges for two
    milliseconds, and the converter appears to explode. */
-export function makeSolver(branches, { maxConfigs = 512, period = 1 } = {}) {
+export function makeSolver(branches, { maxConfigs = 8192, period = 1 } = {}) {
   const net = expand(validate(branches));
   const scaleTime = (m) => {
     if (period === 1) return m;
@@ -52,13 +52,66 @@ export function makeSolver(branches, { maxConfigs = 512, period = 1 } = {}) {
   const ids = switches.map((b) => b.id);
   const byId = new Map(net.map((b) => [b.id, b]));
 
+  /* Where each energy-storage branch sits in the state vector, in the same
+     order indexOf() assigns — needed before any configuration exists, to
+     read a winding's own current out of a state. */
+  const stateIndexOf = new Map();
+  {
+    let i = 0;
+    for (const b of net) if (b.type === "L" || b.type === "C") stateIndexOf.set(b.id, i++);
+  }
+
+  /* Saturating cores.
+
+     A real inductor loses inductance as its current rises, and a datasheet
+     quotes that as a roll-off at the peak. The model is the one cycle.js
+     already uses, so the two cannot describe different magnetics:
+
+         L(i) = L₀ / (1 + κ(i/I_ref)²),   κ = s/(1−s)
+
+     which gives L(0) = L₀ and L(I_ref) = (1−s)·L₀ exactly.
+
+     Everything above this file assumes each configuration is linear, and a
+     current-dependent inductance is not. So it is made piecewise linear: the
+     winding current is bucketed, each bucket takes the inductance at its own
+     level, and the pair (conduction state, bucket) is what identifies a
+     configuration. Crossing a bucket boundary is then just another
+     configuration change, handled by the machinery already here.
+
+     Buckets are spaced by the square root of current, so they are close
+     together where L is moving fastest — near the peak — rather than evenly
+     spread across a range whose lower half barely bends at all. */
+  const satL = net.filter((b) => b.type === "L" && b.sat > 0 && b.iref > 0);
+  const NB = 600;
+  const bucketOf = (b, i) => {
+    const t = Math.min(Math.abs(i) / b.iref, 1.6) / 1.6;
+    return Math.round(Math.sqrt(t) * NB);
+  };
+  const bucketL = (b, k) => {
+    const t = ((k / NB) ** 2) * 1.6;
+    const kap = b.sat / (1 - b.sat);
+    return b.value / (1 + kap * t * t);
+  };
+
   const cache = new Map();
-  const configFor = (cond) => {
-    const k = KEY(cond, ids);
+  const configFor = (cond, x) => {
+    let k = KEY(cond, ids);
+    let lmap;
+    if (satL.length && x) {
+      lmap = {};
+      let tag = "|";
+      for (const b of satL) {
+        const j = stateIndexOf.get(b.id);
+        const bk = bucketOf(b, j === undefined ? 0 : x[j]);
+        lmap[b.id] = bucketL(b, bk);
+        tag += bk + ".";
+      }
+      k += tag;
+    }
     let c = cache.get(k);
     if (!c) {
       if (cache.size > maxConfigs) cache.clear();
-      const m = scaleTime(compile(net, cond));
+      const m = scaleTime(compile(net, cond, lmap));
       if (!m) throw new Error("solver: this conduction state has no solution");
       c = { m, steps: new Map(), probes: new Map() };
       cache.set(k, c);
@@ -103,7 +156,7 @@ export function makeSolver(branches, { maxConfigs = 512, period = 1 } = {}) {
   function settle(cond, x, u) {
     const c0 = { ...cond };
     for (let iter = 0; iter < 12; iter++) {
-      const c = configFor(c0);
+      const c = configFor(c0, x);
       let changed = false;
       for (const d of diodes) {
         if (c0[d.id]) {
@@ -139,7 +192,7 @@ export function makeSolver(branches, { maxConfigs = 512, period = 1 } = {}) {
     let t = 0, xs = x, cs = settle(cond, xs, u);
     let guard = 0;
     while (t < h - 1e-18 && guard++ < 16) {
-      const c = configFor(cs);
+      const c = configFor(cs, xs);
       const rest = h - t;
       const { Phi, Gam } = stepFor(c, rest);
       const xn = matvec(Phi, xs);
@@ -188,7 +241,7 @@ export function makeSolver(branches, { maxConfigs = 512, period = 1 } = {}) {
     configFor,
     /* Read anything, at any state, under a given conduction state. */
     read(kind, id, cond, x, u) {
-      return readAt(probe(configFor(cond), kind, id), x, u);
+      return readAt(probe(configFor(cond, x), kind, id), x, u);
     },
     branch: (id) => byId.get(id),
   };

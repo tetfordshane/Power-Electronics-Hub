@@ -31,6 +31,26 @@ const loadR = (spec, res) => {
 const vinOf = (spec) => (spec.vinNom !== undefined ? spec.vinNom
   : spec.vinMin !== undefined ? spec.vinMin : spec.vout);
 
+/* How a winding is specified to saturate: the roll-off a datasheet quotes,
+   and the current it is quoted at. cycle.js clamps the roll-off to 0.8, so
+   the same ceiling holds here — past that the model stops being a bend in
+   the ramp and starts being a different component.
+
+   The reference current is the design's own peak, which is the current the
+   datasheet figure would have been read at. */
+const satOf = (spec, ipk) => (
+  spec.lsag > 0 && ipk > 0
+    ? { sat: Math.min(spec.lsag / 100, 0.8), iref: ipk }
+    : {}
+);
+
+/* The peak the winding actually reaches, from the design's own ripple. */
+const peakOf = (res) => {
+  const w = res && res.wave;
+  if (!w || !Number.isFinite(w.iavg) || !Number.isFinite(w.dI)) return 0;
+  return Math.abs(w.iavg) + Math.abs(w.dI) / 2;
+};
+
 const common = (spec) => ({
   ron: Math.max((spec.rds || 8) * 1e-3, 1e-6),
   ronS: Math.max((spec.rdsS !== undefined ? spec.rdsS : spec.rds || 8) * 1e-3, 1e-6),
@@ -61,7 +81,7 @@ export const buck = (spec, res) => {
          mechanism behind zero-voltage switching, so the model needs it to be
          able to show ZVS at all. */
       { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
-      { id: "L1", type: "L", n: ["sw", "out"], value: L, esr: c.dcr },
+      { id: "L1", type: "L", n: ["sw", "out"], value: L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "0"], value: C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -114,7 +134,7 @@ export const syncbuck = (spec, res) => {
          mechanism behind zero-voltage switching, so the model needs it to be
          able to show ZVS at all. */
       { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(2 * c.coss, 1e-12) },
-      { id: "L1", type: "L", n: ["sw", "out"], value: res.sim.L, esr: c.dcr },
+      { id: "L1", type: "L", n: ["sw", "out"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -140,7 +160,7 @@ export const boost = (spec, res) => {
   return {
     branches: [
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
-      { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr },
+      { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
       { id: "D1", type: "D", n: ["sw", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
@@ -167,7 +187,7 @@ export const buckboost = (spec, res) => {
     branches: [
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
-      { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr },
+      { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       /* output is negative, so the rectifier points from the output node
          back into the switch node */
       { id: "D1", type: "D", n: ["out", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
@@ -207,7 +227,7 @@ export const flyback = (spec, res) => {
          active clamp, and `vclamp` is already an input waiting for one. The
          leakage spike and its ringing arrive together with that clamp, as
          their own piece of work — drawing the ring is the point of it. */
-      { id: "Lm", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr },
+      { id: "Lm", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       /* The secondary is anti-phase — n2/n3 swapped — and that is the whole
          difference between a flyback and a forward converter. In phase, the
          rectifier conducts while the switch is on and the transformer

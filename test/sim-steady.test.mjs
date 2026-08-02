@@ -28,7 +28,12 @@ const topoOf = (id) => TOPOS.find((t) => t.id === id);
 
 /* Parasitics off. Only the fields a topology actually has are moved, so a
    corner that silently failed to apply cannot pass as a clean result. */
-const IDEAL = { vf: 0, rds: 0.001, dcr: 0, esr: 0, coss: 1, qrr: 0, td: 0, eff: 1 };
+/* `lsag` belongs here with the rest of them: a core that softens under load
+   is a departure from the ideal inductor the design equations assume, and
+   the simulator honours it. Left at its default of 20 % these comparisons
+   fail for a good reason — the real ripple is wider than the nameplate
+   inductance predicts, which is the subject of sim-saturation.test.mjs. */
+const IDEAL = { vf: 0, rds: 0.001, dcr: 0, esr: 0, coss: 1, qrr: 0, td: 0, eff: 1, lsag: 0 };
 const idealSpec = (topo) => {
   const over = {};
   for (const [k, v] of Object.entries(IDEAL)) if ((topo.fields || []).includes(k)) over[k] = v;
@@ -138,7 +143,10 @@ test("buck — the diode drop widens the ripple, exactly as much as it should", 
      drop, so the real ripple is larger by (V_out+V_f)/V_out — a difference
      the ideal equation cannot express and the simulation gets for free. */
   const topo = topoOf("buck");
-  const spec = defaultSpec(topo);
+  /* One effect at a time: the core is held linear so the only thing widening
+     this ripple is the diode. With the default roll-off in play the answer
+     is wider still, for a different and equally real reason. */
+  const spec = defaultSpec(topo, { lsag: 0 });
   const res = topo.design(spec);
   const r = runSteady(topo, spec, res);
   const Vo = r.views.vout.qTot, Vf = spec.vf, D = res.wave.D;
