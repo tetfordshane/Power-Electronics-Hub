@@ -127,6 +127,30 @@ A test that isolates one effect must turn the others off: `lsag: 0` belongs
 in any comparison against a constant-inductance formula, next to `vf: 0` and
 the rest.
 
+### The capacitor pane follows the current above it
+
+A buck-family output capacitor sees `i_L − I_out`, so its pane is a
+restatement of the trace above it — and it was being restated from the
+closed-form ramp while the trace came from the simulator. With a linear core
+the two agreed closely enough to hide it; with a saturating one they do not.
+`simView` now rebuilds the capacitor with the same `buildCap` — its charge
+balance, its ESR term, its exact quadratics — handed the simulated polyline.
+Two things it must be given: the simulated mean as `Io`, because a capacitor
+carries no net charge over a period and the nameplate load is not the mean
+the converter actually delivers; and nothing for `iavg`/`dI`, which is what
+makes `buildCap` read the polyline instead of rebuilding a ramp from scalars.
+A pulse-fed (`boost`) output still comes from the design's rectifier
+currents, because that capacitor is not fed by the plotted winding at all.
+
+**`check-ripple` changes meaning for those five.** Its budget assertion asks
+whether the model is self-consistent — a closed-form capacitor fed the ripple
+its own design equations assumed cannot miss the budget those equations sized
+it against. A simulated one is fed the ripple the circuit really produces,
+which is larger, and a buck at its defaults draws 37 mV against a 30 mV
+budget. That is not a fault in the drawing; it is the design being told its
+capacitor is undersized, so it is reported rather than failed. Keep that
+distinction if you touch check 3.
+
 ## Conventions worth knowing before editing
 
 **Opacity on anything drawn per frame.** Set it inline

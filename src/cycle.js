@@ -155,7 +155,7 @@ export const isDCM = (wv, iShape) => {
    one pulse per switching period — a centre-tapped rectifier and a half
    bridge both ripple at 2·f_sw, which is exactly why their filters are
    smaller than the switch timing alone suggests. */
-function buildCap(pts, Dsub, cap, nPulse) {
+export function buildCap(pts, Dsub, cap, nPulse) {
   const C = num(cap.C, NaN), Io = num(cap.Io, 0);
   const T = 1 / num(cap.fsw, NaN);
   if (!Number.isFinite(C) || C <= 0 || !Number.isFinite(T)) return null;

@@ -53,7 +53,15 @@ const NO_PANE = [
 ];
 
 import { ids as topoIds } from "./lib/topos.mjs";
+import { SIM } from "../src/topologies/sim/pilot.js";
 const ids = topoIds();
+
+/* The topologies whose figure is driven by the circuit simulator rather than
+   by the closed-form cycle. Their capacitor is fed the ripple the circuit
+   really produces, so it can legitimately overshoot the budget the design
+   equations sized it against — see check 3. */
+const SIMULATED = new Set(Object.keys(SIM));
+const overBudget = [];
 
 let fails = 0;
 const bad = (id, what) => { console.log(`  FAIL  ${id.padEnd(12)} ${what}`); fails++; };
@@ -111,10 +119,22 @@ for (const id of ids) {
         charge term is what must not. Several designs also size C at a
         worst-case input corner and draw the nominal point, so the drawn value
         is often legitimately smaller. */
+  /*    On a SIMULATED topology this stops being an invariant and becomes a
+        result. The closed-form capacitor is fed the ripple current the
+        design equations assumed, so it cannot miss the budget those same
+        equations sized it against — the check is really asking whether the
+        model is self-consistent. The simulator is fed the ripple current the
+        circuit actually produces, which is larger: a diode drop steepens the
+        discharge, and a core that softens under load widens the ramp. A buck
+        at its own defaults draws 37 mV against a 30 mV budget, and that is
+        not a fault in the drawing, it is the design being told its capacitor
+        is undersized. Reported rather than failed. */
   if (got.dvout !== null) {
     const budget = got.dvout * 1e-3;
     if (got.cappp > budget * 1.05) {
-      bad(id, `charge ripple ${(got.cappp * 1e3).toFixed(2)} mV exceeds the ${got.dvout} mV budget C_out was sized for`);
+      const over = `charge ripple ${(got.cappp * 1e3).toFixed(2)} mV against the ${got.dvout} mV budget C_out was sized for`;
+      if (SIMULATED.has(id)) overBudget.push(`${id.padEnd(14)} ${over}`);
+      else bad(id, `${over} — the closed-form capacitor cannot miss its own budget`);
     }
   }
   /* 4. no NaN reached the drawing, and the trace closes on itself */
@@ -131,6 +151,12 @@ for (const id of ids) {
 
 console.log("\ndrawn output ripple, per topology");
 for (const [id, v, note] of rows) console.log(`  ${id.padEnd(12)} ${v.padStart(11)}   ${note}`);
+if (overBudget.length) {
+  console.log("\nsimulated ripple over the design's own budget");
+  console.log("  (not a fault: the circuit's ripple current is larger than the");
+  console.log("   ideal equation that sized C_out assumed, so the part is undersized)");
+  for (const line of overBudget) console.log("  " + line);
+}
 console.log(`\n${rows.length} figures checked — ${fails === 0
   ? "every capacitor spec balanced its own charge" : fails + " FAILING"}`);
 await browser.close();

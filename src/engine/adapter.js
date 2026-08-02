@@ -14,7 +14,7 @@
    (check-cap, check-ripple) and no reason to be disturbed yet. Where the two
    describe the same thing they must not disagree, so both are taken from one
    place: the simulated current, or neither. */
-import { buildCycle, lookups } from "../cycle.js";
+import { buildCycle, buildCap, lookups } from "../cycle.js";
 import { FLOW } from "../topologies/index.js";
 import { runSteady, hasSim } from "./run.js";
 
@@ -132,8 +132,43 @@ export function simView(base, run) {
   const flow = fl ? viewFrom(run.u_grid, fl) : iL;
   const flowPk = Math.max(Math.abs(flow.hi), Math.abs(flow.lo));
 
+  /* The capacitor, rebuilt from the current that is actually drawn.
+
+     A buck-family output capacitor sees i_L − I_out, so its pane is a
+     restatement of the trace above it — and it was being restated from the
+     closed-form ramp while the trace came from the simulator. With a linear
+     core the two agreed closely enough that nothing showed; with a
+     saturating one they do not, and the figure would have carried a bent
+     inductor current above a capacitor ripple computed from a straight one.
+
+     The model is unchanged. It is the same buildCap, with its charge
+     balance, its ESR term and its exact quadratics — handed the simulated
+     polyline instead of the ideal one. A pulse-fed output still comes from
+     the design's own rectifier currents, because the capacitor there is not
+     fed by the plotted winding at all. */
+  let cap = base.cap;
+  if (cap && cap.kind !== "boost" && run.plot === "iL") {
+    /* The built capacitor carries the same field names its own spec used —
+       C, Io, f_sw, ESR, phases, sub-intervals — and deliberately does not
+       carry iavg/dI, which is what makes buildCap read the polyline it is
+       given rather than reconstructing a ramp from scalars. */
+    try {
+      /* The load current has to be the one the winding actually delivers,
+         not the one on the nameplate. A capacitor in steady state carries no
+         net charge over a period, so i_C = i_L − I_out only balances if
+         I_out is the mean of i_L — and the simulated mean sits a little
+         below the specified load, because the converter has losses. Handing
+         over the nameplate figure instead leaves a DC offset in the
+         capacitor current, which buildCap dutifully corrects and confesses
+         as a charge error. */
+      const rebuilt = buildCap(iL.pts, base.D, { ...cap, Io: iL.L.qTot }, cap.pulses || 1);
+      if (rebuilt) cap = rebuilt;
+    } catch { /* keep the closed-form capacitor rather than losing the pane */ }
+  }
+
   return {
     ...base,
+    cap,
     /* the plotted current */
     pts: iL.pts,
     iAt: iL.L.at,
