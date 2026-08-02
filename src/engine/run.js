@@ -1,0 +1,113 @@
+/* Put the pieces together: a topology and an operating point in, a converged
+   switching period out.
+
+   This is the seam the rest of the app sees. Everything below it — the
+   netlist, the MNA compilation, the event-located stepping, the convergence
+   loop — is machinery; what comes back is one period, sampled, in the same
+   shape the closed-form model has always produced. */
+import { makeSolver, converge, sample, traceView } from "./limitcycle.js";
+import { pwm1, pwmComplementary, passive, combine } from "./modulator.js";
+import { SIM } from "../topologies/sim/pilot.js";
+
+/* Build the gate schedule a circuit asked for, in period-normalised time. */
+function modulatorFor(g, D, period) {
+  if (!g || g.kind === "passive") return passive;
+  if (g.kind === "pwm1") return pwm1(g.sw, D);
+  if (g.kind === "complementary") return pwmComplementary(g.hi, g.lo, D, (g.td || 0) / period);
+  if (g.kind === "combine") return combine(...g.parts.map((p) => modulatorFor(p, D, period)));
+  throw new Error("unknown gate schedule " + g.kind);
+}
+
+export function hasSim(topo) {
+  return !!SIM[topo.id];
+}
+
+/* Place a circuit's seed values into the state vector by branch name, so a
+   netlist never has to know what order the states ended up in. */
+function seedState(S, seed) {
+  const x = new Float64Array(S.nx);
+  if (!seed) return x;
+  for (const [id, v] of Object.entries(seed)) {
+    const k = S.stateIndex.get(id);
+    if (k !== undefined && Number.isFinite(v)) x[k] = v;
+  }
+  return x;
+}
+
+/* Run a topology to steady state.
+
+   `from` optionally seeds the state vector, which is what makes a knob
+   change a perturbation of a running converter rather than a fresh start. */
+export function runSteady(topo, spec, res, opts = {}) {
+  const make = SIM[topo.id];
+  if (!make || !res || res.infeasible || !res.sim) return null;
+
+  const circuit = make(spec, res);
+  const period = 1 / (spec.fsw * 1e3);
+  const S = makeSolver(circuit.branches, { period });
+  const D = res.wave && res.wave.D !== undefined ? res.wave.D : 0.5;
+  const mod = modulatorFor(circuit.gates, D, period);
+  const u = S.inputs({});
+
+  /* Where to start integrating from.
+
+     A converter started from a cold zero state has to charge its output
+     capacitor through its own control loop before it reaches the operating
+     point, and for a boost that is thousands of switching periods — real
+     physics, and exactly what the transient view is for, but a waste of time
+     when all that is wanted is the steady cycle. Seeding the states at the
+     design's own operating point lands within a few periods of the answer,
+     and convergence still decides what the answer is. */
+  const x0 = opts.from && opts.from.length === S.nx
+    ? opts.from
+    : seedState(S, circuit.seed);
+  const conv = converge(S, x0, u, mod, {
+    nSteps: opts.nSteps || 512,
+    maxPeriods: opts.maxPeriods || 4000,
+    tol: opts.tol || 1e-7,
+  });
+
+  const sam = sample(S, conv.x, u, mod, { nSteps: opts.nSteps || 512, probes: circuit.probes });
+
+  const views = {};
+  for (const name of Object.keys(circuit.probes)) {
+    views[name] = traceView(sam.u, sam.traces[name]);
+  }
+  /* How much of the period no device conducts at all.
+
+     This is discontinuous conduction, stated the way the solver actually
+     knows it: the rectifier's current reached zero, it stopped conducting,
+     and the next switch turn-on has not arrived yet. Measuring it from the
+     current waveform instead — looking for a flat stretch at zero — gets the
+     answer wrong for a good reason, because a real converter in DCM does not
+     sit flat. Once the rectifier opens, the inductor is left facing the
+     switch node's own capacitance and the two ring together. That ringing is
+     the most recognisable thing about a discontinuous waveform, and a test
+     that expects a straight line would call it continuous conduction. */
+  let idle = 0;
+  for (let k = 1; k < sam.u.length; k++) {
+    const c = sam.condAt[k];
+    let any = false;
+    for (const id of S.ids) if (c[id]) { any = true; break; }
+    if (!any) idle += sam.u[k] - sam.u[k - 1];
+  }
+
+  return {
+    solver: S, circuit, mod, u, period, D,
+    x: conv.x, periods: conv.periods, residual: conv.residual,
+    u_grid: sam.u, events: sam.events, traces: sam.traces, views,
+    condAt: sam.condAt, idle,
+    plot: circuit.plot,
+  };
+}
+
+/* Mean of a trace over the period, by the same trapezoidal rule the charge
+   integral uses — so "the average current" means one thing here. */
+export function meanOf(view) {
+  return view.qTot;
+}
+
+/* Peak-to-peak, which for an inductor current is ΔI. */
+export function rippleOf(view) {
+  return view.iMax - view.iMin;
+}

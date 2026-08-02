@@ -53,6 +53,10 @@ const TB = [
     const Pdo = s.vf * Io;
     const Pesr = Ico * Ico * s.esr * 1e-3;
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: Lp, C: Co, n: Nt },
       hi: [["turns ratio N_p:N_s", f2(Nt) + " : 1"], ["primary L_p", eng(Lp, "H")], ["V_DS stress", eng(Vds, "V")]],
       loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)"],
         ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],

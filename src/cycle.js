@@ -83,7 +83,7 @@ export const cycleKey = (wv, iShape) => {
 
    Segments of zero width are the vertical edges; they are skipped when
    scanning, so a lookup at an edge returns the value arriving at it. */
-const lookups = (P) => {
+export const lookups = (P) => {
   const seg = (t) => {
     for (let k = 0; k < P.length - 1; k++) {
       if (P[k + 1].u <= P[k].u) continue;

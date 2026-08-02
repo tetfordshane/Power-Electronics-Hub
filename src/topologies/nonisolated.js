@@ -49,6 +49,10 @@ const TA = [
     const Pt = Pc + Psw + Prr + Pd + Pl, eta = Vo * Io / (Vo * Io + Pt);
     const fLC = 1 / (2 * Math.PI * Math.sqrt(L * Co));
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["output cap", eng(Co, "F")]],
       loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot"],
         ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
@@ -148,6 +152,10 @@ const TA = [
     const Pl = ILr * ILr * s.dcr * 1e-3;
     const Pt = Pc + Pls + Psw + Pdt + Pg + Pl, eta = Vo * Io / (Vo * Io + Pt);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
       loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
         ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"],
@@ -326,6 +334,10 @@ const TA = [
     const Pt = Pc + Psw + Prr + Pd + Pl, eta = Vo * Io / (Vo * Io + Pt);
     const Rld = Vo / Io, frhp = (1 - Dx) * (1 - Dx) * Rld / (2 * Math.PI * L);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["RHP zero", eng(frhp, "Hz")]],
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot"],
         ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_out²·f_sw"],
@@ -415,6 +427,10 @@ const TA = [
     const Pt = Pc + Psw + Pd + Pl;
     const Rl = Vo / Io, frhp = (1 - Dx) * (1 - Dx) * Rl / (2 * Math.PI * Dx * L);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["device stress", eng(Vst, "V")]],
       loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
         ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
