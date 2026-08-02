@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { eng, f2, clamp } from "../format.js";
 import { Mx, Mixed, Sub } from "../tex.jsx";
 import { buildCycle, cycleKey } from "../cycle.js";
+import { engineFor, engineKey } from "../engine/adapter.js";
 import { polySegs, polyPoints, arrowsAt, coilSplice, coilsOnSegment,
   closeLoop, pointInLoop, splitByLoop } from "../flowgeo.js";
 import { SCH } from "../schematic/sch.jsx";
@@ -68,14 +69,25 @@ function FlowCard({ topo, res, spec }) {
     ? { bare: true, iShape: F.iShape, D: F.bareD || 0.5, ilabel: F.ilabel || "i" }
     : null;
 
-  /* The same cycle the waveform pane draws — not a second implementation of
-     it. The flow used to run its own 240-point quadrature over its own idea
-     of the current shape, which is how the dashes came to keep flowing
-     through a flyback's off-time, when no primary current exists. */
-  const M = useMemo(
-    () => (F ? buildCycle(wv, F.iShape) : null),
-    [F, cycleKey(wv, F && F.iShape)]
+  /* The cycle every surface in this card reads — not a second implementation
+     of it. The flow used to run its own 240-point quadrature over its own
+     idea of the current shape, which is how the dashes came to keep flowing
+     through a flyback's off-time, when no primary current exists.
+
+     Where a topology has a circuit, this is a simulated switching period —
+     converged from the netlist, with the conduction pattern worked out by
+     the solver rather than authored. Where it does not, it is exactly the
+     closed-form cycle it always was. Both answer the same questions, so
+     nothing below here needs to know which it got.
+
+     Keyed on the operating point, not on the wave object, whose identity
+     changes on every render — running a converter to steady state sixty
+     times a second would be a poor use of the frame. */
+  const engine = useMemo(
+    () => (F ? engineFor(topo, spec, res) : null),
+    [F, topo.id, engineKey(topo, spec), cycleKey(wv, F && F.iShape)]
   );
+  const M = useMemo(() => (engine ? engine.cycle() : null), [engine]);
 
   if (!F || !M) return null;
   const D = M.D;
@@ -472,7 +484,23 @@ function FlowCard({ topo, res, spec }) {
         How it works · current path and inductor polarity, at the real rate
       </span>
       {FAMILY[topo.id] ? (
-        <p className="fam">This is <Sub t={FAMILY[topo.id]} /></p>
+        <p className="fam">
+          This is <Sub t={FAMILY[topo.id]} />
+          {/* Which model drew this. A reader is owed the difference between a
+              waveform the equations imply and one a circuit produced, and
+              the figures that are simulated look different for reasons —
+              a diode drop steepening the discharge, a ring after the
+              rectifier opens — that are only meaningful if you know they
+              were not drawn on purpose. */}
+          {engine && engine.kind === "sim" ? (
+            <span className="simmark" title={
+              `Simulated: the circuit was solved and run to steady state — `
+              + `${M.sim.periods} switching periods, residual `
+              + `${M.sim.residual.toExponential(1)}. Conduction is worked out `
+              + `from the circuit, not scripted.`
+            }>simulated</span>
+          ) : null}
+        </p>
       ) : null}
       <PlayBar
         play={play} onPlay={() => setPlay(!play)}
@@ -697,8 +725,11 @@ function FlowCard({ topo, res, spec }) {
       </p>
       {wv || bare ? (
         <div style={{ marginTop: 12 }}>
-          <Wave {...(wv || bare)} band={band} playhead={p} flowOffset={flowOff} fadeEdges={play}
-            period={period} />
+          {/* The same cycle the schematic above is animating — handed over
+              rather than rebuilt, so the trace and the dashes cannot end up
+              describing different converters. */}
+          <Wave {...(wv || bare)} model={wv ? M : null} band={band} playhead={p}
+            flowOffset={flowOff} fadeEdges={play} period={period} />
         </div>
       ) : null}
     </div>

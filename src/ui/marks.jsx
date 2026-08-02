@@ -62,9 +62,19 @@ const Swap = ({ items, active, className }) => (
   </span>
 );
 
+/* CARROW_BASE is the opacity these used to carry in the stylesheet, folded
+   in here because the per-arrow fade has to be applied inline.
+
+   The fade is what makes an arrow arrive and leave: arrowsAt() rolls it off
+   over the last stretch of a path so a mark never appears at a visible
+   opacity, which is the continuity rule the whole figure is measured
+   against. Written as an SVG attribute it lost to the stylesheet's flat
+   .95 and every arrow rendered at full strength, popping in and out at the
+   ends of every conducting path. */
+const CARROW_BASE = 0.95;
 const Chevron = (m, i, flip, cls) => (
   <path key={"cv" + i} className={"carrow" + (cls ? " " + cls : "")}
-    opacity={m.o === undefined ? 1 : m.o.toFixed(3)}
+    style={{ opacity: (m.o === undefined ? 1 : m.o) * CARROW_BASE }}
     d="M -4.5 -4.5 L 3 0 L -4.5 4.5"
     transform={`translate(${m.x.toFixed(1)},${m.y.toFixed(1)}) rotate(${(m.a + (flip ? 180 : 0)).toFixed(1)})`} />
 );
@@ -90,7 +100,22 @@ const DevMark = (x, y, label, on, rot) => {
       <g key={nk()} className={"devr" + (on ? " on" : "") + " di"}>
         <circle className="halo" cx={x} cy={y} r={r + 3} />
         <circle className="ring" cx={x} cy={y} r={r} />
-        <path className="bar" opacity={on ? 0 : 1}
+        {/* Inline, per frame, and not a CSS transition.
+
+            Two things had to be true for this bar to work and neither was.
+            An `opacity` presentation attribute loses to any stylesheet rule,
+            so the sheet's own .8 won every frame. Moving the state into a
+            rule keyed on `.on` fixed the cascade and still did not show,
+            because these marks are redrawn on every animation frame: a
+            0.2 s fade that restarts sixty times a second never travels
+            anywhere, and the bar stayed at its blocking value through the
+            entire conduction interval — a rectifier drawn as permanently
+            blocked while its own ring was lit and dashes ran through it.
+
+            An inline style outranks the sheet and needs no transition to
+            arrive. This is the same rule the rest of the figure already
+            follows: values that change per frame are computed per frame. */}
+        <path className="bar" style={{ opacity: on ? 0 : 0.8 }}
           d={`M ${x - 6.5} ${y - 6.5} L ${x + 6.5} ${y + 6.5}`} />
       </g>
     );

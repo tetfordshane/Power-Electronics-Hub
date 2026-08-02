@@ -304,7 +304,9 @@ export const CSS = `
   stroke-linecap:round; stroke-linejoin:round}
 .ps .capp{fill:none; stroke:var(--vi); stroke-linecap:round; stroke-linejoin:round;
   stroke-dasharray:5 11}
-.ps .capfl .carrow{stroke:var(--vi); stroke-width:1.8; opacity:.95}
+/* No opacity: each arrow carries its own, inline, so the fade at the ends
+   of a path survives. See CARROW_BASE in marks.jsx. */
+.ps .capfl .carrow{stroke:var(--vi); stroke-width:1.8}
 .ps .ird{display:inline-flex; align-items:center; gap:8px; margin-left:auto;
   font-family:var(--num); font-size:var(--t-small); color:var(--dim);
   font-variant-numeric:tabular-nums}
@@ -323,7 +325,10 @@ export const CSS = `
    the two can never be mistaken for the same widget in two colours.      */
 .ps .devr .halo{fill:none; stroke:none}
 .ps .devr .ring{fill:none; stroke:var(--ghost); stroke-width:1.3; opacity:.55}
-.ps .devr .bar{stroke:var(--rd); stroke-width:1.9; stroke-linecap:round; fill:none; opacity:.8}
+/* No opacity here: the bar's is set inline, per frame, in DevMark. Putting
+   one back would not override it, but it would look as though this is where
+   the state lives, and it is not. */
+.ps .devr .bar{stroke:var(--rd); stroke-width:1.9; stroke-linecap:round; fill:none}
 
 /* conducting: the ring closes into a bright loop with a soft halo */
 .ps .devr.on .ring{stroke:var(--gn); stroke-width:2; opacity:1}
@@ -335,7 +340,10 @@ export const CSS = `
 .ps .devr.di .ring{stroke-dasharray:3.2 3.2}
 .ps .devr.di.on .ring{stroke-dasharray:5 3.4; animation:psdring 1.1s linear infinite}
 @keyframes psdring{to{stroke-dashoffset:-16.8}}
-.ps .devr .bar, .ps .devr .ring, .ps .devr .halo{transition:opacity .2s ease, stroke .2s ease}
+/* The bar is not in this list. It is redrawn every frame, and a transition
+   on something redrawn every frame never completes — it just holds the
+   property near where it started. */
+.ps .devr .ring, .ps .devr .halo{transition:opacity .2s ease, stroke .2s ease}
 
 /* A switch gets no ring at all. The FET glyph is tall and left-heavy, so a
    circle centred on it slices through the channel, the gate plate and both
@@ -385,7 +393,7 @@ export const CSS = `
 /* direction of charge flow, carried along with it */
 .ps .carrow{fill:none; stroke:#0C1017; stroke-width:3.4; stroke-linecap:round;
   stroke-linejoin:round; paint-order:stroke}
-.ps .flowov .carrow{stroke:var(--gn); stroke-width:1.9; opacity:.95}
+.ps .flowov .carrow{stroke:var(--gn); stroke-width:1.9}
 
 /* ------------------------------------------------- live facts under a figure
    What the figure knows and the tables do not say out loud: the conduction
@@ -425,6 +433,15 @@ export const CSS = `
    so a reader landing on an unfamiliar page knows what they are looking at
    before the animation starts moving. */
 .ps .fam{margin:2px 0 12px; font-size:var(--t-small); color:var(--faint); line-height:1.5}
+/* Green, because it is a statement about current — the same reading the
+   flow dashes get. Deliberately quiet: it marks how the figure was made,
+   which matters once and then stops mattering. */
+.ps .simmark{
+  margin-left:8px; padding:1px 7px; border-radius:99px; cursor:help;
+  border:1px solid var(--gn-dim); color:var(--gn); background:#0D1D16;
+  font-family:var(--ui); font-size:var(--t-micro); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
+}
 
 /* The glossary under each topology. Two columns of term-and-definition, the
    term set in the number face so it reads as a label rather than as more

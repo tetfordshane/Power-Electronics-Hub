@@ -133,8 +133,18 @@ function Wave(props) {
      from the same closure that drives its animation. Without it this pane
      could only draw designs that publish a `wave` spec, which is why a third
      of the topologies had a moving figure and no waveform under it. */
-  const M = useMemo(() => buildCycle(props, props.iShape),
+  /* The cycle this pane plots.
+
+     A caller that has already resolved one hands it over; that is how the
+     animated card and this pane stay the same converter. FlowCard now
+     resolves a simulated cycle where a topology has a circuit, and building
+     a second one here from the spec would draw the ideal triangle underneath
+     a schematic animating the real current — the two disagreeing about the
+     same converter, which is the fault the shared cycle model exists to
+     prevent. Without a supplied model, nothing has changed. */
+  const own = useMemo(() => buildCycle(props, props.iShape),
     [cycleKey(props, props.iShape)]);
+  const M = props.model || own;
   const D = M.D, iavg = props.iavg;
   const x0 = PX0, x1 = PX1, per = (x1 - x0) / cycles;
   const C = M.cap;
