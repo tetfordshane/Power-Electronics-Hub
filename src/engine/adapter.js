@@ -203,6 +203,20 @@ export function simView(base, run) {
   };
 }
 
+/* One engine per operating point, shared by everyone who asks for it.
+
+   Running a converter to steady state costs tens of milliseconds — nothing
+   per knob turn, but the figure and the results panel both want the answer
+   and neither should pay for it twice. The key has to carry the COMPONENTS
+   as well as the inputs: a load stepped to 2× and a load edited to 2× arrive
+   with identical specs and completely different inductors, because editing
+   the load re-sizes the magnetics and stepping it does not. */
+const CACHE = new Map();
+const CACHE_MAX = 8;
+
+const cacheKey = (topo, spec, res) => engineKey(topo, spec)
+  + "|" + (res && res.sim ? `${res.sim.L}:${res.sim.C}:${res.sim.n || ""}` : "");
+
 export function engineFor(topo, spec, res) {
   const F = FLOW[topo && topo.id];
   const wv = res && res.wave ? res.wave : null;
@@ -211,6 +225,9 @@ export function engineFor(topo, spec, res) {
   if (!hasSim(topo) || !res || res.infeasible || !res.sim || !wv) {
     return { kind: "closed", cycle: closed, run: null };
   }
+  const ck = cacheKey(topo, spec, res);
+  const hit = CACHE.get(ck);
+  if (hit) return hit;
   let run = null;
   try { run = runSteady(topo, spec, res); } catch { run = null; }
   /* A circuit that did not converge is not a better answer than a closed
@@ -224,5 +241,40 @@ export function engineFor(topo, spec, res) {
   if (!run || !(run.residual < 1e-4)) {
     return { kind: "closed", cycle: closed, run: null };
   }
-  return { kind: "sim", cycle: () => simView(closed(), run), run };
+  /* The cycle is built once and kept: several surfaces read it per frame,
+     and rebuilding a view is wasted work even though it is cheap. */
+  let view = null;
+  const engine = {
+    kind: "sim", run,
+    cycle: () => (view || (view = simView(closed(), run))),
+  };
+  CACHE.set(ck, engine);
+  if (CACHE.size > CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
+  return engine;
+}
+
+/* What the simulation can tell the results panel that the design equations
+   cannot tell themselves.
+
+   Right now that is one thing, and it is worth saying plainly: whether the
+   output capacitor actually meets the ripple budget it was sized against.
+   The sizing formula uses the ideal ripple current; the real one is larger,
+   by the catch diode's drop steepening the discharge and by a core that
+   softens as it loads. A part chosen for 30 mV can deliver 37. */
+export function simFacts(topo, spec, res) {
+  const e = engineFor(topo, spec, res);
+  if (e.kind !== "sim") return null;
+  const M = e.cycle();
+  const cap = M.cap;
+  if (!cap || !Number.isFinite(cap.capPP) || !Number.isFinite(spec.dvout)) return null;
+  const budget = spec.dvout * 1e-3;
+  return {
+    charge: cap.capPP,        /* ripple from the charge alone */
+    total: cap.vPP,           /* and with this capacitor's ESR */
+    budget,
+    over: cap.capPP > budget * 1.05,
+    ratio: budget > 0 ? cap.capPP / budget : NaN,
+    dI: M.iMax - M.iMin,
+    dIideal: Number.isFinite(res.wave && res.wave.dI) ? res.wave.dI : NaN,
+  };
 }

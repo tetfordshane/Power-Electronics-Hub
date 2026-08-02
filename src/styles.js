@@ -465,6 +465,19 @@ export const CSS = `
 /* Green, because it is a statement about current — the same reading the
    flow dashes get. Deliberately quiet: it marks how the figure was made,
    which matters once and then stops mattering. */
+/* A measurement, not a rule of thumb.
+
+   The other notes in this panel are conditions the design equations know to
+   check for. This one is the circuit disagreeing with them, so it is marked
+   in the copper the rest of the app uses for a computed quantity rather than
+   the red it uses for a warning — it is not telling you something is broken,
+   it is telling you the ideal figure above was optimistic. */
+.ps .warn.measured{
+  border-color:#5A431F; background:#17110A; color:#D9C4A4;
+  border-left-width:3px;
+}
+.ps .warn.measured b{color:var(--cu)}
+
 /* ------------------------------------------------ the settling response */
 /* Appears only while a transient is live and dissolves when it is done, so
    the steady figure is never sharing the page with a timeline that has

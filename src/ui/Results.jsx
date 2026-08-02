@@ -4,8 +4,9 @@ import { isDCM } from "../cycle.js";
 import { swPeriod } from "../fields.js";
 import { Wave, LineChart } from "./Wave.jsx";
 import { LossBar } from "./LossBar.jsx";
+import { eng, f2 } from "../format.js";
 
-function Results({ res, spec, hideWave }) {
+function Results({ res, spec, hideWave, sim }) {
   if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
   if (res.error) {
     return (
@@ -58,6 +59,28 @@ function Results({ res, spec, hideWave }) {
       {(res.warn || []).map((w, i) => (
         <div className="warn" key={i}><b>check ·</b> <Mx t={w} /></div>
       ))}
+      {/* What the simulation found, which the design equations cannot find
+          out about themselves.
+
+          C_out is sized from the IDEAL ripple current. The real one is
+          larger — the catch diode's forward drop steepens the discharge, and
+          a core that softens under load widens the ramp further — so a
+          capacitor chosen for 30 mV can deliver 37. The equation above is
+          not wrong; it is answering a question about an ideal inductor, and
+          this is the same question asked of the circuit. */}
+      {sim && sim.over ? (
+        <div className="warn measured">
+          <b>measured ·</b>{" "}
+          <Mx t={"Simulated at " + eng(sim.charge, "V") + " peak-to-peak from the charge alone, "
+            + "against the " + eng(sim.budget, "V") + " C_out was sized for — " + f2(sim.ratio)
+            + "× the budget. The sizing formula uses the ideal ripple current; the circuit's is "
+            + (Number.isFinite(sim.dIideal) && sim.dIideal > 0
+              ? eng(sim.dI, "A") + " against an ideal " + eng(sim.dIideal, "A") + ", "
+              : "larger, ")
+            + "because the rectifier's forward drop steepens the discharge and the core softens "
+            + "as it loads. Raise C_out, lower the ripple, or accept the larger figure."} />
+        </div>
+      ) : null}
       <LossBar items={res.loss} />
       {res.wave && !hideWave ? <div style={{ margin: "14px 0" }}>
         <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>

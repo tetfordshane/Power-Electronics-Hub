@@ -4,6 +4,7 @@ import { Eq, Mx, Mixed, Sub } from "./tex.jsx";
 import { FIELDS, order } from "./fields.js";
 import { clamp } from "./format.js";
 import { TOPOS, CATS, FLOW, FAMILY } from "./topologies/index.js";
+import { simFacts } from "./engine/adapter.js";
 import { SHEETS } from "./content/sheets.js";
 import { SELECT, SELECT_ID } from "./content/select.js";
 import { termsFor } from "./content/terms.js";
@@ -138,6 +139,16 @@ export default function App() {
     }
   }, [topo, spec]);
 
+  /* What the circuit says about the design, where there is a circuit to ask.
+     Shares one engine with the figure — the cache in the adapter is keyed on
+     the operating point AND the components, so this costs nothing beyond the
+     run the figure was going to do anyway. Null for every topology that has
+     no netlist yet, and the panel simply says nothing. */
+  const sim = useMemo(() => {
+    if (!res || res.error || res.infeasible) return null;
+    try { return simFacts(topo, spec, res); } catch { return null; }
+  }, [topo, spec, res]);
+
   const pick = useCallback((id) => {
     setRaw((prev) => carryOver(tid, id, prev));
     setTid(id);
@@ -257,7 +268,7 @@ export default function App() {
 
             <div className="card">
               <span className="eyebrow">Design output</span>
-              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} />
+              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} />
             </div>
 
             <HeatCard topo={topo} spec={spec} />

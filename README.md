@@ -142,6 +142,16 @@ makes `buildCap` read the polyline instead of rebuilding a ramp from scalars.
 A pulse-fed (`boost`) output still comes from the design's rectifier
 currents, because that capacitor is not fed by the plotted winding at all.
 
+`simFacts(topo, spec, res)` is how that reaches the reader: the results panel
+carries a **measured ·** note when the simulated ripple exceeds the ΔV budget
+C_out was sized for, with both figures and the reason. It is styled in copper
+rather than the warning red, because it is not reporting a fault — it is
+reporting that the ideal figure above it was optimistic. A buck at its
+defaults draws 1.24× its budget; a *synchronous* buck draws 1.03×, because
+there is no diode drop on its freewheel path. Both come from the same engine
+the figure uses — `engineFor` memoises on the operating point **and** the
+components, so the panel and the figure share one run.
+
 **`check-ripple` changes meaning for those five.** Its budget assertion asks
 whether the model is self-consistent — a closed-form capacitor fed the ripple
 its own design equations assumed cannot miss the budget those equations sized
