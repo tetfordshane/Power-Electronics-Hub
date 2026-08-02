@@ -7,7 +7,7 @@ const TA = [
   id: "buck", name: "Buck", cat: "Non-isolated DC–DC", sch: "buck",
   tag: "Step down. The reference converter — everything else is a variation on it.",
   chips: ["step-down", "continuous i_out", "M = D"],
-  what: "The switch chops V_in into a square wave at the SW node; the LC filter passes its average. Output current is continuous, so the output cap only has to swallow the inductor ripple — which is why buck outputs are quiet and buck output caps are small.",
+  what: "The switch chops V_in into a square wave at the SW node, and the LC filter passes its average — so the output is the input scaled by the fraction of time the switch is closed, and D is the whole conversion ratio. Because the inductor is between the switch node and the load, output current never stops flowing: the capacitor only has to absorb the inductor's ripple, not the whole load pulse. That is why buck outputs are quiet and their capacitors are small, and why almost every point-of-load rail in a computer is a buck. What it cannot do is raise the voltage, or reverse it, or isolate anything — and its input current is the pulsating one, so the input capacitor is the part people forget.",
   eqs: [
     { e: "M = V_out / V_in = D", n: "ideal CCM; add diode and R_DS drops for the real duty" },
     { e: "L = V_out·(1 − D) / (f_sw·ΔI_L)", n: "ripple is worst at V_in max" },
@@ -276,7 +276,7 @@ const TA = [
   id: "boost", name: "Boost", cat: "Non-isolated DC–DC", sch: "boost",
   tag: "Step up. Continuous input current, pulsating output — and a right-half-plane zero.",
   chips: ["step-up", "RHP zero", "no inrush protection"],
-  what: "The inductor sits at the input, so input current is smooth and boost stages make good PFC front ends. The output is fed in pulses, so C_out works hard. There is no path to disconnect the load: V_in always reaches the output through the diode.",
+  what: "The switch shorts the inductor to ground, building current in it; when the switch opens, that current has nowhere to go but through the diode into the output, and it will drag the output above the input to keep flowing. An inductor's current cannot change instantly, and this is the most direct demonstration of it. Because the inductor faces the input, input current is smooth and continuous — which is why boost stages make good power-factor front ends, where drawing a clean sinusoid is the whole point. The costs are on the far side: the output is fed in pulses so the capacitor works hard, the duty runs away as the ratio climbs, and there is no way to disconnect the load, because V_in always reaches the output through the diode even with the switch off.",
   eqs: [
     { e: "M = 1 / (1 − D)", n: "so D = 1 − V_in/V_out" },
     { e: "I_L = I_out / (1 − D)", n: "input current, not output current — size the inductor for it" },
@@ -395,7 +395,7 @@ const TA = [
   id: "buckboost", name: "Inverting buck-boost", cat: "Non-isolated DC–DC", sch: "buckboost",
   tag: "Step up or down, with the output inverted. Both ports pulsate.",
   chips: ["inverting", "step up/down", "RHP zero"],
-  what: "One switch, one inductor, one diode — the most compact way to make a negative rail. The cost is that both input and output currents are discontinuous, and every device sees V_in + |V_out|.",
+  what: "One switch, one inductor, one diode: the switch charges the inductor from the input, and when it opens the inductor discharges into the output — but connected the other way round, so the output comes out negative. Nothing but the inductor connects input to output, which is what lets the ratio be anything at all, above or below one. The price is paid on both sides: neither the input nor the output current is continuous, so both ports need real capacitance, and every device stands off V_in plus the magnitude of V_out rather than either one alone. It is still the most compact way to make a negative rail, and it is the cell the Ćuk, SEPIC and flyback are all rearrangements of.",
   eqs: [
     { e: "M = −D / (1 − D)", n: "D = |V_out| / (V_in + |V_out|)" },
     { e: "I_L = I_out / (1 − D)", n: "the inductor carries input and output current" },
@@ -582,7 +582,7 @@ const TA = [
   id: "cuk", name: "Ćuk", cat: "Non-isolated DC–DC", sch: "cuk",
   tag: "Inverting step up/down with continuous current at both ports. Energy moves through a capacitor.",
   chips: ["inverting", "low ripple both ports", "capacitive transfer"],
-  what: "The dual of the buck-boost: energy is transferred by C1 rather than by the inductor's stored field, and inductors sit at both ports so both currents are continuous. Coupling L1 and L2 on one core can steer ripple almost entirely into one winding.",
+  what: "The dual of the buck-boost: energy crosses the converter in a capacitor's electric field rather than in an inductor's magnetic one, and inductors sit at both ports so that neither the input nor the output current ever stops. That makes it the quietest of the non-isolated family at both terminals at once, which no other single-switch topology manages. The output is inverted, like the buck-boost it is derived from. The coupling capacitor sees the full load current and is the part that fails, and coupling the two inductors on one core lets the ripple be steered almost entirely into one winding — tune it right and the output ripple nearly disappears.",
   eqs: [
     { e: "M = −D / (1 − D)", n: "same ratio as the buck-boost" },
     { e: "V_C1 = V_in + |V_out|", n: "the transfer cap holds the sum — and must handle it" },
@@ -661,7 +661,7 @@ const TA = [
   id: "sepic", name: "SEPIC", cat: "Non-isolated DC–DC", sch: "sepic",
   tag: "Non-inverting step up/down with a DC-blocking cap. The go-to when V_in crosses V_out.",
   chips: ["non-inverting", "step up/down", "input isolation at DC"],
-  what: "A boost stage followed by a capacitor-coupled buck-boost. The series cap blocks DC, so a shorted output does not drag the input down — a real advantage over the boost. Both inductors can share a core; when they do, ΔI depends on the coupled inductance.",
+  what: "A boost stage followed by a capacitor-coupled buck-boost, which buys one thing the boost cannot offer: the series capacitor blocks DC, so a shorted output no longer drags the input down through the diode. That is why SEPICs turn up wherever the input can be above or below the output and the load cannot be trusted — battery inputs especially, where the cell sags past the output during a discharge. The coupling capacitor carries the full load current, so its rms rating matters more than its value. Both inductors can share a core, and when they do the ripple is set by the coupled inductance rather than by either winding alone.",
   eqs: [
     { e: "M = D / (1 − D)", n: "D = (V_out + V_F)/(V_in + V_out + V_F)" },
     { e: "V_Cs = V_in", n: "the coupling cap sits at the input voltage" },
@@ -747,7 +747,7 @@ const TA = [
   id: "zeta", name: "Zeta", cat: "Non-isolated DC–DC", sch: "zeta",
   tag: "The SEPIC's mirror image: non-inverting, with the quiet port on the output side.",
   chips: ["non-inverting", "low output ripple", "high-side switch"],
-  what: "Same parts as a SEPIC, rearranged so the output inductor faces the load. That makes output current continuous and output ripple low, at the price of pulsating input current and a high-side switch that needs a floating drive.",
+  what: "The same parts as a SEPIC, rearranged so the inductor faces the load rather than the source. That single change moves the pulsating current from the output to the input: output current is continuous and output ripple is low, which is what you want when the load is a sensitive rail. It buys that at the input, which now needs the capacitance the SEPIC needed at its output, and at the gate driver, because the switch is now high-side and needs a floating or bootstrapped supply. Like the SEPIC it can step up or down and its coupling capacitor blocks DC, so it keeps the same tolerance for a shorted output.",
   eqs: [
     { e: "M = D / (1 − D)", n: "identical ratio to the SEPIC" },
     { e: "V_C1 = V_in", n: "series cap holds the input voltage" },

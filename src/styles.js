@@ -168,6 +168,35 @@ export const CSS = `
 .ps .fld input.bad{border-color:var(--rd); background:#1A1110}
 .ps .fld .u{color:var(--faint); font-family:var(--num); font-size:var(--t-micro)}
 
+/* What this input actually is.
+
+   Every field carries a sentence; it opens on hover and on keyboard focus,
+   so it is reachable without a mouse. Positioned absolutely out of flow so
+   revealing it never reflows the grid underneath — a panel that shuffles as
+   the pointer crosses it is worse than no help at all. */
+.ps .fld{position:relative}
+.ps .fhelp{
+  position:absolute; z-index:40; left:0; top:calc(100% + 6px);
+  width:max(260px,100%); max-width:340px;
+  background:var(--surf3); border:1px solid var(--line3); border-radius:var(--radius);
+  padding:10px 12px; box-shadow:0 8px 24px rgba(0,0,0,.55);
+  font-size:var(--t-fine); line-height:1.5; color:var(--dim);
+  opacity:0; visibility:hidden; transform:translateY(-3px);
+  transition:opacity .12s ease, transform .12s ease, visibility .12s;
+  pointer-events:none;
+}
+.ps .fld:hover .fhelp,
+.ps .fld:focus-within .fhelp{opacity:1; visibility:visible; transform:translateY(0)}
+.ps .fhelp .frange{
+  display:block; margin-top:7px; padding-top:7px; border-top:1px solid var(--line);
+  font-family:var(--num); font-size:var(--t-micro); color:var(--faint);
+}
+/* The rewrite explanation, which used to live only in a title attribute —
+   invisible to anyone not hovering, and to everyone on a keyboard. */
+.ps .fld .fwhy{
+  margin-top:5px; font-size:var(--t-micro); line-height:1.45; color:var(--rd);
+}
+
 /* ---------------------------------------------------------------- tables */
 .ps table{width:100%; border-collapse:collapse; font-size:var(--t-small)}
 .ps td,.ps th{padding:7px 9px; text-align:left; border-bottom:1px solid var(--line);

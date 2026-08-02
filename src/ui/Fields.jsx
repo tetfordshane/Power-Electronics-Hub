@@ -35,6 +35,15 @@ function Fields({ topo, raw, spec, set }) {
           : (F.mn !== undefined && (num < F.mn || num > F.mx))
             ? "Outside the usable range " + F.mn + " to " + F.mx + " — the design uses the nearest valid value."
             : "Out of order with the other limits — the design uses " + eng(used, F.u === "V" ? "V" : "") + ".";
+        /* Every input carries a sentence explaining what it is and what
+           moving it does. Fifty-one of these had nothing but a symbol and a
+           unit, which assumes the reader already knows what K_rp or Q_rr
+           means — precisely the assumption this tool exists not to make.
+
+           It opens on hover and on keyboard focus, and it is described to
+           assistive technology through aria-describedby rather than being
+           left as a visual-only affordance. */
+        const hid = "h_" + k;
         return (
           <div className="fld" key={k}>
             <label htmlFor={"f_" + k}>
@@ -43,8 +52,18 @@ function Fields({ topo, raw, spec, set }) {
             <input id={"f_" + k} type="number" inputMode="decimal" step={F.s || "any"}
               min={F.mn} max={F.mx} className={bad ? "bad" : ""}
               aria-invalid={bad || undefined}
+              aria-describedby={F.help ? hid : undefined}
               title={bad ? why : undefined}
               value={txt ?? ""} onChange={(e) => set(k, e.target.value)} />
+            {F.help ? (
+              <div className="fhelp" id={hid} role="tooltip">
+                <Mx t={F.help} />
+                {F.mn !== undefined ? (
+                  <span className="frange">usable range {F.mn} to {F.mx}{F.u ? " " + F.u : ""}</span>
+                ) : null}
+              </div>
+            ) : null}
+            {bad ? <div className="fwhy">{why}</div> : null}
           </div>
         );
       })}
