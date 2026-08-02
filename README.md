@@ -73,6 +73,35 @@ netlist, a `sim: { L, C }` on the design result so the simulation and the
 printed numbers cannot describe different converters, and a case in
 `test/sim-steady.test.mjs`.
 
+### Transients
+
+`runTransient(topo, spec, res, fromRun)` applies new parameters to the state a
+previous run left the converter in and integrates until it repeats. The
+**load step** control on the figure is the way in: `res` is passed through
+untouched so every component stays as designed and only the load resistance
+moves. Editing `I_out` instead asks `design()` to re-size the inductor, which
+is a different converter — `isPerturbation()` refuses that case rather than
+animating a settle between two unrelated designs.
+
+Two resolutions on purpose. The settle runs at 96 sub-steps because all it
+has to resolve is the envelope; each period the reader actually sees is
+re-solved at 512 from its own recorded state. A boost takes ~1,160 periods to
+recover and the whole thing costs under 100 ms.
+
+The current pane's axis freezes across a settle (`spanI`). Letting it scale
+per period grows the axis underneath a climbing current, and the waveform
+appears not to move.
+
+### Known gap: the simulated inductor is linear
+
+`lsag` — inductance roll-off at peak current — bends the ramp in `cycle.js`
+and does nothing on the five simulated topologies, because their netlists
+carry a constant inductance. `wave-cases.mjs` shows it: identical peak and
+valley at 0 %, 20 % and 60 % roll-off, while the capacitor pane beside them
+still responds, since that model is still the closed-form one. Fixing it
+means a piecewise-linear inductor — bucket L(i) and let the configuration key
+carry the bucket, the same way it carries the conduction state.
+
 ## Conventions worth knowing before editing
 
 **Opacity on anything drawn per frame.** Set it inline
