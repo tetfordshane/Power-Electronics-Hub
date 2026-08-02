@@ -52,8 +52,8 @@ const NO_PANE = [
   "halfwave", "bridgerect", "syncrect", "classe", "classepp", "classde",
 ];
 
-const src = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
-const ids = [...src.matchAll(/^\s*id: "([a-z0-9]+)", name: "/gm)].map((x) => x[1]);
+import { ids as topoIds } from "./lib/topos.mjs";
+const ids = topoIds();
 
 let fails = 0;
 const bad = (id, what) => { console.log(`  FAIL  ${id.padEnd(12)} ${what}`); fails++; };

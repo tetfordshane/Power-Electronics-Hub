@@ -25,9 +25,8 @@ const list = ids.length ? ids : JSON.parse(process.env.TOPO_IDS || "[]");
 /* The rail buttons do not carry ids, and TOPOS is assembled from five
    separate arrays, so read the entries out of the source directly. */
 const topoIds = list.length ? list : await (async () => {
-  const { readFileSync } = await import("fs");
-  const src = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
-  return [...src.matchAll(/^\s*id: "([a-z0-9]+)", name: "/gm)].map((x) => x[1]);
+  const { ids } = await import("./lib/topos.mjs");
+  return ids();
 })();
 
 console.log(`sweeping ${topoIds.length} topologies\n`);

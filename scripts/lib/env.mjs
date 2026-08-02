@@ -10,3 +10,14 @@ export const BASE = process.env.PS_URL || `http://localhost:${PORT}`;
 
 /* The bench address for one topology. */
 export const bench = (id) => `${BASE}/#/bench/${id}`;
+
+/* The same page, forced to load as a new document.
+
+   Navigating between two addresses that differ only in the hash does not
+   reload anything — the router just moves — so the app keeps the state it
+   had, and `carryOver` hands the previous topology's edited fields to the
+   next one. A walk over every topology then measures a figure that depends
+   on the order it was walked in, which is not a property of the app at all.
+   A distinct query string makes it a real navigation. */
+let visit = 0;
+export const benchFresh = (id) => `${BASE}/?v=${++visit}#/bench/${id}`;

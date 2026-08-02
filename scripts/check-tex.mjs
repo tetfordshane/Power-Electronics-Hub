@@ -3,7 +3,11 @@
    topology data and pushes it through the parser, reporting anything that
    falls back to plain text. Run after editing tex.jsx or adding formulas:
        node scripts/check-tex.mjs                                          */
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, statSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { TOPOS } from "./lib/topos.mjs";
+import { defaultSpec } from "./lib/spec.mjs";
 
 const src = readFileSync(new URL("../src/tex.jsx", import.meta.url), "utf8")
   .replace(/^import .*$/gm, "")
@@ -13,7 +17,23 @@ const src = readFileSync(new URL("../src/tex.jsx", import.meta.url), "utf8")
 const mod = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
 const { toLatex, splitRuns } = mod;
 
-const ps = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
+/* Every source file that can hold a string the typesetter will see.
+
+   This used to read one file, because there was one file. Walking the tree
+   instead means a new topology module is covered the day it is added rather
+   than the day someone remembers to list it here — the failure that silently
+   drops coverage is the one worth designing out. */
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const sources = [];
+(function walk(d) {
+  for (const f of readdirSync(d)) {
+    const p = join(d, f);
+    if (statSync(p).isDirectory()) walk(p);
+    else if (/\.(js|jsx)$/.test(f)) sources.push(p);
+  }
+})(join(root, "src"));
+const ps = sources.map((p) => readFileSync(p, "utf8")).join("\n");
+
 const QUOTED = '"((?:[^"\\\\]|\\\\.)*)"';
 const patterns = [
   new RegExp("\\{\\s*e:\\s*" + QUOTED, "g"),
@@ -29,6 +49,7 @@ const patterns = [
   new RegExp("\\bwhat:\\s*" + QUOTED, "g"),
   new RegExp("\\btag:\\s*" + QUOTED, "g"),
   new RegExp("\\bfam:\\s*" + QUOTED, "g"),
+  new RegExp("\\bhelp:\\s*" + QUOTED, "g"),
 ];
 /* Array-valued prose fields: grab the literal, then every string inside it. */
 const ARRAYS = ["chips", "pros", "cons", "use"];
@@ -48,13 +69,35 @@ for (const key of ["FAMILY"]) {
   if (m) for (const q of m[1].matchAll(new RegExp(QUOTED, "g"))) strs.add(q[1]);
 }
 
+/* And the strings no literal scan can reach: the ones design() builds at run
+   time. A row label assembled from a template — "C_out ≥ " + eng(c) — is
+   typeset exactly like a written one, and until now nothing checked it. */
+let ran = 0;
+const runtime = new Set();
+for (const topo of TOPOS) {
+  if (!topo.design) continue;
+  let res;
+  try { res = topo.design(defaultSpec(topo)); } catch { continue; }
+  ran++;
+  const add = (s) => { if (typeof s === "string" && s.trim()) runtime.add(s); };
+  for (const [k, v] of res.hi || []) { add(k); add(v); }
+  for (const w of res.warn || []) add(w);
+  for (const l of res.loss || []) { add(l[0]); add(l[2]); }
+  for (const g of res.groups || []) {
+    add(g.t);
+    for (const r of g.rows || []) { add(r[0]); add(r[1]); add(r[2]); }
+  }
+}
+for (const s of runtime) strs.add(s);
+
 const fails = [];
 for (const s of strs) {
   for (const r of splitRuns(s)) {
     if (r.t === "m" && r.text && toLatex(r.text) === null) fails.push([s, r.text]);
   }
 }
-console.log(`strings checked: ${strs.size}   failing math runs: ${fails.length}`);
+console.log(`strings checked: ${strs.size}   (${runtime.size} of them built by design(), over ${ran} topologies)`);
+console.log(`failing math runs: ${fails.length}`);
 const seen = new Set();
 for (const [s, r] of fails) {
   if (seen.has(r)) continue;

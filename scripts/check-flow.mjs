@@ -6,8 +6,8 @@
  * at an inductor terminal while the phase note said it was continuous, and
  * how two opaque polarity discs sat close enough to a conducting path to
  * notch it. This script derives both sides from the same sources the app
- * uses — the FLOW/SCH literals in src/PowerStage.jsx, and the real geometry
- * code in src/flowgeo.js — and asserts:
+ * uses — the SCH and FLOW literals in src/schematic and src/topologies, and
+ * the real geometry code in src/flowgeo.js — and asserts:
  *
  *   1. every coil is spliced (dashes routed over its arcs) in at least one
  *      phase, unless it is on the reviewed never-animated list;
@@ -30,7 +30,15 @@ import { polySegs, polyPoints, coilSplice, coilsOnSegment, distToPath,
   closeLoop, pointInLoop, splitByLoop } from "../src/flowgeo.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const src = readFileSync(join(root, "src", "PowerStage.jsx"), "utf8");
+/* The two literal registries this checks, now that they live in their own
+ * modules. They are read as text rather than imported because what is being
+ * checked is the authored form — the coil placements written into a
+ * schematic and the path strings written into a FLOW entry — and a regex
+ * over the source is what sees those. */
+const src = [
+  readFileSync(join(root, "src", "schematic", "sch.jsx"), "utf8"),
+  readFileSync(join(root, "src", "topologies", "flow.js"), "utf8"),
+].join("\n");
 const css = readFileSync(join(root, "src", "styles.js"), "utf8");
 
 let fails = 0;
@@ -49,7 +57,7 @@ function balanced(text, open, close, from) {
 
 /* ---------------- the schematics: viewBox + coil registry --------------- */
 /* The same expansion the app performs at draw time: Lh/Lv record themselves,
- * and Xf/XfCT are built from Lv with these exact placements (PowerStage.jsx
+ * and Xf/XfCT are built from Lv with these exact placements (parts.jsx
  * defines them once; a change there must be mirrored here or check 5's
  * length identity starts failing, which is the alarm working). */
 const coilH = (x, y, n = 4, r = 9, b = 1) =>

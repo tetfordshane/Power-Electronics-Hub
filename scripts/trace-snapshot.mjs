@@ -7,15 +7,15 @@
 
    Usage: node scripts/trace-snapshot.mjs [outfile]                        */
 import puppeteer from "puppeteer";
-import { bench } from "./lib/env.mjs";
+import { benchFresh } from "./lib/env.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { fileURLToPath } from "url";
 
 const out = process.argv[2] || ".anim/traces.json";
 mkdirSync(new URL("../.anim/", import.meta.url), { recursive: true });
 
-const src = readFileSync(new URL("../src/PowerStage.jsx", import.meta.url), "utf8");
-const ids = [...src.matchAll(/^\s*id: "([a-z0-9]+)", name: "/gm)].map((x) => x[1]);
+import { ids as topoIds } from "./lib/topos.mjs";
+const ids = topoIds();
 
 const browser = await puppeteer.launch({ headless: true });
 const page = await browser.newPage();
@@ -23,7 +23,7 @@ await page.setViewport({ width: 1600, height: 1100 });
 
 const snap = {};
 for (const id of ids) {
-  await page.goto(bench(id), { waitUntil: "networkidle2" });
+  await page.goto(benchFresh(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 650));
   snap[id] = await page.evaluate(() => {
     const w = document.querySelector('[data-fig="wave"]');

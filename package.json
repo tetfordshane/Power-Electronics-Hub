@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test test/",
+    "check": "node scripts/check-tex.mjs && node scripts/check-registry.mjs && node scripts/check-cycle.mjs && node scripts/check-cap.mjs && node scripts/check-flow.mjs && node --test test/"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.1.1",
