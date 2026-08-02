@@ -36,13 +36,41 @@ export const engineKey = (topo, spec) => {
 function flowTrace(run) {
   const names = Object.keys(run.traces).filter((n) => /^i[QD]/.test(n));
   if (!names.length) return null;
-  const n = run.u_grid.length;
+  const us = run.u_grid;
+  const n = us.length;
   const out = new Array(n).fill(0);
   for (const nm of names) {
     const tr = run.traces[nm];
     for (let k = 0; k < n; k++) out[k] += Math.abs(tr[k]);
   }
-  return out;
+
+  /* Clip the turn-on spike out of the CONDUCTION story.
+
+     A switch closing onto its own output capacitance passes an enormous
+     current for C_oss·R_DS(on) — a picosecond or so, kiloamps, and entirely
+     real: it is where the ½C_oss·V² goes. But it is displacement current
+     emptying a capacitor, not the current flowing round the power loop, and
+     letting it into this trace wrecks everything downstream that is scaled
+     by a peak. The dashes are drawn at |i|/i_peak, so a 1,500 A spike
+     against a 3 A ripple makes the whole conducting path invisible; the
+     simplification tolerance is a fraction of the range, so the same spike
+     discards the ripple as noise; and the live readout reports kiloamps
+     flowing through a converter carrying ten.
+
+     So: a time-weighted quantile, not a maximum. Anything above it is held
+     at it. The spike is still in the probe traces, where it belongs and
+     where the loss figures can see it — this is only about what the flow
+     animation is scaled against. */
+  const order = out.map((v, k) => [v, k]).sort((a, b) => a[0] - b[0]);
+  let acc = 0, cap = out[0];
+  const total = us[n - 1] - us[0] || 1;
+  for (const [v, k] of order) {
+    const w = (k > 0 ? us[k] - us[k - 1] : 0) + (k < n - 1 ? us[k + 1] - us[k] : 0);
+    acc += w / 2;
+    cap = v;
+    if (acc / total > 0.995) break;
+  }
+  return out.map((v) => Math.min(v, cap));
 }
 
 /* Thin a sampled trace down to the points that carry its shape.
@@ -98,7 +126,7 @@ function viewFrom(us, vals) {
    Deliberately an overlay rather than a replacement: everything the
    simulator does not yet compute keeps working exactly as it did, and the
    keys it does compute are the ones the reader is looking at. */
-function simView(base, run) {
+export function simView(base, run) {
   const iL = viewFrom(run.u_grid, run.traces[run.plot] || run.traces.iL);
   const fl = flowTrace(run);
   const flow = fl ? viewFrom(run.u_grid, fl) : iL;
@@ -122,8 +150,12 @@ function simView(base, run) {
     flowPk: flowPk > 1e-12 ? flowPk : 1,
     /* what the simulator knows that the closed form never did */
     sim: {
-      periods: run.periods,
-      residual: run.residual,
+      /* A period lifted out of a transient has no convergence history of its
+         own — it was reached by being integrated to, not by being solved
+         for. Defaulted rather than left undefined so every consumer can read
+         the same shape whichever kind of period it was handed. */
+      periods: run.periods === undefined ? 0 : run.periods,
+      residual: run.residual === undefined ? 0 : run.residual,
       idle: run.idle,
       events: run.events,
       traces: run.traces,

@@ -50,7 +50,7 @@ function grid(edges, events) {
 const GRADE = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 0.1, 0.3];
 
 /* Integrate one period from x, calling back at each sub-step. */
-function runPeriod(S, x, u, mod, cond, nSteps, onStep) {
+export function runPeriod(S, x, u, mod, cond, nSteps, onStep) {
   const edges = [...mod.edges, 1].sort((a, b) => a - b);
   let xs = x, cs = cond, t = 0, ei = 0;
   const h0 = 1 / nSteps;

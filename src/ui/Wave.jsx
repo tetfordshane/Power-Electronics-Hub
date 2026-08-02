@@ -246,8 +246,15 @@ function Wave(props) {
      it describes — a plain ramp, a pulse that stops at turn-off, a ramp bent
      by core saturation, a discontinuous cycle that sits at zero — is drawn
      without the drawing knowing which of those it is. */
-  const iCeil = Math.max(M.iMax * 1.18, 1e-9);
-  const iFloor = Math.min(M.iMin * 1.18, 0);
+  /* Normally the current pane scales itself to the cycle it is drawing.
+
+     While a transient is playing that is exactly wrong: every period would
+     rescale to its own peak, so a current climbing to meet a doubled load
+     would appear not to move at all — the axis would grow underneath it and
+     the waveform would sit still. `spanI` freezes the axis across the whole
+     settle, which is what makes the climb visible. */
+  const iCeil = props.spanI ? props.spanI[1] : Math.max(M.iMax * 1.18, 1e-9);
+  const iFloor = props.spanI ? props.spanI[0] : Math.min(M.iMin * 1.18, 0);
   /* A supplied shape is a SHAPE: its height is whatever the closure happened
      to return, and printing that as amps would be inventing a measurement.
      So bare mode scales in multiples of the peak and says so, which is

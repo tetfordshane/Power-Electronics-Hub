@@ -8,6 +8,7 @@
 import { makeSolver, converge, sample, traceView } from "./limitcycle.js";
 import { pwm1, pwmComplementary, passive, combine } from "./modulator.js";
 import { SIM } from "../topologies/sim/pilot.js";
+import { settle, isPerturbation, periodAt, displaySchedule } from "./transient.js";
 
 /* Build the gate schedule a circuit asked for, in period-normalised time. */
 function modulatorFor(g, D, period) {
@@ -38,16 +39,21 @@ function seedState(S, seed) {
 
    `from` optionally seeds the state vector, which is what makes a knob
    change a perturbation of a running converter rather than a fresh start. */
-export function runSteady(topo, spec, res, opts = {}) {
+export function prepare(topo, spec, res) {
   const make = SIM[topo.id];
   if (!make || !res || res.infeasible || !res.sim) return null;
-
   const circuit = make(spec, res);
   const period = 1 / (spec.fsw * 1e3);
   const S = makeSolver(circuit.branches, { period });
   const D = res.wave && res.wave.D !== undefined ? res.wave.D : 0.5;
   const mod = modulatorFor(circuit.gates, D, period);
-  const u = S.inputs({});
+  return { S, circuit, period, D, mod, u: S.inputs({}) };
+}
+
+export function runSteady(topo, spec, res, opts = {}) {
+  const P = prepare(topo, spec, res);
+  if (!P) return null;
+  const { S, circuit, period, D, mod, u } = P;
 
   /* Where to start integrating from.
 
@@ -98,6 +104,68 @@ export function runSteady(topo, spec, res, opts = {}) {
     u_grid: sam.u, events: sam.events, traces: sam.traces, views,
     condAt: sam.condAt, idle,
     plot: circuit.plot,
+  };
+}
+
+/* Perturb a running converter and watch it settle.
+
+   `from` is the state a previous run left the circuit in. The new parameters
+   are applied to it rather than to a fresh start, which is the difference
+   between simulating an event and simulating two unrelated operating points.
+
+   Returns null where the change is not a perturbation at all — a different
+   inductor is a different converter, not a converter that has been disturbed
+   — and null where it settles immediately, because a transient nobody can
+   see is not one worth drawing. */
+export function runTransient(topo, spec, res, fromRun, opts = {}) {
+  const P = prepare(topo, spec, res);
+  if (!P || !fromRun || !fromRun.x) return null;
+  const { S, circuit, period, D, mod, u } = P;
+  if (S.nx !== fromRun.x.length) return null;
+  if (!isPerturbation(fromRun.circuit.branches, circuit.branches)) return null;
+
+  /* The settle budget, measured rather than guessed.
+
+     A boost recovering from a load step takes about 1,160 periods to come
+     within 1e-5 of its new operating point — its output time constant is
+     R·C and there is no way around that. At 96 sub-steps a period that
+     costs under 100 ms, which is inside a knob turn; the tighter 1e-6 runs
+     past 1,200 periods and lands in the same place to four figures. The
+     step count only has to resolve the envelope, because every period the
+     reader actually sees is re-solved at full resolution afterwards. */
+  const st = settle(S, fromRun.x, u, mod, {
+    nSteps: opts.nSteps || 96,
+    maxPeriods: opts.maxPeriods || 4000,
+    tol: opts.tol || 1e-5,
+    probes: circuit.probes,
+    iProbe: circuit.plot || "iL",
+    vProbe: "vout",
+  });
+
+  /* Nothing to show: the operating point barely moved, or it was already
+     there. Falling through to a plain steady run is the honest response. */
+  const swing = st.env.reduce((m, e) => Math.max(m, Math.abs(e.vMean - st.env[st.env.length - 1].vMean)), 0);
+  const ref = Math.max(Math.abs(st.env[st.env.length - 1].vMean), 1e-9);
+  if (st.periods < 3 || swing / ref < 2e-3) return null;
+
+  const schedule = displaySchedule(st.periods);
+  const cache = new Map();
+  return {
+    kind: "transient",
+    periods: st.periods, settled: st.settled, env: st.env, schedule,
+    period, D, solver: S, circuit, mod, u,
+    xEnd: st.states[st.states.length - 1],
+    /* One full-resolution period, re-solved from its own recorded state and
+       memoised — the reader steps back and forth across a settle, and
+       re-solving the same period each time it is revisited would make
+       scrubbing feel like work. */
+    at(i) {
+      const k = Math.max(0, Math.min(schedule.length - 1, i | 0));
+      if (!cache.has(k)) {
+        cache.set(k, periodAt(S, st.states[schedule[k]], u, mod, circuit, opts.viewSteps || 512));
+      }
+      return cache.get(k);
+    },
   };
 }
 

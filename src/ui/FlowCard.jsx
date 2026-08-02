@@ -2,7 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { eng, f2, clamp } from "../format.js";
 import { Mx, Mixed, Sub } from "../tex.jsx";
 import { buildCycle, cycleKey } from "../cycle.js";
-import { engineFor, engineKey } from "../engine/adapter.js";
+import { engineFor, engineKey, simView } from "../engine/adapter.js";
+import { runTransient } from "../engine/run.js";
+import { TransientStrip } from "./TransientStrip.jsx";
 import { polySegs, polyPoints, arrowsAt, coilSplice, coilsOnSegment,
   closeLoop, pointInLoop, splitByLoop } from "../flowgeo.js";
 import { SCH } from "../schematic/sch.jsx";
@@ -25,6 +27,18 @@ function FlowCard({ topo, res, spec }) {
   const [play, setPlay] = useState(true);
   const [spd, setSpd] = useState(1);
   const [lens, setLens] = useState("i");
+  /* The load the converter is actually feeding, as a multiple of the
+     specified one. Not an input: editing I_out asks design() to re-size the
+     inductor for a different load, which is a different converter. Stepping
+     it keeps every component and changes what the converter is feeding —
+     which is the experiment worth running, and the one a bench supply gets
+     put through on its first day. */
+  const [loadK, setLoadK] = useState(1);
+  const [tr, setTr] = useState(null);       /* the settle in progress */
+  const [ti, setTi] = useState(0);          /* which of its periods is drawn */
+  const [trPlay, setTrPlay] = useState(false);
+  const [trOut, setTrOut] = useState(false); /* dissolving away */
+  const lastRun = useRef(null);
 
   /* `u` runs 0→1 across the whole plotted waveform, not across one period.
      The switching phase is derived from it, so the marker and the circuit
@@ -83,11 +97,82 @@ function FlowCard({ topo, res, spec }) {
      Keyed on the operating point, not on the wave object, whose identity
      changes on every render — running a converter to steady state sixty
      times a second would be a poor use of the frame. */
-  const engine = useMemo(
-    () => (F ? engineFor(topo, spec, res) : null),
-    [F, topo.id, engineKey(topo, spec), cycleKey(wv, F && F.iShape)]
+  /* The load step changes the sources the circuit sees and nothing else: the
+     design result is passed through untouched, so L and C_out stay exactly
+     as sized and only the load resistance moves. */
+  const effSpec = useMemo(
+    () => (loadK === 1 || !spec || !spec.iout ? spec : { ...spec, iout: spec.iout * loadK }),
+    [spec, loadK]
   );
-  const M = useMemo(() => (engine ? engine.cycle() : null), [engine]);
+  const engine = useMemo(
+    () => (F ? engineFor(topo, effSpec, res) : null),
+    [F, topo.id, engineKey(topo, effSpec), cycleKey(wv, F && F.iShape)]
+  );
+  const steady = useMemo(() => (engine ? engine.cycle() : null), [engine]);
+  /* While a settle is playing, the figure draws a period out of it — a
+     full-resolution cycle re-solved from the state the converter was
+     actually in at that moment, not an interpolation between two steady
+     states. Everything downstream reads it the same way. */
+  const M = useMemo(() => {
+    if (!tr || !steady) return steady;
+    try { return simView(steady, tr.at(ti)); } catch { return steady; }
+  }, [tr, ti, steady]);
+
+  /* One axis for the whole settle, taken from the envelope rather than from
+     whichever period is on screen. Padded the same way the per-cycle axis
+     is, so nothing changes visually when the strip retires and the pane goes
+     back to scaling itself. */
+  const trSpan = useMemo(() => {
+    if (!tr || !tr.env.length) return null;
+    let lo = Infinity, hi = -Infinity;
+    for (const e of tr.env) { if (e.iMin < lo) lo = e.iMin; if (e.iMax > hi) hi = e.iMax; }
+    return [Math.min(lo * 1.18, 0), Math.max(hi * 1.18, 1e-9)];
+  }, [tr]);
+
+  /* Remember the converged state, so the next step starts from where this
+     converter actually is rather than from a fresh solve. */
+  useEffect(() => {
+    if (engine && engine.run) lastRun.current = engine.run;
+  }, [engine]);
+
+  /* Reset the experiment when the topology or the design underneath changes:
+     a settle recorded for one converter says nothing about another. */
+  useEffect(() => { setLoadK(1); setTr(null); setTrPlay(false); setTrOut(false); }, [topo.id]);
+
+  /* Play the settle through once, then let it dissolve and leave the steady
+     figure behind. Reduced motion skips straight to the end — the same thing
+     the strip would have arrived at, without the journey. */
+  useEffect(() => {
+    if (!tr || !trPlay) return undefined;
+    if (reduce) { setTi(tr.schedule.length - 1); setTrPlay(false); return undefined; }
+    const per = Math.max(3200 / Math.max(tr.schedule.length, 1), 90);
+    const id = setInterval(() => {
+      setTi((k) => {
+        if (k + 1 >= tr.schedule.length) { setTrPlay(false); return k; }
+        return k + 1;
+      });
+    }, per);
+    return () => clearInterval(id);
+  }, [tr, trPlay, reduce]);
+
+  /* Once it has settled and been looked at, retire the strip. */
+  useEffect(() => {
+    if (!tr || trPlay || trOut) return undefined;
+    if (ti < tr.schedule.length - 1) return undefined;
+    const a = setTimeout(() => setTrOut(true), 1400);
+    const b = setTimeout(() => { setTr(null); setTrOut(false); }, 1900);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [tr, trPlay, trOut, ti]);
+
+  const stepLoad = (k) => {
+    if (k === loadK) return;
+    const from = lastRun.current;
+    setTrOut(false);
+    const next = from ? runTransient(topo, { ...spec, iout: spec.iout * k }, res, from) : null;
+    setLoadK(k);
+    if (next) { setTr(next); setTi(0); setTrPlay(true); }
+    else { setTr(null); setTrPlay(false); }
+  };
 
   if (!F || !M) return null;
   const D = M.D;
@@ -492,11 +577,15 @@ function FlowCard({ topo, res, spec }) {
               a diode drop steepening the discharge, a ring after the
               rectifier opens — that are only meaningful if you know they
               were not drawn on purpose. */}
-          {engine && engine.kind === "sim" ? (
+          {/* The badge describes the STEADY solve, not whichever period the
+              figure happens to be drawing — a period lifted out of a
+              transient was integrated to rather than solved for, and has no
+              convergence figures of its own to report. */}
+          {engine && engine.kind === "sim" && steady && steady.sim ? (
             <span className="simmark" title={
               `Simulated: the circuit was solved and run to steady state — `
-              + `${M.sim.periods} switching periods, residual `
-              + `${M.sim.residual.toExponential(1)}. Conduction is worked out `
+              + `${steady.sim.periods} switching periods, residual `
+              + `${steady.sim.residual.toExponential(1)}. Conduction is worked out `
               + `from the circuit, not scripted.`
             }>simulated</span>
           ) : null}
@@ -522,6 +611,25 @@ function FlowCard({ topo, res, spec }) {
               title="Show each component's field — magnetic around the inductors, electric in the capacitors, flux in the cores">
               fields
             </button>
+            {/* Only where there is a circuit to disturb. A closed-form cycle
+                has no state to carry across a step, so offering the control
+                would promise something the model cannot do. */}
+            {engine && engine.kind === "sim" && spec && spec.iout ? (
+              <span className="stepbar">
+                <span className="lbl">step the load</span>
+                {[[0.5, "½×"], [1, "1×"], [2, "2×"]].map(([k, t]) => (
+                  <button key={t} className={"stepbtn" + (loadK === k ? " on" : "")}
+                    aria-pressed={loadK === k}
+                    onClick={() => stepLoad(k)}
+                    title={k === 1
+                      ? "Back to the specified load"
+                      : `Suddenly change the load to ${t} the specified current, keeping every `
+                        + `component as designed, and watch the converter recover`}>
+                    {t}
+                  </button>
+                ))}
+              </span>
+            ) : null}
             {wv ? (
               <span className="ird">
                 <Mx t={wv.ilabel || "i_L"} /> = <b>{eng(iNow, "A")}</b>
@@ -729,7 +837,15 @@ function FlowCard({ topo, res, spec }) {
               rather than rebuilt, so the trace and the dashes cannot end up
               describing different converters. */}
           <Wave {...(wv || bare)} model={wv ? M : null} band={band} playhead={p}
-            flowOffset={flowOff} fadeEdges={play} period={period} />
+            flowOffset={flowOff} fadeEdges={play} period={period}
+            spanI={trSpan} />
+          {tr ? (
+            <div className={trOut ? "out" : ""}>
+              <TransientStrip tr={tr} index={ti} playing={trPlay}
+                onIndex={(k) => { setTrPlay(false); setTi(k); }}
+                label={`load stepped to ${loadK === 0.5 ? "½×" : loadK + "×"}`} />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -126,6 +126,40 @@ test("probes read node voltages and branch currents consistently", () => {
   near(readAt(m.probeBranch("R1"), x, u), 0.05, 1e-12, "and passes 50 mA");
 });
 
+test("a compiled configuration does not change when the caller edits its conduction state", () => {
+  /* The probes are built lazily, so they need to know which devices were
+     conducting long after compile() returned. Holding the caller's object
+     means holding whatever the caller does to it next — and the conduction
+     search does exactly that: it proposes a state, compiles it, tests it,
+     and flips a diode in place before trying again.
+
+     Left aliased, a configuration compiled as "diode blocking" hands out a
+     conducting probe, and a blocking diode reports thousands of amps. It
+     only shows up for the configurations whose probes are first requested
+     after the search has moved on, which is why it survived a full test
+     suite and appeared in a transient. */
+  const cond = { Q1: true, D1: false };
+  const m = build([
+    { id: "Vin", type: "V", n: ["in", "0"], value: 12 },
+    { id: "Q1", type: "SW", n: ["in", "sw"], ron: 8e-3, roff: 1e7 },
+    { id: "D1", type: "D", n: ["0", "sw"], ron: 2e-3, roff: 1e7, vf: 0.45 },
+    { id: "Coss", type: "C", n: ["sw", "0"], value: 300e-12 },
+    { id: "L1", type: "L", n: ["sw", "out"], value: 1.7e-6 },
+    { id: "C1", type: "C", n: ["out", "0"], value: 25e-6 },
+    { id: "Rload", type: "R", n: ["out", "0"], value: 0.33 },
+  ], cond);
+
+  /* The caller now edits the object it handed over, as the search does. */
+  cond.D1 = true;
+
+  const p = m.probeBranch("D1");
+  /* Still the blocking device it was compiled as: a conductance of 1/roff,
+     not 1/ron, and no forward-drop offset. */
+  near(p.cx[m.stateOf.get("Coss")], -1e-7, 1e-6, "blocking conductance");
+  assert.ok(Math.abs(p.cu[p.cu.length - 1]) < 1e-9,
+    `a blocking diode should carry no forward-drop term, got ${p.cu[p.cu.length - 1]}`);
+});
+
 test("capacitor ESR is in the circuit, not added to the answer afterwards", () => {
   /* The output node must sit above the capacitor's internal voltage by
      i·ESR — the ripple contribution that closed-form design adds by hand. */

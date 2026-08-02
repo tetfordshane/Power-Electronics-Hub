@@ -37,7 +37,24 @@ const resistOf = (b, on) => (on ? b.ron : b.roff);
    Returns the matrices plus the machinery to read any node voltage or branch
    current back out, because the animation needs volts on nodes and amps
    through devices — the two things the old model never had. */
-export function compile(branches, cond) {
+export function compile(branches, condIn) {
+  /* Take a copy of the conduction state.
+
+     The probe builders below are lazy — a node voltage or a branch current
+     is compiled the first time something asks for it, which can be long
+     after this function returned — and they need to know which devices were
+     conducting. Holding the caller's object means holding whatever the
+     caller does to it next, and the conduction search does exactly that: it
+     proposes a state, compiles it, tests it, and flips a diode in place
+     before trying again. The compiled configuration then quietly acquires
+     the state it was supposed to be an alternative to.
+
+     What that looks like downstream is a blocking diode reporting thousands
+     of amps, because its probe was built with an on-resistance for a device
+     the matrices treat as open. It is a hard fault to see: the numbers are
+     wrong only for the configurations whose probes happened to be requested
+     after the search moved on. */
+  const cond = { ...condIn };
   const idx = indexOf(branches);
   const { nodes, states, sources } = idx;
   const N = nodes.size;

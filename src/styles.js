@@ -465,6 +465,48 @@ export const CSS = `
 /* Green, because it is a statement about current — the same reading the
    flow dashes get. Deliberately quiet: it marks how the figure was made,
    which matters once and then stops mattering. */
+/* ------------------------------------------------ the settling response */
+/* Appears only while a transient is live and dissolves when it is done, so
+   the steady figure is never sharing the page with a timeline that has
+   stopped meaning anything. */
+.ps .tstrip{
+  margin-top:12px; padding:10px 12px 4px;
+  border:1px solid var(--line2); border-radius:var(--radius); background:var(--surf2);
+  animation:pstsin .35s ease both;
+}
+@keyframes pstsin{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+.ps .tstrip.out{animation:pstsout .45s ease both; pointer-events:none}
+@keyframes pstsout{to{opacity:0; transform:translateY(-4px)}}
+.ps .tshead{display:flex; align-items:baseline; gap:12px; margin-bottom:4px; flex-wrap:wrap}
+.ps .tstitle{
+  font-family:var(--ui); font-size:var(--t-micro); font-weight:600;
+  letter-spacing:.11em; text-transform:uppercase; color:var(--cu);
+}
+.ps .tsfacts{font-family:var(--num); font-size:var(--t-micro); color:var(--faint)}
+.ps .tsfacts b{color:var(--dim); font-weight:500}
+.ps .tsband{fill:var(--gn); opacity:.16; stroke:none}
+.ps .tsv{fill:none; stroke:var(--cy); stroke-width:1.6; stroke-linejoin:round}
+.ps .tsref{stroke:var(--line3); stroke-width:1; stroke-dasharray:3 4; fill:none}
+.ps .tssettled{stroke:var(--gn-dim); stroke-width:1; stroke-dasharray:2 3; fill:none}
+.ps .tscur{stroke:var(--cu); stroke-width:1.4; fill:none}
+.ps .tscurdot{fill:var(--cu); stroke:var(--bg); stroke-width:1.2}
+.ps .tsscrub{width:100%; margin:2px 0 0; accent-color:var(--cu)}
+.ps .tsnote{margin:4px 0 6px}
+.ps .tsnote b{color:var(--dim); font-family:var(--num)}
+/* The load-step control: an experiment you can run, not an input you edit.
+   Editing I_out re-sizes the inductor, which is a different converter;
+   stepping the load keeps the converter and changes what it is feeding. */
+.ps .stepbar{display:flex; align-items:center; gap:6px; margin-left:auto}
+.ps .stepbar .lbl{font-size:var(--t-micro); color:var(--faint); letter-spacing:.04em}
+.ps .stepbtn{
+  background:var(--surf3); border:1px solid var(--line2); color:var(--dim);
+  font-family:var(--num); font-size:var(--t-micro); padding:3px 9px;
+  border-radius:99px; cursor:pointer; transition:color .12s, border-color .12s, background .12s;
+}
+.ps .stepbtn:hover{color:var(--txt); border-color:var(--line3)}
+.ps .stepbtn.on{color:var(--cu); border-color:var(--cu-dim); background:#1B140A; font-weight:600}
+.ps .stepbtn:disabled{opacity:.4; cursor:default}
+
 .ps .simmark{
   margin-left:8px; padding:1px 7px; border-radius:99px; cursor:help;
   border:1px solid var(--gn-dim); color:var(--gn); background:#0D1D16;
