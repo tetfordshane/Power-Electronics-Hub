@@ -632,9 +632,86 @@ export function buildCycle(wv, iShape) {
     return { pts: cPts, at: CI.at, qAt: CI.qAt, qAbs: abs, ipk: pk, iavg: Iin };
   })();
 
+  /* ---- the ideal switch node, as the flat intervals it sits at ----
+
+     This list used to live inside the waveform component, which was the one
+     place that wanted it — until the animated schematic did too (the core
+     flux of a transformer is this node's volt-second integral). Same rule as
+     the current shape above: one description, read by both drawings, so the
+     node the flux integrates can never differ from the node the pane plots.
+
+     Three pictures, one list: a single pulse per period (the classic switch
+     node), two positive pulses (a rectified node behind a centre tap), and a
+     bipolar primary (±V with rests between). `v` here is the DISPLAY level —
+     a rectified node draws both pulses positive.                          */
+  const flats = (() => {
+    if (!wv) return null;
+    const lOn = w.vinv ? 0 : 1, lOff = w.vinv ? 1 : 0;
+    const vbi = !!w.vbi;
+    const out = [];
+    if (nPulse === 1) {
+      out.push({ u0: 0, u1: D, v: lOn }, { u0: D, u1: 1, v: lOff });
+    } else {
+      for (let k = 0; k < nPulse; k++) {
+        /* alternate polarity on a bipolar drive; every pulse positive otherwise */
+        const lvl = vbi && k % 2 ? -1 : 1;
+        const a = k / nPulse, b = Math.min(a + D, (k + 1) / nPulse);
+        out.push({ u0: a, u1: b, v: lvl }, { u0: b, u1: (k + 1) / nPulse, v: 0 });
+      }
+    }
+    return out;
+  })();
+
+  /* Core flux, as the normalised volt-second integral of that node.
+
+     The physical alternation, not the displayed one: a centre-tapped
+     secondary DRAWS both its pulses positive because the rectified node is
+     what the pane plots, but the winding those pulses came from swings both
+     ways, and so does the flux — that is the whole flux-walking story. So
+     for a multi-pulse drive the lobes alternate sign here regardless of
+     `vbi`. The result is a SHAPE: centred on its midpoint, peak ±1, claiming
+     which way the core is being driven and when, and nothing about webers. */
+  const fluxAt = (() => {
+    if (!flats) return null;
+    /* flats arrive as ordered [pulse, rest] pairs, so entry j belongs to
+       pulse ⌊j/2⌋; a rest's level is zero either way */
+    const lvl = (j, v) => (nPulse > 1 ? (v === 0 ? 0 : (Math.floor(j / 2) % 2 ? -1 : 1)) : v);
+    /* The flux integrates the WINDING's voltage, not the node's: the node
+       minus its own mean, which is exactly what volt-second balance pins to
+       the winding. Integrating the raw node would leave the integral open by
+       the mean × period every cycle — flux walking drawn as a fact on every
+       single-pulse converter. A bipolar drive's mean is already zero, so
+       this subtracts nothing there. */
+    let meanLvl = 0;
+    for (let j = 0; j < flats.length; j++) meanLvl += lvl(j, flats[j].v) * (flats[j].u1 - flats[j].u0);
+    /* breakpoints of the piecewise-linear integral */
+    const bp = [{ u: 0, f: 0 }];
+    let f = 0;
+    for (let j = 0; j < flats.length; j++) {
+      const seg = flats[j];
+      f += (lvl(j, seg.v) - meanLvl) * (seg.u1 - seg.u0);
+      bp.push({ u: seg.u1, f });
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (const p of bp) { if (p.f < lo) lo = p.f; if (p.f > hi) hi = p.f; }
+    const mid = (lo + hi) / 2, span = Math.max((hi - lo) / 2, 1e-12);
+    return (u) => {
+      u = Math.min(Math.max(u, 0), 1);
+      for (let j = 1; j < bp.length; j++) {
+        if (u <= bp[j].u + 1e-12) {
+          const a = bp[j - 1], b = bp[j];
+          const s = b.u > a.u ? (u - a.u) / (b.u - a.u) : 1;
+          return (a.f + (b.f - a.f) * s - mid) / span;
+        }
+      }
+      return (bp[bp.length - 1].f - mid) / span;
+    };
+  })();
+
   return { D, mode, pts, iAt, slopeAt, iMin, iMax, iValley, iPeak, qAt, qTot,
     /* the animated schematic drives itself from these, not from the trace */
     flowPts, flowAt: FL.at, qFlowAt: FL.qAt, flowTot: FL.qTot, flowPk,
+    flats, fluxAt,
     /* Dsub, not D: the capacitor's own shape is built per sub-interval and
        tiled, exactly as the inductor current above it was. */
     cap: w.cap ? buildCap(pts, Dsub, w.cap, nPulse) : null, inCap, BEND };

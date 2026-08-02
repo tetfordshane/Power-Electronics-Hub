@@ -58,6 +58,23 @@ for (let i = 1; i < f.length; i++) {
 console.log(`arrows appearing with no near predecessor: ${orphanN}, brightest: ${orphanA.toFixed(3)}`,
   orphanA > 0.12 ? "*** A VISIBLE POP ***" : "(all faint — they dissolve in)");
 
+/* EMC rings: an always-mounted ring whose radius rides the time since its
+   switching edge. The envelope is zero at both ends of the ride, so a ring
+   that jumps in radius while visible is the emitter misfiring. */
+const withRings = f.filter((s) => s.rings && s.rings.length);
+if (withRings.length) {
+  let worst = 0;
+  for (let i = 1; i < withRings.length; i++) {
+    const A = withRings[i - 1].rings, B = withRings[i].rings;
+    for (let k = 0; k < B.length && k < A.length; k++) {
+      const jump = Math.hypot(B[k][0] - A[k][0], B[k][1] - A[k][1]);
+      if (jump > 6) worst = Math.max(worst, Math.max(B[k][2], A[k][2]));
+    }
+  }
+  console.log(`emc rings: ${withRings[0].rings.length} emitters, brightest ring at a radius jump: ${worst.toFixed(3)}`,
+    worst > 0.12 ? "*** A VISIBLE POP ***" : "(resets happen dark)");
+}
+
 /* dash travel actually reaches a whole number of dash periods */
 const dmag = stats(f.map((s) => Math.abs(s.dash || 0)));
 console.log("dash offset magnitude:", JSON.stringify(dmag),

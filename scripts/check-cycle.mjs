@@ -165,5 +165,45 @@ sect("two pulses, saturating");
   else console.log(`  ok    peak floats up to ${M.iPeak.toFixed(3)} A as the core softens`);
 }
 
+/* ---- the node flats and the flux integral ---- */
+sect("switch-node flats and core flux");
+{
+  const M = buildCycle({ D: 0.3, dI: 3, iavg: 10 });
+  near(M.flats.length, 2, 0, "one pulse: two flat intervals");
+  near(M.flats[0].v, 1, 0, "on-interval sits at the rail");
+  near(M.fluxAt(0), M.fluxAt(1), 1e-12, "flux is periodic — φ(0) = φ(1)");
+  let lo = Infinity, hi = -Infinity;
+  for (let k = 0; k <= 400; k++) {
+    const f = M.fluxAt(k / 400);
+    if (f < lo) lo = f; if (f > hi) hi = f;
+  }
+  near(hi, 1, 1e-9, "flux peaks at exactly +1");
+  near(lo, -1, 1e-9, "…and at exactly −1 (centred on the midpoint)");
+  /* rising while the node is high, falling while it is low */
+  if (!(M.fluxAt(0.2) > M.fluxAt(0.1))) { console.log("  FAIL  flux should rise during the pulse"); fails++; }
+  else if (!(M.fluxAt(0.8) < M.fluxAt(0.6))) { console.log("  FAIL  flux should fall after it"); fails++; }
+  else console.log("  ok    flux slope follows the node level");
+}
+{
+  /* two pulses: the flats DRAW both positive (a rectified node), but the
+     flux alternates — the winding those pulses came from swings both ways */
+  const M = buildCycle({ D: 0.35, dI: 1.8, iavg: 6, pulses: 2 });
+  near(M.flats[0].v, 1, 0, "rectified node draws its first pulse positive");
+  near(M.flats[2].v, 1, 0, "…and its second");
+  let sum = 0;
+  for (let k = 0; k < 400; k++) sum += M.fluxAt((k + 0.5) / 400) / 400;
+  near(sum, 0, 1e-3, "two-pulse flux has zero mean — the core cannot walk");
+  for (const u of [0.05, 0.2, 0.4]) {
+    near(M.fluxAt(u), -M.fluxAt(u + 0.5), 1e-9, `mirror lobes: φ(${u}) = −φ(${u + 0.5})`);
+  }
+}
+{
+  const bare = buildCycle(null, (u) => Math.abs(Math.sin(2 * Math.PI * u)));
+  if (bare.flats !== null || bare.fluxAt !== null) {
+    console.log("  FAIL  a supplied shape must not invent a switch node or a flux");
+    fails++;
+  } else console.log("  ok    bare mode has no flats and no flux — nothing computed stands behind them");
+}
+
 console.log(`\n${fails === 0 ? "all cycle-model assertions hold" : fails + " FAILING"}`);
 process.exit(fails ? 1 : 0);

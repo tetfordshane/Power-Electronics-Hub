@@ -210,6 +210,9 @@ export const CSS = `
    smear the wrap at the end of the cycle. */
 .ps .fig .flow,.ps .fig .flowp,.ps .fig .flowglow,.ps .fig .flowdim,
 .ps .fig .capp,.ps .fig .capglow,
+.ps .fig .mfl,.ps .fig .mfa,.ps .fig .efl,.ps .fig .efa,
+.ps .fig .cxf,.ps .fig .cxa,
+.ps .fig .emcloop,.ps .fig .emcn2,.ps .fig .emcring,
 .ps .fig .dflow,.ps .hmgrid rect{transition:none !important}
 .ps .flow{
   fill:none; stroke:var(--cu); stroke-width:2.8; stroke-linecap:round;
@@ -461,12 +464,29 @@ export const CSS = `
 .ps .polm circle{fill:var(--bg); stroke:var(--line2); stroke-width:1}
 .ps .polm path{fill:none; stroke:var(--cy); stroke-width:1.9; stroke-linecap:round}
 
-/* --------------------------------------------------------------- EMC lens */
+/* --------------------------------------------------------------- EMC lens
+   Live, not decorated: the loop's and halo's opacity are driven inline, per
+   frame, from the switching edges the model computed — the old 2.4 s CSS
+   pulse claimed a rhythm the circuit does not have. */
 .ps .emcloop{fill:rgba(240,121,108,.07); stroke:var(--rd); stroke-width:2;
-  stroke-dasharray:6 5; animation:psemc 2.4s ease-in-out infinite}
+  stroke-dasharray:6 5}
 .ps .emcn{fill:rgba(168,139,240,.28); stroke:var(--vi); stroke-width:1.6}
-.ps .emcn2{fill:rgba(168,139,240,.1); stroke:none; animation:psemc 2.4s ease-in-out infinite}
-@keyframes psemc{0%,100%{opacity:.55}50%{opacity:1}}
+.ps .emcn2{fill:rgba(168,139,240,.1); stroke:none}
+.ps .emcring{fill:none; stroke:var(--vi); stroke-width:1.6}
+/* copper inside the hot loop runs red; the rest keeps the normal green */
+.ps .emclive .hotseg{stroke:var(--rd)}
+.ps .emclive .carrow.hot{stroke:var(--rd)}
+
+/* ------------------------------------------------------------ fields lens
+   One colour per kind of field, in the page's own vocabulary: green is the
+   current's field (B, around the windings), cyan is the voltage's field
+   (E, between the plates), copper is the magnetics (flux in the core). */
+.ps .mfl{fill:none; stroke:var(--gn); stroke-width:1.1; stroke-dasharray:4 6}
+.ps .mfa{stroke:var(--gn); stroke-width:1.6}
+.ps .efl{fill:none; stroke:var(--cy); stroke-width:1.4; stroke-linecap:round}
+.ps .efa{stroke:var(--cy); stroke-width:1.6}
+.ps .cxf{fill:none; stroke:var(--cu); stroke-width:1.5; stroke-dasharray:5 7}
+.ps .cxa{stroke:var(--cu); stroke-width:1.6}
 
 /* ------------------------------------------------------------- loss bar */
 .ps .lbar{display:flex; height:16px; border-radius:3px; overflow:hidden;

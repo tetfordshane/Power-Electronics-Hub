@@ -33,8 +33,8 @@ frame. `drawScope(prefix, fn)` gives each drawing surface its own key
 namespace so React can diff instead of remounting. If you add a new drawing
 surface, wrap it — without that, the CSS transitions silently stop working
 and the animation gets choppy. Prefixes in use: `sc` schematic, `wv` waveform,
-`pl` polarity, `db` devices, `cf` capacitor flow, `lc` line chart, `sp`
-spectrum. They must not collide.
+`pl` polarity, `db` devices, `cf` capacitor flow, `mf` fields lens, `lc` line
+chart, `hm` heatmap, `sp` spectrum. They must not collide.
 
 **Do not name anything `Math`.** A hoisted `function Math` shadows the global
 `Math` object for the whole module. The math component is `TeXSpan`.
@@ -213,14 +213,35 @@ opposite of the lesson. Measure it rather than reasoning about it: scrub the
 figure and check the arrows turn where the `i_C` pane crosses zero.
 
 **Flow geometry and the coil registry.** The overlay's path maths —
-`polyPoints`, `polySegs`, `arrowsAt`, `coilSplice` — live in `src/flowgeo.js`,
-a plain module like `cycle.js`, so `check-flow.mjs` asserts against the code
-the figures draw with. `Lh`/`Lv` record every winding they draw into `COILS`
+`polyPoints`, `polySegs`, `arrowsAt`, `coilSplice`, and the EMC loop helpers
+`closeLoop`/`pointInLoop`/`splitByLoop` — live in `src/flowgeo.js`, a plain
+module like `cycle.js`, so `check-flow.mjs` asserts against the code the
+figures draw with. `Lh`/`Lv` record every winding they draw into `COILS`
 while `FlowCard` renders the schematic; `coilSplice` then reroutes each flow
 path over the arcs of any coil it runs straight through, which is what makes
 the current visibly climb through a winding instead of sliding under it on
-the chord. Never hand-list an inductor's extent anywhere — the registry is
-derived from the drawing precisely so the two cannot drift.
+the chord. `Cv`/`Ch` record capacitors into `CAPS` and `Core` (used by `Xf`,
+`XfCT`, and any hand-drawn transformer) records core bars into `CORES` the
+same way, for the fields lens. Never hand-list a component's extent anywhere
+— the registries are derived from the drawing precisely so the two cannot
+drift.
+
+**The lenses claim only what the model computed.** The fields lens drives
+each mark from a real quantity: a winding's field from the conducting flow
+current (or the plotted current, for the pol-marked inductor), a modelled
+capacitor's field from its charge integral, a core's flux from the FLOW
+entry's declared `flux:` — `"mag"` (the flow current is the magnetising
+story: flybacks), `"vs"` (the volt-second integral of the shared node
+description, alternating sign so the core cannot walk: bridges and centre
+taps), a supplied `{ shape }` (the forward's store/reset/idle triangle), or
+`"static"` (presence at a fixed faint opacity, claiming no waveform: tanks
+and bare-mode transformers — `"vs"` degrades to this when there is no wave).
+A coil on a `dim` branch gets the same static treatment: its current is real
+but uncomputed. The EMC lens times its flares and node rings off the
+phase-window starts — the switching instants — sized by the commutated
+current, so a DCM edge is honestly quiet, and the hot/cold split of the
+copper is geometric (`splitByLoop`, cut on the raw path, spliced per piece,
+dash offset carried across the cut by the piece's own arc length).
 
 Two numbers in that file are load-bearing. Arrow spacing is exactly 120
 because one switching period advances the dash travel by 240 and the belt's
@@ -341,12 +362,14 @@ backgrounded browser tab either — `requestAnimationFrame` is suspended there,
 so the figure simply does not advance. These drive their own headless
 Chromium, which does composite:
 
-- `node scripts/record-animation.mjs <topology> <seconds>` then
+- `node scripts/record-animation.mjs <topology> <seconds> [emc|fld]` then
   `node scripts/analyse-frames.mjs` — captures the cursor rake, the arrow
-  field, the dash offset and each device's on/off state per frame, then
-  reports the continuity metrics. The one that matters: nothing may *appear*
-  at an opacity you could see. Anything entering or leaving has to dissolve,
-  so a mark with no near predecessor on the previous frame must be faint.
+  field (including the fields lens's circulation marks), the EMC rings, the
+  dash offset and each device's on/off state per frame, then reports the
+  continuity metrics. The optional third argument clicks that lens before
+  sampling. The metric that matters: nothing may *appear* at an opacity you
+  could see. Anything entering or leaving has to dissolve, so a mark with no
+  near predecessor on the previous frame must be faint.
 - `node scripts/handoff-filmstrip.mjs <topology>` — a strip of live frames
   through a hand-off, with the rake's positions and opacities beside each one.
   Use this to look at the result; the metrics only say whether to.

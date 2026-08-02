@@ -222,3 +222,107 @@ export function distToPath(px, py, { segs }) {
   }
   return best;
 }
+
+/* ---------------------------------------------------------------------
+   The EMC hot loop, as a region.
+
+   Every FLOW entry's `emc.loop` is a closed rectilinear polygon drawn
+   AROUND the switched-current loop — which means it is drawn largely ON
+   the copper it describes: the loop's top edge often is the conducting
+   run. So "inside the loop" here always means inside OR on (within `tol`
+   of) the boundary; a strict interior test would call the hottest copper
+   in the figure cold.
+   ------------------------------------------------------------------- */
+
+/* polyPoints does not parse Z — worse, a trailing "H 88 Z" would feed the
+   Z to Number() and emit a NaN point — so strip it, then re-append the
+   first point to close. */
+export function closeLoop(d) {
+  const pts = polyPoints(String(d).replace(/[Zz]/g, ""));
+  if (pts.length > 1) {
+    const a = pts[0], b = pts[pts.length - 1];
+    if (Math.hypot(a[0] - b[0], a[1] - b[1]) > EPS) pts.push([a[0], a[1]]);
+  }
+  return pts;
+}
+
+const distToEdges = (x, y, loop) => {
+  let best = Infinity;
+  for (let i = 1; i < loop.length; i++) {
+    const ax = loop[i - 1][0], ay = loop[i - 1][1];
+    const dx = loop[i][0] - ax, dy = loop[i][1] - ay;
+    const len = Math.hypot(dx, dy);
+    if (len < EPS) continue;
+    const t = clamp(((x - ax) * dx + (y - ay) * dy) / (len * len), 0, 1);
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), y - (ay + dy * t)));
+  }
+  return best;
+};
+
+/* Even-odd ray cast, with the boundary counted in. `tol` covers the coil
+   arcs, which bulge up to r (9) off a winding that sits on the boundary. */
+export function pointInLoop(x, y, loop, tol = 0.5) {
+  if (distToEdges(x, y, loop) <= tol) return true;
+  let inside = false;
+  for (let i = 1; i < loop.length; i++) {
+    const [x1, y1] = loop[i - 1], [x2, y2] = loop[i];
+    if ((y1 > y) !== (y2 > y) && x < x1 + ((y - y1) / (y2 - y1)) * (x2 - x1)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/* Split a RAW (unspliced, rectilinear) flow path into contiguous pieces
+   that are inside or outside the loop. Cuts happen where the path crosses
+   a loop edge; a run collinear with an edge changes state at the loop's
+   corners, which the perpendicular edges supply. Splice each piece
+   afterwards — splitting the spliced path instead would cut a winding on
+   the boundary into a hot/cold zigzag, one chord at a time. */
+export function splitByLoop(d, loop) {
+  const pts = polyPoints(d);
+  if (pts.length < 2) return [{ d, inside: false }];
+  const pieces = [];
+  let run = [pts[0]];
+  let runIn = null;
+  const flush = () => {
+    if (run.length > 1) pieces.push({ pts: run, inside: runIn });
+  };
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const abx = b[0] - a[0], aby = b[1] - a[1];
+    const len = Math.hypot(abx, aby);
+    if (len < EPS) continue;
+    /* cut parameters along a→b where a loop edge crosses it */
+    const ts = [0, 1];
+    for (let j = 1; j < loop.length; j++) {
+      const e1 = loop[j - 1], e2 = loop[j];
+      const ex = e2[0] - e1[0], ey = e2[1] - e1[1];
+      const den = abx * ey - aby * ex;
+      if (Math.abs(den) < EPS) continue;          /* parallel or collinear */
+      const t = ((e1[0] - a[0]) * ey - (e1[1] - a[1]) * ex) / den;
+      const s = ((e1[0] - a[0]) * aby - (e1[1] - a[1]) * abx) / den;
+      if (t > EPS && t < 1 - EPS && s >= -EPS && s <= 1 + EPS) ts.push(t);
+    }
+    ts.sort((p, q) => p - q);
+    for (let k = 1; k < ts.length; k++) {
+      if (ts[k] - ts[k - 1] < 1e-9) continue;
+      const mid = (ts[k] + ts[k - 1]) / 2;
+      const isIn = pointInLoop(a[0] + abx * mid, a[1] + aby * mid, loop);
+      const q = [a[0] + abx * ts[k], a[1] + aby * ts[k]];
+      if (runIn === null) runIn = isIn;
+      if (isIn !== runIn) {
+        flush();
+        run = [run[run.length - 1]];
+        runIn = isIn;
+      }
+      run.push(q);
+    }
+  }
+  flush();
+  return pieces.map((p) => ({
+    d: `M ${r2(p.pts[0][0])} ${r2(p.pts[0][1])} L`
+      + p.pts.slice(1).map((q) => ` ${r2(q[0])} ${r2(q[1])}`).join(""),
+    inside: !!p.inside,
+  }));
+}

@@ -26,8 +26,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { polySegs, polyPoints, coilSplice, coilsOnSegment, distToPath }
-  from "../src/flowgeo.js";
+import { polySegs, polyPoints, coilSplice, coilsOnSegment, distToPath,
+  closeLoop, pointInLoop, splitByLoop } from "../src/flowgeo.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const src = readFileSync(join(root, "src", "PowerStage.jsx"), "utf8");
@@ -88,7 +88,30 @@ const SCH_META = {};
         { ...coilV(x + 24, y, 2, h / 8, 1), xf: true },
         { ...coilV(x + 24, y + h / 2, 2, h / 8, 1), xf: true });
     }
-    SCH_META[e.id] = { w: e.w, h: e.h, coils };
+    /* the fields lens reads capacitors and cores from the same drawing */
+    const caps = [];
+    for (const c of body.matchAll(/\{Cv\(([\d\s.,-]+)\)\}/g)) {
+      const [x, y1, y2] = c[1].split(",").map(Number);
+      caps.push({ axis: "v", x, y0: y1, y1: y2, m: (y1 + y2) / 2 });
+    }
+    for (const c of body.matchAll(/\{Ch\(([\d\s.,-]+)\)\}/g)) {
+      const [x1, x2, y] = c[1].split(",").map(Number);
+      caps.push({ axis: "h", y, x0: x1, x1: x2, m: (x1 + x2) / 2 });
+    }
+    const cores = [];
+    for (const c of body.matchAll(/\{Core\(([\d\s.,-]+)\)\}/g)) {
+      const [bx, y0, y1] = c[1].split(",").map(Number);
+      cores.push({ x: bx + 3, y0, y1 });
+    }
+    for (const c of body.matchAll(/\{Xf\(([\d\s.,-]+)\)\}/g)) {
+      const [x, y, h = 64] = c[1].split(",").map(Number);
+      cores.push({ x: x + 12, y0: y - 4, y1: y + h + 4 });
+    }
+    for (const c of body.matchAll(/\{XfCT\(([\d\s.,-]+)\)\}/g)) {
+      const [x, y, h = 80] = c[1].split(",").map(Number);
+      cores.push({ x: x + 12, y0: y - 4, y1: y + h + 4 });
+    }
+    SCH_META[e.id] = { w: e.w, h: e.h, coils, caps, cores };
   });
 }
 
@@ -103,11 +126,13 @@ const FLOW_META = {};
   while ((m = entryRe.exec(flowBlock)) !== null) {
     entries.push({ id: m[1], w: +m[2], h: +m[3], at: m.index });
   }
+  /* only path strings — a capFlow array also carries src: "out"/"in" */
   const strings = (block, key) => {
     const at = block.indexOf(key + ": [");
     if (at < 0) return [];
     const arr = balanced(block, "[", "]", block.indexOf("[", at));
-    return [...arr.matchAll(/"([^"]+)"/g)].map((s) => s[1]);
+    return [...arr.matchAll(/"([^"]+)"/g)].map((s) => s[1])
+      .filter((s) => /^M /.test(s));
   };
   entries.forEach((e, i) => {
     const body = flowBlock.slice(e.at, i + 1 < entries.length ? entries[i + 1].at : undefined);
@@ -122,9 +147,11 @@ const FLOW_META = {};
       if (ch === "{") { if (depth === 0) s0 = k; depth++; }
       else if (ch === "}") { if (--depth === 0) phases.push(phArr.slice(s0, k + 1)); }
     }
+    const emcM = body.match(/emc: \{ loop: "([^"]+)", node: \[([\d\s.,-]+)\]/);
     FLOW_META[e.id] = {
       w: e.w, h: e.h,
       pol: polM ? polM[1].split(",").map(Number) : null,
+      emc: emcM ? { loop: emcM[1], node: emcM[2].split(",").map(Number) } : null,
       capFlow: strings(body.slice(0, phAt), "capFlow"),
       ph: phases.map((p) => ({ d: strings(p, "d"), dim: strings(p, "dim") })),
     };
@@ -263,6 +290,79 @@ for (const id of ids) {
     if (NEVER[id] && NEVER[id].has(anchorOf(c))) continue;
     if (REPORT) console.log(`  never-spliced  ${id}  ${c.axis} @ ${anchorOf(c)}`);
     else fail(`${id}: coil ${c.axis} @ ${anchorOf(c)} is never traversed by any phase (add a path or review into NEVER)`);
+  }
+}
+
+/* ---- 7. the EMC loop, the hot/cold split, and the fields geometry ------ */
+const sameP = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6;
+for (const id of ids) {
+  const F = FLOW_META[id], S = SCH_META[id];
+  if (!S) continue;
+  if (!F.emc) { fail(`${id}: FLOW entry has no emc data`); continue; }
+  const loop = closeLoop(F.emc.loop);
+  for (const [x, y] of loop) {
+    if (!(isFinite(x) && isFinite(y) && x >= 0 && x <= F.w && y >= 0 && y <= F.h)) {
+      fail(`${id}: emc loop vertex (${x},${y}) escapes the viewBox`);
+    }
+  }
+  /* the swinging node need not sit inside the hot loop (a push-pull's tap
+     does not), but it must be on the drawing, with its 65 px ring too */
+  const [nx, ny] = F.emc.node;
+  if (!(nx >= 0 && nx <= F.w && ny >= 0 && ny <= F.h)) {
+    fail(`${id}: emc node (${nx},${ny}) escapes the viewBox`);
+  }
+  /* the hot/cold cut: pieces must tile the parent exactly */
+  F.ph.forEach((p, pi) => {
+    for (const raw of p.d) {
+      const pieces = splitByLoop(raw, loop);
+      const tot = polySegs(raw).total;
+      const sum = pieces.reduce((s, q) => s + polySegs(q.d).total, 0);
+      if (Math.abs(sum - tot) > 0.2) {
+        fail(`${id} ph${pi}: split pieces sum to ${sum.toFixed(1)}, parent is ${tot.toFixed(1)}`);
+      }
+      const a = polyPoints(raw);
+      if (!sameP(polyPoints(pieces[0].d)[0], a[0])
+        || !sameP(polyPoints(pieces[pieces.length - 1].d).pop(), a[a.length - 1])) {
+        fail(`${id} ph${pi}: split moved a path endpoint`);
+      }
+      for (let k = 1; k < pieces.length; k++) {
+        if (pieces[k].inside === pieces[k - 1].inside) {
+          fail(`${id} ph${pi}: adjacent split pieces share a side — merge failed`);
+        }
+      }
+    }
+  });
+  /* every capacitor branch must sit on exactly one drawn capacitor */
+  const capMatches = (cap, d) => {
+    const pts = polyPoints(d);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (cap.axis === "v") {
+        if (Math.abs(a[0] - cap.x) < 1e-6 && Math.abs(b[0] - cap.x) < 1e-6
+          && cap.m >= Math.min(a[1], b[1]) - 1e-6 && cap.m <= Math.max(a[1], b[1]) + 1e-6) return true;
+      } else if (Math.abs(a[1] - cap.y) < 1e-6 && Math.abs(b[1] - cap.y) < 1e-6
+        && cap.m >= Math.min(a[0], b[0]) - 1e-6 && cap.m <= Math.max(a[0], b[0]) + 1e-6) return true;
+    }
+    return false;
+  };
+  for (const d of F.capFlow) {
+    const n = S.caps.filter((cp) => capMatches(cp, d)).length;
+    if (n !== 1) fail(`${id}: capFlow "${d}" matches ${n} drawn capacitors (need exactly 1)`);
+  }
+  /* the field marks must stay inside the drawing */
+  for (const c of S.coils) {
+    const h = c.axis === "h";
+    const cx = h ? (c.x0 + c.x1) / 2 : c.x, cy = h ? c.y : (c.y0 + c.y1) / 2;
+    const half = h ? (c.x1 - c.x0) / 2 : (c.y1 - c.y0) / 2;
+    const rx = h ? half + 11 : c.r + 9, ry = h ? c.r + 9 : half + 11;
+    if (cx - rx < 0 || cx + rx > S.w || cy - ry < 0 || cy + ry > S.h) {
+      fail(`${id}: field ellipse around coil @ ${c.axis === "h" ? c.x0 : c.x},${c.axis === "h" ? c.y : c.y0} escapes the viewBox`);
+    }
+  }
+  for (const cr of S.cores) {
+    if (cr.x - 7 < 0 || cr.x + 7 > S.w || cr.y0 - 9 < 0 || cr.y1 + 9 > S.h) {
+      fail(`${id}: flux racetrack around core @ ${cr.x} escapes the viewBox`);
+    }
   }
 }
 
