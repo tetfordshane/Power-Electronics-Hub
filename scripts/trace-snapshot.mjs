@@ -7,6 +7,7 @@
 
    Usage: node scripts/trace-snapshot.mjs [outfile]                        */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -22,7 +23,7 @@ await page.setViewport({ width: 1600, height: 1100 });
 
 const snap = {};
 for (const id of ids) {
-  await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+  await page.goto(bench(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 650));
   snap[id] = await page.evaluate(() => {
     const w = document.querySelector('[data-fig="wave"]');

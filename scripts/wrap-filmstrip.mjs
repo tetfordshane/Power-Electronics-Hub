@@ -9,6 +9,7 @@
           what = wave | circuit | both
           span = fraction of the loop either side of the wrap (default .014) */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { mkdirSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -29,7 +30,7 @@ for (let k = 0; k <= 3; k++) POS.push(snap((span * k) / 4));
 const browser = await puppeteer.launch({ headless: true });
 const page = await browser.newPage();
 await page.setViewport({ width: 1600, height: 1100, deviceScaleFactor: 2 });
-await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+await page.goto(bench(id), { waitUntil: "networkidle2" });
 await new Promise((r) => setTimeout(r, 1400));
 
 /* Pause first: while it is running the clock overwrites the scrub value

@@ -9,6 +9,7 @@
 
    Usage: node scripts/handoff-filmstrip.mjs [topologyId]                   */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { mkdirSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -19,7 +20,7 @@ mkdirSync(dir, { recursive: true });
 const browser = await puppeteer.launch({ headless: true });
 const page = await browser.newPage();
 await page.setViewport({ width: 1600, height: 1100, deviceScaleFactor: 1 });
-await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+await page.goto(bench(id), { waitUntil: "networkidle2" });
 await new Promise((r) => setTimeout(r, 1400));
 
 /* half speed, so the dissolve spans enough frames to be seen */

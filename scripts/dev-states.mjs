@@ -4,6 +4,7 @@
 
    Usage: node scripts/dev-states.mjs [id,id,...]                          */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { mkdirSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -17,7 +18,7 @@ await page.setViewport({ width: 1600, height: 1100, deviceScaleFactor: 2 });
 
 const rows = [];
 for (const id of ids) {
-  await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+  await page.goto(bench(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1300));
   /* step through the named phases rather than scrubbing, so each shot lands
      squarely inside a phase instead of near a commutation */

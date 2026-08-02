@@ -24,6 +24,7 @@
 
    Usage: node scripts/check-ripple.mjs        (needs the dev server up)     */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { readFileSync } from "fs";
 
 /* Which topologies are expected to have a waveform figure but NO capacitor
@@ -63,7 +64,7 @@ await page.setViewport({ width: 1600, height: 1100 });
 
 const rows = [];
 for (const id of ids) {
-  await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+  await page.goto(bench(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 600));
   const got = await page.evaluate(() => {
     const w = document.querySelector('[data-fig="wave"]');

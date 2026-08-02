@@ -5,6 +5,7 @@
 
    Usage: node scripts/sweep.mjs                                           */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 
 const browser = await puppeteer.launch({ headless: true });
 const page = await browser.newPage();
@@ -14,7 +15,7 @@ const errs = [];
 page.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
 page.on("pageerror", (e) => errs.push("pageerror: " + e.message));
 
-await page.goto("http://localhost:5173/#/bench/buck", { waitUntil: "networkidle2" });
+await page.goto(bench("buck"), { waitUntil: "networkidle2" });
 await new Promise((r) => setTimeout(r, 1200));
 const ids = await page.evaluate(() =>
   [...document.querySelectorAll("nav button, .rail button")]
@@ -34,7 +35,7 @@ let problems = 0;
 
 for (const id of topoIds) {
   errs.length = 0;
-  await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+  await page.goto(bench(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 700));
   const r = await page.evaluate(() => {
     const out = { clipped: [], overlaps: 0, rake: null, svgs: 0,

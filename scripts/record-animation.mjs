@@ -10,12 +10,13 @@
    `lens` is `emc` or `fld` — the matching lens button is clicked before
    sampling, so the new overlays are measured under the same invariants.  */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { writeFileSync, mkdirSync } from "fs";
 
 const id = process.argv[2] || "buck";
 const secs = Number(process.argv[3] || 13);
 const lens = process.argv[4] || null;
-const pageUrl = `http://localhost:5173/#/bench/${id}`;
+const pageUrl = bench(id);
 
 const browser = await puppeteer.launch({ headless: true, args: ["--window-size=1600,1000"] });
 const page = await browser.newPage();

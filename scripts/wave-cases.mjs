@@ -9,6 +9,7 @@
 
    Usage: node scripts/wave-cases.mjs                                       */
 import puppeteer from "puppeteer";
+import { bench } from "./lib/env.mjs";
 import { writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 
@@ -27,7 +28,7 @@ await page.setViewport({ width: 1600, height: 1100, deviceScaleFactor: 2 });
 
 const shots = [];
 for (const [id, label, fields] of CASES) {
-  await page.goto(`http://localhost:5173/#/bench/${id}`, { waitUntil: "networkidle2" });
+  await page.goto(bench(id), { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
   const applied = await page.evaluate((f) => {
     const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
