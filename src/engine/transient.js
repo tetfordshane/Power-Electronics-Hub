@@ -28,7 +28,7 @@ import { converge, sample, traceView, runPeriod } from "./limitcycle.js";
    opening of a transient gets most of them and the long tail gets a few —
    which is where the interesting part is, and how a settling curve is read
    anyway. */
-const DISPLAY_MAX = 28;
+const DISPLAY_MAX = 16;
 
 function displaySchedule(n) {
   if (n <= DISPLAY_MAX) return Array.from({ length: n }, (_, i) => i);

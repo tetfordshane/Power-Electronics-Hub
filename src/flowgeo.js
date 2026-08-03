@@ -69,7 +69,7 @@ export function polySegs(d) {
      · every arrow's position is continuous in `travel` right up to the
        moment it leaves through the path's end fade, and it re-enters
        through the start fade after its ride across the hidden arc. */
-export function arrowsAt({ segs, total }, travel, spacing = 120) {
+export function arrowsAt({ segs, total }, travel, spacing = 120, fadeScale = 1) {
   if (!total || !segs.length) return [];
   const n = Math.max(1, Math.ceil(total / spacing));
   const C = n * spacing;
@@ -81,7 +81,15 @@ export function arrowsAt({ segs, total }, travel, spacing = 120) {
      several times a second, and it was the last thing making the motion feel
      unsteady. Each arrow instead dissolves over the first and last stretch of
      its path, so it arrives and departs rather than blinking. */
-  const FADE = 26;
+  /* How much of the path an arrow spends arriving.
+
+     Twenty-six units at the normal rate. `fadeScale` widens it when the
+     figure is being played faster, because this is a fade in TIME wearing
+     distance's clothing: an arrow that covers nine units in a frame is
+     already a quarter lit the first time it is drawn, and the dissolve it
+     was given never happens. Measured during a settle played at six times
+     speed, that was the last thing still popping. */
+  const FADE = 26 * Math.max(fadeScale, 1);
   for (let k = 0; k < n; k++) {
     const s = (base + k * spacing) % C;
     if (s > total) continue;

@@ -8,13 +8,18 @@
    frame is near SOME arrow on the previous one.                            */
 import { readFileSync } from "fs";
 
-const f = JSON.parse(readFileSync(new URL("../.anim/frames.json", import.meta.url), "utf8"));
+const raw = JSON.parse(readFileSync(new URL("../.anim/frames.json", import.meta.url), "utf8"));
+/* A perturbed recording carries the step time beside the frames; a plain one
+   is still just the array it always was. */
+const f = Array.isArray(raw) ? raw : raw.frames;
+const steppedAt = Array.isArray(raw) ? null : raw.steppedAt;
 const stats = (a) => {
   const v = a.filter(Number.isFinite).slice().sort((x, y) => x - y);
   return { min: +v[0].toFixed(2), p50: +v[Math.floor(v.length / 2)].toFixed(2), max: +v[v.length - 1].toFixed(2) };
 };
 
 console.log(`frames: ${f.length}`);
+if (steppedAt > 0) console.log(`load stepped at ${(steppedAt / 1000).toFixed(2)} s — the settle is inside this recording`);
 
 /* arrow count stability */
 const counts = {};
@@ -45,16 +50,40 @@ console.log("arrow field, worst displacement per frame:", JSON.stringify(stats(s
    at an opacity you could see. Same rule the cursor rake is held to below,
    and it is stricter than the old "was it a commutation?" excuse: since the
    overlay cross-fades, even a commutation has no right to pop. */
-let orphanA = 0, orphanN = 0;
+/* Did a mark APPEAR, or did it merely move?
+
+   Nearest-neighbour distance alone cannot tell those apart, and the faster
+   the figure is played the worse it gets: a capacitor chevron rides the
+   charge integral and sprints through the zero crossing, so at six times
+   speed it covers nine pixels in a frame while the flow arrows cover three.
+   Held to a fixed radius it reads as a new mark every time, which buried the
+   real signal under hundreds of false ones.
+
+   Counting is what distinguishes them. If the field has no more marks than
+   it had, every mark has a partner however far it travelled — nothing
+   appeared, whatever the distances say. Only a field that GREW has newcomers
+   in it, and only that surplus is judged. That is exactly the rule the
+   figure is meant to obey: anything entering has to dissolve in. */
+let orphanA = 0, orphanN = 0, grew = 0;
 for (let i = 1; i < f.length; i++) {
   const A = f[i - 1].arrows, B = f[i].arrows;
   if (!A || !A.length || !B) continue;
-  for (const b of B) {
+  const surplus = B.length - A.length;
+  if (surplus <= 0) continue;
+  grew++;
+  /* The newcomers are the surplus marks furthest from anything that was
+     already there. */
+  const scored = B.map((b) => {
     let best = Infinity;
     for (const a of A) best = Math.min(best, Math.hypot(b[0] - a[0], b[1] - a[1]));
-    if (best > 6) { orphanN++; orphanA = Math.max(orphanA, b[2] === undefined ? 1 : b[2]); }
+    return { b, best };
+  }).sort((x, y) => y.best - x.best).slice(0, surplus);
+  for (const { b } of scored) {
+    orphanN++;
+    orphanA = Math.max(orphanA, b[2] === undefined ? 1 : b[2]);
   }
 }
+console.log(`  (${grew} frames added a mark; only what they added is judged)`);
 console.log(`arrows appearing with no near predecessor: ${orphanN}, brightest: ${orphanA.toFixed(3)}`,
   orphanA > 0.12 ? "*** A VISIBLE POP ***" : "(all faint — they dissolve in)");
 

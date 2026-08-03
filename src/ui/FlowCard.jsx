@@ -44,21 +44,57 @@ function FlowCard({ topo, res, spec }) {
      The switching phase is derived from it, so the marker and the circuit
      can never disagree: one clock, one wrap point, at the right-hand edge
      of the plot rather than a third of the way along it. */
-  useEffect(() => { setP(0); setLens("i"); }, [topo.id]);
+  useEffect(() => { setP(0); pRef.current = 0; setLens("i"); }, [topo.id]);
   useEffect(() => { if (reduce) setPlay(false); }, [reduce]);
+  /* One period of a settle per drawn period, advanced ON the phase wrap.
+
+     Stepping the transient on its own timer looked simpler and was wrong:
+     the index changed in the middle of a drawn cycle, so the dash travel and
+     the arrow belt jumped by a whole period's worth wherever the change
+     happened to land. Measured, that was arrows appearing at 0.92 opacity
+     and moving 15 px in a frame — the pop this figure exists not to have.
+
+     Tying it to the wrap costs a faster clock: a dozen periods at the steady
+     rate would take most of a minute. Six times is the compromise — about
+     0.6 s a period, which is a couple of seconds of settle and still some
+     thirty-five frames per period on a 60 Hz display. Faster looked better
+     on paper and was a blur: at twenty-two times there are ten frames in a
+     period, and the dashes travel further between frames than the eye can
+     follow. The compression is honest either way — the event really is
+     microseconds wide, and the strip beside it carries the true time. */
+  const pRef = useRef(0);
+  const RUSH = 6;
   useEffect(() => {
     if (!play || !F) return undefined;
     let raf, last = 0;
     const step = (now) => {
       if (last) {
         const dt = Math.min((now - last) / 1000, 0.1);
-        setP((v) => (v + dt * 0.28 * spd / WAVE_CYCLES) % 1);
+        const rate = 0.28 * spd / WAVE_CYCLES * (tr && trPlay ? RUSH : 1);
+        /* The frame is the single writer of the phase.
+
+           Advancing it inside a setP updater and stepping the transient from
+           there put a side effect in a state updater: React is free to run
+           those twice, and the phase and the period index could land in
+           different renders — one frame drawn with the new phase and the old
+           cycle, which is a whole period's worth of dash travel in a single
+           frame. Both are now derived here and set together. */
+        const prev = pRef.current;
+        const nv = (prev + dt * rate) % 1;
+        pRef.current = nv;
+        setP(nv);
+        if (tr && trPlay && Math.floor(nv * WAVE_CYCLES) !== Math.floor(prev * WAVE_CYCLES)) {
+          setTi((k) => {
+            if (k + 1 >= tr.schedule.length) { setTrPlay(false); return k; }
+            return k + 1;
+          });
+        }
       }
       last = now; raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [play, spd, F, topo.id]);
+  }, [play, spd, F, topo.id, tr, trPlay]);
 
   /* The schematic underneath never changes while the animation runs, so it
      is built once per topology and kept out of the per-frame path. The draw
@@ -142,18 +178,13 @@ function FlowCard({ topo, res, spec }) {
   /* Play the settle through once, then let it dissolve and leave the steady
      figure behind. Reduced motion skips straight to the end — the same thing
      the strip would have arrived at, without the journey. */
+  /* Reduced motion, or a paused figure: there is no wrap coming to advance
+     on, so resolve straight to the settled cycle. */
   useEffect(() => {
     if (!tr || !trPlay) return undefined;
-    if (reduce) { setTi(tr.schedule.length - 1); setTrPlay(false); return undefined; }
-    const per = Math.max(3200 / Math.max(tr.schedule.length, 1), 90);
-    const id = setInterval(() => {
-      setTi((k) => {
-        if (k + 1 >= tr.schedule.length) { setTrPlay(false); return k; }
-        return k + 1;
-      });
-    }, per);
-    return () => clearInterval(id);
-  }, [tr, trPlay, reduce]);
+    if (reduce || !play) { setTi(tr.schedule.length - 1); setTrPlay(false); }
+    return undefined;
+  }, [tr, trPlay, reduce, play]);
 
   /* Once it has settled and been looked at, retire the strip. */
   useEffect(() => {
@@ -185,7 +216,16 @@ function FlowCard({ topo, res, spec }) {
   /* Peak drives stroke weight and opacity, so it must never be zero — an
      idle topology would divide the whole overlay away. */
   const iPk = M.flowPk > 1e-9 ? M.flowPk : 1;
-  const flowOff = -(M.qFlowAt(tPer) / (M.flowTot || 1)) * 240;
+  /* Travel, not position within a period.
+
+     240 units is one period of charge, and in steady state the wrap is
+     invisible by construction — the arrow spacing divides it, so every mark
+     lands in another's slot. Across a settle it is not, because consecutive
+     drawn periods carry different shapes: resetting to zero at each seam
+     moves the whole belt. Accumulating the periods already shown keeps the
+     dashes travelling forwards through the transient, and reduces to exactly
+     the old expression when there is no transient to accumulate. */
+  const flowOff = -((tr ? ti : 0) + M.qFlowAt(tPer) / (M.flowTot || 1)) * 240;
 
   /* Phase lookup. Some topologies define windows that do not tile the
      cycle (a rectifier conducts for a slice and idles for the rest), so
@@ -204,7 +244,8 @@ function FlowCard({ topo, res, spec }) {
      FIRST drawn period, so the highlighted band and the marker agree. */
   const jump = (k) => {
     const b = F.ph[k].f ? F.ph[k].f(D) : [0, 1];
-    setPlay(false); setP(((b[0] + b[1]) / 2) / WAVE_CYCLES);
+    const at = ((b[0] + b[1]) / 2) / WAVE_CYCLES;
+    setPlay(false); setP(at); pRef.current = at;
   };
   const rising = M.flowAt(Math.min(tPer + 0.01, 0.999)) > iNow;
 
@@ -390,7 +431,18 @@ function FlowCard({ topo, res, spec }) {
   const inIdx = phaseAt(starts[nearK] + 1e-4);
   const outIdx = phaseAt(starts[nearK] - 1e-4);
   const wOf = (k) => Math.max(bounds[k][1] - bounds[k][0], 1e-3);
-  const fw = Math.min(0.02, 0.4 * Math.min(wOf(inIdx), wOf(outIdx)));
+  /* The dissolve is a duration, not a fraction of a cycle.
+
+     Written as a flat 0.02 of a period it keeps its width in PHASE and loses
+     it in time the moment the clock speeds up: at 2× it halves, and while a
+     settle plays it is six times shorter still — twelve milliseconds, under
+     one frame on a 60 Hz display. The layer then mounts fully lit between
+     one frame and the next, which measured as arrows appearing at 0.84
+     opacity, and every one of them coincided with a route mounting. Scaling
+     by the rate keeps the fade the same number of milliseconds however fast
+     the figure is being played. */
+  const rateMul = spd * (tr && trPlay ? RUSH : 1);
+  const fw = Math.min(0.02 * rateMul, 0.4 * Math.min(wOf(inIdx), wOf(outIdx)));
   /* 0 = outgoing phase fully present, 1 = incoming fully arrived. Cubic
      ease-in-out, not smoothstep: the narrowest windows span only three or
      four frames at 1×, so the first rendered sample can land a third of the
@@ -438,7 +490,7 @@ function FlowCard({ topo, res, spec }) {
      hold at a floor rather than vanishing, and everything is continuous in
      t, so nothing ever appears at a visible opacity. */
   const flowLive = 0.30 + 0.70 * mag;
-  const arrows = flows.map((fl) => arrowsAt(fl.segs, -flowOff));
+  const arrows = flows.map((fl) => arrowsAt(fl.segs, -flowOff, 120, rateMul));
 
   /* ---- the capacitor branches ----
 
@@ -472,7 +524,11 @@ function FlowCard({ topo, res, spec }) {
     const pk = g.src === "in"
       ? (src.ipk > 1e-12 ? src.ipk : 1)
       : Math.max(Math.abs(src.iCmin), Math.abs(src.iCmax), 1e-12);
-    const off = -(src.qAt(tPer) / (src.qAbs || 1)) * 240;
+    /* Accumulated across a settle, for the same reason the conducting path
+       is: the capacitor's own charge integral restarts every period, and its
+       shape changes from one displayed period to the next, so resetting at
+       each seam slides the whole dash train. */
+    const off = -((tr ? ti : 0) + src.qAt(tPer) / (src.qAbs || 1)) * 240;
     const mag = Math.min(Math.abs(i) / pk, 1);
     return {
       i, mag, off, geo: capGeo[j], label: g.src === "in" ? "C_in" : "C_out",
@@ -480,7 +536,7 @@ function FlowCard({ topo, res, spec }) {
          mark at the zero crossing is invisible, which is also the instant
          the direction reverses. */
       o: 0.12 + 0.88 * mag,
-      arrows: arrowsAt(capGeo[j], -off),
+      arrows: arrowsAt(capGeo[j], -off, 120, rateMul),
       /* the arrowhead points the way it is actually travelling */
       flip: i < 0,
     };
@@ -595,7 +651,7 @@ function FlowCard({ topo, res, spec }) {
         play={play} onPlay={() => setPlay(!play)}
         spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
         phases={F.ph.map((q) => q.t)} phase={play ? -1 : idx} onPhase={jump}
-        pos={p} onPos={(v) => { setPlay(false); setP(v); }}
+        pos={p} onPos={(v) => { setPlay(false); setP(v); pRef.current = v; }}
         extra={
           <>
             <span className="sp" />

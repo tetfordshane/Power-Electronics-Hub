@@ -15,7 +15,13 @@ import { writeFileSync, mkdirSync } from "fs";
 
 const id = process.argv[2] || "buck";
 const secs = Number(process.argv[3] || 13);
-const lens = process.argv[4] || null;
+const lens = process.argv[4] && !/^--/.test(process.argv[4]) ? process.argv[4] : null;
+/* --perturb[=2x|=0.5x] steps the load part-way through the recording, so the
+   continuity metric covers a settle as well as a steady loop. Nothing about
+   a transient is exempt from the rule that marks may not appear at a visible
+   opacity, and until this existed nothing measured it. */
+const pArg = process.argv.find((a) => /^--perturb/.test(a));
+const perturb = pArg ? (pArg.split("=")[1] || "2x") : null;
 const pageUrl = bench(id);
 
 const browser = await puppeteer.launch({ headless: true, args: ["--window-size=1600,1000"] });
@@ -50,7 +56,8 @@ if (lens) {
   await new Promise((r) => setTimeout(r, 300));
 }
 
-const samples = await page.evaluate(async (secs) => {
+const samples = await page.evaluate(async (secs, perturb) => {
+  let stepped = null;
   const out = [];
   const t0 = performance.now();
   await new Promise((res) => {
@@ -84,11 +91,14 @@ const samples = await page.evaluate(async (secs) => {
            group's — the commutation cross-fade and the current dimming live
            on the parent <g>, and an "invisible" arrow only counts as
            invisible if the whole product says so. */
-        let o = +(a.getAttribute("opacity") || 1);
+        let o = +((a.style && a.style.opacity) || a.getAttribute("opacity") || 1);
         for (let g = a.parentElement; g && g.tagName === "g"; g = g.parentElement) {
           o *= +((g.style && g.style.opacity) || g.getAttribute("opacity") || 1);
         }
-        return [+m[1], +m[2], +o.toFixed(3)];
+        /* The class rides along so a pop can be attributed to a specific
+           kind of mark — a flow chevron, a capacitor one, a field one —
+           rather than reported as an anonymous count. */
+        return [+m[1], +m[2], +o.toFixed(3), (a.getAttribute("class") || "").trim()];
       }).filter(Boolean);
       out.push({
         t: +(performance.now() - t0).toFixed(2),
@@ -101,17 +111,34 @@ const samples = await page.evaluate(async (secs) => {
         rings,
         ph: [...document.querySelectorAll(".devr,.devg")].map((g)=>g.classList.contains("on")?1:0).join(""),
       });
+      /* Fire the step once, a third of the way in, so there is a settled
+         stretch before it to compare against. */
+      if (perturb && stepped === null && performance.now() - t0 > secs * 333) {
+        const want = perturb === "0.5x" ? "½×" : "2×";
+        const b = [...document.querySelectorAll(".stepbtn")].find((x) => x.textContent.trim() === want);
+        stepped = b ? performance.now() - t0 : -1;
+        if (b) b.click();
+      }
       if (performance.now() - t0 < secs * 1000) requestAnimationFrame(step); else res();
     };
     requestAnimationFrame(step);
   });
-  return out;
-}, secs);
+  return { out, stepped };
+}, secs, perturb);
 
+const frames = samples.out;
 mkdirSync(new URL("../.anim", import.meta.url), { recursive: true });
-writeFileSync(new URL("../.anim/frames.json", import.meta.url), JSON.stringify(samples));
+/* The step time rides along so the analysis can say which side of the
+   perturbation a discontinuity landed on. */
+writeFileSync(new URL("../.anim/frames.json", import.meta.url),
+  JSON.stringify(perturb ? { frames, steppedAt: samples.stepped } : frames));
 
-console.log(`captured ${samples.length} frames over ${secs}s (~${(samples.length/secs).toFixed(0)} fps)`);
+if (perturb) {
+  console.log(samples.stepped > 0
+    ? `load stepped to ${perturb} at ${(samples.stepped / 1000).toFixed(2)} s`
+    : "PERTURB REQUESTED BUT NO STEP CONTROL FOUND — this topology has no circuit");
+}
+console.log(`captured ${frames.length} frames over ${secs}s (~${(frames.length/secs).toFixed(0)} fps)`);
 console.log("run: node scripts/analyse-frames.mjs");
 
 await browser.close();
