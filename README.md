@@ -68,10 +68,22 @@ being forced into an open circuit; and a flyback secondary is **anti-phase**,
 which is the whole difference between a flyback and a forward converter —
 wired in phase it still converges, still regulates, and reads about 20 % high.
 
-Pilots: buck, sync buck, boost, buck-boost, flyback. Adding another means a
-netlist, a `sim: { L, C }` on the design result so the simulation and the
-printed numbers cannot describe different converters, and a case in
-`test/sim-steady.test.mjs`.
+Converted so far: buck, sync buck, boost, buck-boost, flyback, Ćuk, SEPIC,
+Zeta. Adding another means a netlist, a `sim: { … }` on the design result so
+the simulation and the printed numbers cannot describe different converters,
+and an entry in `test/sim-steady.test.mjs`.
+
+That entry records what the design's ΔI actually refers to, because it is not
+the same quantity everywhere: `"own"` where the design sizes L for the plotted
+winding at this operating point, `"sum"` where ΔI is the summed winding ripple
+(a SEPIC's two windings both ripple and the switch sees the total), `"corner"`
+where L is sized at an input corner and drawn at nominal so only the output
+voltage is worth asserting. Guessing wrong there fails honestly or passes by
+luck, and both are worse than saying which it is.
+
+Wire a new one against the textbook ratio before trusting anything else —
+every error so far has been wiring, and every one of them produced a
+converter that ran, settled, and regulated to a plausible wrong number.
 
 ### Transients
 
