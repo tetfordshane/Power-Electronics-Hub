@@ -25,10 +25,14 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? +v.toPrecision
 function shot(res) {
   if (!res) return null;
   const o = {};
-  if (res.infeasible) return { infeasible: true, warn: res.warn || [] };
+  /* Warnings record as [severity, message] pairs: the tier is part of what
+     the reader sees, so a warning silently demoted from stop to note is a
+     change this file has to notice. */
+  const warnOf = (r) => (r.warn || []).map((w) => [w.s, w.m]);
+  if (res.infeasible) return { infeasible: true, warn: warnOf(res) };
   o.hi = (res.hi || []).map(([k, v]) => [k, v]);
   o.loss = (res.loss || []).map(([k, w, f]) => [k, num(w), f || ""]);
-  o.warn = res.warn || [];
+  o.warn = warnOf(res);
   if (res.pout !== undefined) o.pout = num(res.pout);
   o.groups = (res.groups || []).map((g) => ({
     t: g.t, rows: (g.rows || []).map((r) => [r[0], r[1], r[2] || ""]),

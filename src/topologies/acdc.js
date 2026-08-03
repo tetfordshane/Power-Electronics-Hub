@@ -1,4 +1,4 @@
-import { G, R, R2, esrOhm, infeasible, swPeriod } from "../fields.js";
+import { G, R, R2, esrOhm, infeasible, swPeriod, W, warns } from "../fields.js";
 import { clamp, eng, pct, f2, f3 } from "../format.js";
 
 /* ================= topologies — AC–DC and DC–AC ================= */
@@ -71,10 +71,10 @@ const TC = [
         ["Boost diode reverse recovery", Prr, "Q_rr·V_bus·f_sw — why CCM PFC went SiC"],
         ["Switch C_oss", Poss, "½·C_oss·V_bus²·f_sw, dumped at every turn-on"],
         ["Boost diode", Pbd, "V_F·I_out(avg)"]],
-      warn: [
-        Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak.",
-        Vpp > 20 && "Bus ripple is " + eng(Vpp, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak."),
+        W("check", Vpp > 20 && "Bus ripple is " + eng(Vpp, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference."),
+      ),
       groups: [
         G("Line side", [
           R("Input rms current at V_ac min", eng(Iin, "A")),
@@ -163,11 +163,11 @@ const TC = [
         ["Boost diodes reverse recovery", Prr, "2·Q_rr·V_bus·f_sw"],
         ["Switch C_oss (both legs)", Poss, "2·½·C_oss·V_bus²·f_sw"],
         ["Boost diodes", Pbd, "V_F·I_out(avg)"]],
-      warn: [
-        Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak.",
-        K < 0.15 && "At the line peak the duty is " + f2(Dpk) + ", almost exactly where the two ripples cancel completely. Real cancellation will be set by how well the two inductors match, not by this number.",
-        Po < 300 && "Below about 300 W the second leg usually costs more than the filter it saves. A single boost stage is the cheaper answer.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak."),
+        W("check", K < 0.15 && "At the line peak the duty is " + f2(Dpk) + ", almost exactly where the two ripples cancel completely. Real cancellation will be set by how well the two inductors match, not by this number."),
+        W("note", Po < 300 && "Below about 300 W the second leg usually costs more than the filter it saves. A single boost stage is the cheaper answer."),
+      ),
       groups: [
         G("Line side", [
           R("Input rms current at V_ac min", eng(Iin, "A")),
@@ -236,7 +236,11 @@ const TC = [
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["bridge loss removed", eng(Pbr, "W")]],
       loss: [["Fast-leg conduction", Iin * Iin * s.rds * 1e-3, "I_in(rms)²·R_DS(on)"],
         ["Line-frequency leg", Plf, "one device conducts per half cycle"]],
-      warn: ["This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."],
+      /* Unconditional, so it is a standing property of the topology rather
+         than a fault in this design — a note, not a stop, however severe the
+         consequence. A red banner on every render of a page that is working
+         teaches the reader to stop reading red banners. */
+      warn: warns(W("note", "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle.")),
       groups: [
         G("Power stage", [
           R("Input rms current", eng(Iin, "A")), R("Peak line current", eng(Ipk, "A")),
@@ -305,10 +309,10 @@ const TC = [
         ["Switching", 4 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
           "four devices, averaged over the output sine"],
         ["Dead-time distortion", Vdt * Io, "energy the output never receives"]],
-      warn: [
-        m > 1 && "m = " + f2(m) + " exceeds 1: the bridge cannot make " + Vac + " V rms from " + Vdc + " V DC without overmodulation. Raise V_dc above " + eng(Math.SQRT2 * Vac, "V") + ".",
-        Iq > 0.05 * Io && "Filter cap draws " + eng(Iq, "A") + " of reactive current, over 5 % of rated. Shrink C_f and raise L_f.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", m > 1 && "m = " + f2(m) + " exceeds 1: the bridge cannot make " + Vac + " V rms from " + Vdc + " V DC without overmodulation. Raise V_dc above " + eng(Math.SQRT2 * Vac, "V") + "."),
+        W("check", Iq > 0.05 * Io && "Filter cap draws " + eng(Iq, "A") + " of reactive current, over 5 % of rated. Shrink C_f and raise L_f."),
+      ),
       groups: [
         G("Modulation", [
           R("Modulation index m", f3(m)),
@@ -360,10 +364,10 @@ const TC = [
       loss: [["Conduction", 6 * 0.5 * Iph * Iph * s.rds * 1e-3, "six devices, each conducting half the time"],
         ["Switching", 6 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
           "six devices, averaged over the output sine"]],
-      warn: [
-        mV > 1 && "SVPWM needs m = " + f2(mV) + " — beyond the linear range. Minimum V_dc for " + s.vac + " V is " + eng(s.vac / 0.707, "V") + ".",
-        Mratio < 15 && "f_sw/f_out = " + f2(Mratio) + ". Below ~15 use synchronous modulation or the low-order harmonics become significant.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", mV > 1 && "SVPWM needs m = " + f2(mV) + " — beyond the linear range. Minimum V_dc for " + s.vac + " V is " + eng(s.vac / 0.707, "V") + "."),
+        W("check", Mratio < 15 && "f_sw/f_out = " + f2(Mratio) + ". Below ~15 use synchronous modulation or the low-order harmonics become significant."),
+      ),
       groups: [
         G("Modulation", [
           R("m required, sine PWM", f3(mS)),
@@ -412,7 +416,7 @@ const TC = [
       loss: [["Conduction", 12 * 0.5 * Iph * Iph * s.rds * 1e-3, "twelve devices share the phase current"],
         ["Switching", 12 * (2 / Math.PI) * Ipk * (Vdc / 2) * s.tsw * 1e-9 * fs / 2,
           "each transition only steps half the link — the point of the topology"]],
-      warn: [mV > 1 && "m = " + f2(mV) + " is beyond the linear range; raise V_dc above " + eng(s.vac / 0.707, "V") + "."].filter(Boolean),
+      warn: warns(W("stop", mV > 1 && "m = " + f2(mV) + " is beyond the linear range; raise V_dc above " + eng(s.vac / 0.707, "V") + ".")),
       groups: [
         G("Voltage structure", [
           R("Bus voltage", eng(Vdc, "V")),

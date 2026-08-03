@@ -1,11 +1,27 @@
 import React from "react";
 import { Mx, Mixed } from "../tex.jsx";
 import { isDCM } from "../cycle.js";
-import { swPeriod } from "../fields.js";
+import { swPeriod, SEV, W, warns } from "../fields.js";
 import { Wave, LineChart } from "./Wave.jsx";
 import { LossBar } from "./LossBar.jsx";
 import { Spark } from "./Spark.jsx";
 import { eng, f2 } from "../format.js";
+
+/* How each tier presents itself, in one place.
+
+   `stop` is the red the whole page reserves for "this will not work".
+   `check` keeps the copper the warnings have always used — it is the tier
+   almost every existing warning belongs to. `note` borrows the neutral cyan
+   the spectrum card already uses for a standing fact.
+
+   `measured` is not here: it belongs to the simulator, is emitted below
+   rather than by a design function, and the README is explicit that it is
+   not the warning red. */
+const SEVR = {
+  stop: { cls: "warn stop", tag: "stop" },
+  check: { cls: "warn", tag: "check" },
+  note: { cls: "note", tag: "note" },
+};
 
 /* The shapes worth seeing without leaving the numbers.
 
@@ -50,7 +66,7 @@ function Results({ res, spec, hideWave, sim, cyc }) {
   if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
   if (res.error) {
     return (
-      <div className="warn">
+      <div className="warn stop">
         <b>The design equations failed for these inputs.</b> This is a bug rather than a bad
         entry: <span className="mono">{res.error}</span>. Try stepping the numbers back toward the
         defaults, and the rest of the page is unaffected.
@@ -66,13 +82,13 @@ function Results({ res, spec, hideWave, sim, cyc }) {
   return (
     <div>
       {res.infeasible ? (
-        <div className="warn">
+        <div className="warn stop">
           <b>This operating point is outside the topology.</b> There is nothing to size, because
           no set of components produces this conversion ratio. The reason is below.
         </div>
       ) : null}
       {allBlank || negative ? (
-        <div className="warn">
+        <div className="warn stop">
           <b>No usable numbers at this operating point.</b> The inputs are self-consistent enough
           to run, but the result is not physical — usually a conversion ratio this topology cannot
           reach. Check the warnings below and the voltages you entered.
@@ -105,19 +121,31 @@ function Results({ res, spec, hideWave, sim, cyc }) {
           </div>
         );
       })() : null}
-      {/* Said once, for every topology, from the same test the drawing uses.
-          A converter that has fallen into discontinuous conduction is not
-          described by any of the ratios above it, and thirty design functions
-          each remembering to mention that is thirty chances to forget. */}
-      {isDCM(res.wave) ? (
-        <div className="warn"><b>check ·</b> <Mx t={"At this load the current falls to zero before the "
-          + "period ends — discontinuous conduction. The conversion ratio, the ripple and the C_out "
-          + "sizing above all assume it never does, so treat them as upper bounds here: the real "
-          + "output voltage rises above them as the load falls further."} /></div>
-      ) : null}
-      {(res.warn || []).map((w, i) => (
-        <div className="warn" key={i}><b>check ·</b> <Mx t={w} /></div>
-      ))}
+      {/* One list, one renderer, so a tier cannot come to be styled two ways.
+          The DCM warning is said once here, for every topology, from the same
+          test the drawing uses — a converter in discontinuous conduction is
+          not described by any of the ratios above it, and thirty design
+          functions each remembering to mention that is thirty chances to
+          forget.
+
+          Sorted by tier, because a stop underneath two notes is a stop the
+          reader finds last. Within a tier the author's order survives. */}
+      {(() => {
+        const all = warns(
+          W("check", isDCM(res.wave) && "At this load the current falls to zero before the "
+            + "period ends — discontinuous conduction. The conversion ratio, the ripple and the C_out "
+            + "sizing above all assume it never does, so treat them as upper bounds here: the real "
+            + "output voltage rises above them as the load falls further."),
+          ...(res.warn || [])
+        );
+        return all
+          .map((w, i) => ({ w, i }))
+          .sort((a, b) => (SEV.indexOf(a.w.s) - SEV.indexOf(b.w.s)) || (a.i - b.i))
+          .map(({ w, i }) => {
+            const t = SEVR[w.s] || SEVR.check;
+            return <div className={t.cls} key={i}><b>{t.tag} ·</b> <Mx t={w.m} /></div>;
+          });
+      })()}
       {/* What the simulation found, which the design equations cannot find
           out about themselves.
 

@@ -838,7 +838,10 @@
     ]
    ],
    "warn": [
-    "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    [
+     "check",
+     "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    ]
    ],
    "groups": [
     {
@@ -1013,7 +1016,10 @@
     ]
    ],
    "warn": [
-    "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    [
+     "check",
+     "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    ]
    ],
    "groups": [
     {
@@ -1188,7 +1194,10 @@
     ]
    ],
    "warn": [
-    "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    [
+     "check",
+     "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."
+    ]
    ],
    "groups": [
     {
@@ -3950,7 +3959,10 @@
     ]
    ],
    "warn": [
-    "C1 carries 5.53 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    [
+     "check",
+     "C1 carries 5.53 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    ]
    ],
    "groups": [
     {
@@ -4240,7 +4252,10 @@
     ]
    ],
    "warn": [
-    "C1 carries 5.53 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    [
+     "check",
+     "C1 carries 5.53 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    ]
    ],
    "groups": [
     {
@@ -4386,7 +4401,10 @@
     ]
    ],
    "warn": [
-    "C1 carries 6.38 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    [
+     "check",
+     "C1 carries 6.38 A rms — use film or several ceramics in parallel, never a single electrolytic."
+    ]
    ],
    "groups": [
     {
@@ -4534,7 +4552,10 @@
     ]
    ],
    "warn": [
-    "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    [
+     "check",
+     "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    ]
    ],
    "groups": [
     {
@@ -4834,7 +4855,10 @@
     ]
    ],
    "warn": [
-    "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    [
+     "check",
+     "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    ]
    ],
    "groups": [
     {
@@ -4985,7 +5009,10 @@
     ]
    ],
    "warn": [
-    "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    [
+     "check",
+     "C_s rms is 6.45 A — plan on several ceramics or a film cap."
+    ]
    ],
    "groups": [
     {
@@ -5653,7 +5680,10 @@
     ]
    ],
    "warn": [
-    "R_out is large enough that the pump collapses under this load — it cannot deliver 10.0 A at all. Raise f_sw or C_pump, or accept far less current."
+    [
+     "stop",
+     "R_out is large enough that the pump collapses under this load — it cannot deliver 10.0 A at all. Raise f_sw or C_pump, or accept far less current."
+    ]
    ],
    "pout": 0,
    "groups": [
@@ -5909,7 +5939,10 @@
     ]
    ],
    "warn": [
-    "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage."
+    [
+     "check",
+     "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage."
+    ]
    ],
    "pout": 311.582447833,
    "groups": [
@@ -6572,7 +6605,10 @@
     ]
    ],
    "warn": [
-    "Waiting for the valley saves only 718 mW here. At this C_oss and frequency a fixed-frequency flyback is simpler and just as efficient."
+    [
+     "note",
+     "Waiting for the valley saves only 718 mW here. At this C_oss and frequency a fixed-frequency flyback is simpler and just as efficient."
+    ]
    ],
    "groups": [
     {
@@ -8551,7 +8587,10 @@
     ]
    ],
    "warn": [
-    "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    [
+     "check",
+     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    ]
    ],
    "groups": [
     {
@@ -8686,7 +8725,10 @@
     ]
    ],
    "warn": [
-    "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    [
+     "check",
+     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    ]
    ],
    "groups": [
     {
@@ -8821,8 +8863,14 @@
     ]
    ],
    "warn": [
-    "Duty loss is 29.5 % — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
-    "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    [
+     "check",
+     "Duty loss is 29.5 % — that is a lot of transformer you are not using. Reduce L_r or the turns ratio."
+    ],
+    [
+     "check",
+     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    ]
    ],
    "groups": [
     {
@@ -8957,7 +9005,10 @@
     ]
    ],
    "warn": [
-    "The lagging leg only achieves ZVS above 21.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    [
+     "check",
+     "The lagging leg only achieves ZVS above 21.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+    ]
    ],
    "groups": [
     {
@@ -9999,8 +10050,14 @@
     ]
    ],
    "warn": [
-    "Crest factor is 54.74. The transformer and diode see currents an order of magnitude above the DC draw.",
-    "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux."
+    [
+     "check",
+     "Crest factor is 54.74. The transformer and diode see currents an order of magnitude above the DC draw."
+    ],
+    [
+     "note",
+     "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux."
+    ]
    ],
    "groups": [
     {
@@ -10103,8 +10160,14 @@
     ]
    ],
    "warn": [
-    "Crest factor is 173.44. The transformer and diode see currents an order of magnitude above the DC draw.",
-    "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux."
+    [
+     "check",
+     "Crest factor is 173.44. The transformer and diode see currents an order of magnitude above the DC draw."
+    ],
+    [
+     "note",
+     "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux."
+    ]
    ],
    "groups": [
     {
@@ -10209,9 +10272,18 @@
     ]
    ],
    "warn": [
-    "Power factor is 0.40 with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front.",
-    "Crest factor 17.23: the bridge and the source both see 17.2 A peaks. Size the diode's I_FSM accordingly.",
-    "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor."
+    [
+     "check",
+     "Power factor is 0.40 with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front."
+    ],
+    [
+     "check",
+     "Crest factor 17.23: the bridge and the source both see 17.2 A peaks. Size the diode's I_FSM accordingly."
+    ],
+    [
+     "note",
+     "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor."
+    ]
    ],
    "groups": [
     {
@@ -10324,9 +10396,18 @@
     ]
    ],
    "warn": [
-    "Power factor is 0.23 with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front.",
-    "Crest factor 54.75: the bridge and the source both see 5.48 A peaks. Size the diode's I_FSM accordingly.",
-    "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor."
+    [
+     "check",
+     "Power factor is 0.23 with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front."
+    ],
+    [
+     "check",
+     "Crest factor 54.75: the bridge and the source both see 5.48 A peaks. Size the diode's I_FSM accordingly."
+    ],
+    [
+     "note",
+     "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor."
+    ]
    ],
    "groups": [
     {
@@ -10974,7 +11055,10 @@
     ]
    ],
    "warn": [
-    "Gate drive is 64.9 % of the total. At 150 kHz a lower-Q_g device beats a lower-R_DS one."
+    [
+     "check",
+     "Gate drive is 64.9 % of the total. At 150 kHz a lower-Q_g device beats a lower-R_DS one."
+    ]
    ],
    "groups": [
     {
@@ -11092,7 +11176,10 @@
     ]
    ],
    "warn": [
-    "Body-diode conduction is 25.8 % of the loss. Tighten the dead time — 60 ns is costing 972 mW."
+    [
+     "check",
+     "Body-diode conduction is 25.8 % of the loss. Tighten the dead time — 60 ns is costing 972 mW."
+    ]
    ],
    "groups": [
     {
@@ -11626,7 +11713,10 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ]
    ],
    "groups": [
     {
@@ -11779,7 +11869,10 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ]
    ],
    "groups": [
     {
@@ -11932,7 +12025,10 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ]
    ],
    "groups": [
     {
@@ -12087,7 +12183,10 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ]
    ],
    "groups": [
     {
@@ -12243,8 +12342,14 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak.",
-    "Below about 300 W the second leg usually costs more than the filter it saves. A single boost stage is the cheaper answer."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ],
+    [
+     "note",
+     "Below about 300 W the second leg usually costs more than the filter it saves. A single boost stage is the cheaper answer."
+    ]
    ],
    "groups": [
     {
@@ -12400,7 +12505,10 @@
     ]
    ],
    "warn": [
-    "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    [
+     "check",
+     "V_bus must sit comfortably above √2·V_ac(max) = 375 V or the boost loses control at the line peak."
+    ]
    ],
    "groups": [
     {
@@ -12543,7 +12651,10 @@
     ]
    ],
    "warn": [
-    "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    [
+     "note",
+     "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    ]
    ],
    "groups": [
     {
@@ -12651,7 +12762,10 @@
     ]
    ],
    "warn": [
-    "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    [
+     "note",
+     "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    ]
    ],
    "groups": [
     {
@@ -12759,7 +12873,10 @@
     ]
    ],
    "warn": [
-    "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    [
+     "note",
+     "This topology requires zero-reverse-recovery devices (GaN or SiC) in CCM. Silicon superjunction devices will not survive the first line cycle."
+    ]
    ],
    "groups": [
     {
@@ -12874,7 +12991,10 @@
     ]
    ],
    "warn": [
-    "Filter cap draws 675 mA of reactive current, over 5 % of rated. Shrink C_f and raise L_f."
+    [
+     "check",
+     "Filter cap draws 675 mA of reactive current, over 5 % of rated. Shrink C_f and raise L_f."
+    ]
    ],
    "groups": [
     {
@@ -12987,7 +13107,10 @@
     ]
    ],
    "warn": [
-    "Filter cap draws 67.5 mA of reactive current, over 5 % of rated. Shrink C_f and raise L_f."
+    [
+     "check",
+     "Filter cap draws 67.5 mA of reactive current, over 5 % of rated. Shrink C_f and raise L_f."
+    ]
    ],
    "groups": [
     {
@@ -13818,7 +13941,10 @@
     ]
    ],
    "warn": [
-    "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    [
+     "check",
+     "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    ]
    ],
    "groups": [
     {
@@ -13946,8 +14072,14 @@
     ]
    ],
    "warn": [
-    "Device C_oss (300 pF) already exceeds the 269 pF the design calls for. ZVS is impossible here — go below 800 kHz, raise the power, or find a lower-C_oss device.",
-    "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    [
+     "stop",
+     "Device C_oss (300 pF) already exceeds the 269 pF the design calls for. ZVS is impossible here — go below 800 kHz, raise the power, or find a lower-C_oss device."
+    ],
+    [
+     "check",
+     "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    ]
    ],
    "groups": [
     {
@@ -14075,7 +14207,10 @@
     ]
    ],
    "warn": [
-    "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    [
+     "check",
+     "Plan for a device rated well above 171 V — component tolerance and load variation push the peak higher still."
+    ]
    ],
    "groups": [
     {
@@ -14205,7 +14340,10 @@
     ]
    ],
    "warn": [
-    "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    [
+     "note",
+     "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    ]
    ],
    "groups": [
     {
@@ -14333,7 +14471,10 @@
     ]
    ],
    "warn": [
-    "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    [
+     "note",
+     "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    ]
    ],
    "groups": [
     {
@@ -14461,7 +14602,10 @@
     ]
    ],
    "warn": [
-    "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    [
+     "note",
+     "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."
+    ]
    ],
    "groups": [
     {
@@ -14727,8 +14871,14 @@
     ]
    ],
    "warn": [
-    "C_oss (200 pF) is larger than the 29.6 pF this dead time can move. Increase t_dead to at least 405.63 ns or the node will not reach the rail before turn-on.",
-    "Required transition time is 405.63 ns against the 60 ns allowed — the bridge is switching hard."
+    [
+     "check",
+     "C_oss (200 pF) is larger than the 29.6 pF this dead time can move. Increase t_dead to at least 405.63 ns or the node will not reach the rail before turn-on."
+    ],
+    [
+     "check",
+     "Required transition time is 405.63 ns against the 60 ns allowed — the bridge is switching hard."
+    ]
    ],
    "groups": [
     {

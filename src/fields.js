@@ -116,11 +116,37 @@ const R = (k, v, n) => [k, v, n || ""];
    one. A design that has no ESR input still gets a ripple pane; it just gets
    the charge term alone, which is what its own C_out formula assumes. */
 const esrOhm = (s) => (Number(s.esr) > 0 ? s.esr * 1e-3 : 0);
+/* ------------------------------------------------------------- warnings */
+/* Three tiers, and the difference between them is what the reader should DO.
+
+     stop  — this will not work. A physical impossibility, a device that will
+             not survive, a model that does not apply to what was entered.
+     check — this probably works, but a decision was made for you and you
+             should confirm it. Controller limits, margins, stresses near a
+             practical edge.
+     note  — a true and useful fact about this topology at this operating
+             point that asks nothing of you.
+
+   A fourth, `measured`, belongs to the simulator and is emitted by the
+   results panel rather than by a design function — it reports what the
+   circuit did, not what is wrong, and the README is explicit that it is not
+   the warning red.
+
+   They used to be one flat array of strings, so a hard impossibility and an
+   unconditional footnote arrived in the same red box at the same weight. The
+   half-wave rectifier had three different severities in one array, in the
+   order they happened to be written.
+
+   `W` drops a warning whose message is falsy, which is what makes the
+   `cond && "…"` idiom keep working; `warns` drops the holes.               */
+const SEV = ["stop", "check", "note"];
+const W = (s, m) => (m ? { s, m } : null);
+const warns = (...ws) => ws.filter(Boolean);
 /* A conversion ratio the topology cannot reach is a design error, not a set
    of numbers. Returning this says so, instead of printing a duty above 1
    and a negative inductance as though they meant something. */
-const infeasible = (msg) => ({ hi: [], warn: [msg], groups: [], infeasible: true });
+const infeasible = (msg) => ({ hi: [], warn: [W("stop", msg)], groups: [], infeasible: true });
 /* alias, for design functions that need R as a resistance */
 const R2 = R;
 
-export { FIELDS, ORDERED, order, swPeriod, G, R, R2, esrOhm, infeasible };
+export { FIELDS, ORDERED, order, swPeriod, G, R, R2, esrOhm, infeasible, SEV, W, warns };

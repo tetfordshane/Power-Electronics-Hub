@@ -212,6 +212,34 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**Warnings carry a severity, and the tier is the first thing read.** Write
+them with the helpers in `src/fields.js`:
+
+```js
+warn: warns(
+  W("stop",  cond && "…"),   // this will not work as entered
+  W("check", cond && "…"),   // it probably works; confirm a decision made for you
+  W("note",  "…"),           // true and useful, and asks nothing of you
+)
+```
+
+`W` drops a warning whose message is falsy, so the `cond && "…"` idiom keeps
+working, and `warns` drops the holes. Red is spent on `stop` alone — that is
+what makes it mean anything. An *unconditional* warning is a `note` however
+severe its content: totem-pole PFC's "silicon will not survive the first line
+cycle" is a standing property of the topology, and a red banner on every
+render of a working page teaches the reader to stop reading red banners. The
+simulator's `measured` tier is not in this set; it is emitted by the results
+panel, not by a design function.
+
+`Results` is the only thing that maps a tier to a style, and it sorts by tier
+before rendering — a stop underneath two notes is a stop the reader finds
+last. `check-registry` holds the severity to the closed set, because an
+unrecognised tier falls back to `check` in the renderer and would silently
+downgrade a stop. Warnings are recorded in the golden file as
+`[severity, message]`, so **changing a warning's wording or its tier requires
+`node scripts/gen-golden.mjs` in the same commit**.
+
 **Sparklines come from the CycleView, never from a second pass over the
 data.** `Spark` takes a polyline the cycle model already emits — `cyc.pts`,
 the output capacitor's `vTot` against its `iC` timebase, `inCap.pts` — so the

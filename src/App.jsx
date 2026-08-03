@@ -53,7 +53,7 @@ function readHash() {
 /* The words this page used, defined. Scanned out of the page's own prose, so
    there is nothing per-topology to keep in step: write a new interval note
    that mentions dead time and the definition appears by itself. */
-function TermCard({ topo }) {
+function TermCard({ topo, res }) {
   const F = FLOW[topo.id];
   /* Everything the reader can see on the page, including the equations and
      their footnotes — those carry most of the vocabulary a beginner trips
@@ -67,7 +67,11 @@ function TermCard({ topo }) {
        vocabulary a beginner has not met yet tends to turn up first — hold-up
        time, crest factor, loaded Q. A term defined nowhere because it was
        only ever said in an example is the fault this scan exists to avoid. */
-    (EXAMPLES[topo.cat] || []).map((x) => x.t + " " + x.n).join(" ")].join(" ");
+    (EXAMPLES[topo.cat] || []).map((x) => x.t + " " + x.n).join(" "),
+    /* And the warnings, which is where the vocabulary is most urgent — a
+       reader who has just been told they are losing ZVS or sitting on a
+       cancellation null is exactly the reader who needs the definition. */
+    ((res && res.warn) || []).map((w) => w.m).join(" ")].join(" ");
   const hits = termsFor(text);
   if (!hits.length) return null;
   return (
@@ -334,7 +338,7 @@ export default function App() {
               </div>
             ) : null}
 
-            <TermCard topo={topo} /></main>
+            <TermCard topo={topo} res={res} /></main>
         </div></div>
       )}
 

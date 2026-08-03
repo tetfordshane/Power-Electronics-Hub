@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { TOPOS, CATS, FLOW, FAMILY } from "./lib/topos.mjs";
-import { FIELDS } from "../src/fields.js";
+import { FIELDS, SEV } from "../src/fields.js";
 import { SELECT, SELECT_ID } from "../src/content/select.js";
 import { EXAMPLES } from "../src/content/examples.js";
 import { defaultSpec } from "./lib/spec.mjs";
@@ -103,6 +103,14 @@ for (const t of TOPOS) {
     if (!Number.isFinite(l[1])) fail(t.id, `loss ${i} ("${l[0]}") is ${l[1]}, not a number`);
     else if (l[1] < 0) fail(t.id, `loss ${i} ("${l[0]}") is negative`);
   });
+  /* Warnings carry a severity from a closed set. An unrecognised tier falls
+     back to `check` in the renderer, so a typo would silently downgrade a
+     stop to an advisory — visible nowhere except on the page it matters on. */
+  for (const w of res.warn || []) {
+    if (!w || typeof w !== "object") { fail(t.id, `warn "${w}" is not a {s, m} entry`); continue; }
+    if (!SEV.includes(w.s)) fail(t.id, `warn severity "${w.s}" is not one of ${SEV.join(", ")}`);
+    if (typeof w.m !== "string" || !w.m.trim()) fail(t.id, `warn with severity "${w.s}" has no message`);
+  }
   /* Nothing on the panel may read as an unfilled blank or a nonsense value —
      this is the walk the README asks a human to do by eye. */
   for (const g of res.groups) {

@@ -1,4 +1,4 @@
-import { G, R, R2, esrOhm, infeasible, swPeriod } from "../fields.js";
+import { G, R, R2, esrOhm, infeasible, swPeriod, W, warns } from "../fields.js";
 import { clamp, eng, pct, f2, f3 } from "../format.js";
 
 /* ================= topologies — rectification ================= */
@@ -37,13 +37,19 @@ const TD = [
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["diode peak", eng(Ipk, "A")]],
       loss: [["Diode conduction", s.vf * Idc, "V_F·I_dc"]],
-      warn: [
-        Vpk <= 0 && "V_F is larger than the peak of the AC input — no current can flow at all. Lower the diode drop or raise V_ac.",
-        Vpk > 0 && dV >= Vpk && "The capacitor fully discharges between peaks: this is not a DC rail, and the conduction-angle model below does not apply. Increase C_bulk or reduce the load.",
-        Vpk > 0 && dV <= Vpk && dV > 0.3 * Vpk && "Ripple is " + pct(dV / Vpk) + " of the peak. The conduction-angle model gets rough past ~30 %, and the rail is barely DC.",
-        Ipk / Idc > 12 && "Crest factor is " + f2(Ipk / Idc) + ". The transformer and diode see currents an order of magnitude above the DC draw.",
-        "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux.",
-      ].filter(Boolean),
+      /* This array is why the tiers exist. It used to run a physical
+         impossibility, a model that no longer applies, a roughness caveat, a
+         stress figure and an unconditional footnote through one red box, in
+         the order they happened to be written. */
+      warn: warns(
+        W("stop", Vpk <= 0 && "V_F is larger than the peak of the AC input — no current can flow at all. Lower the diode drop or raise V_ac."),
+        /* Everything below this line on the page is computed by a model that
+           does not describe what was entered. That is a stop. */
+        W("stop", Vpk > 0 && dV >= Vpk && "The capacitor fully discharges between peaks: this is not a DC rail, and the conduction-angle model below does not apply. Increase C_bulk or reduce the load."),
+        W("check", Vpk > 0 && dV <= Vpk && dV > 0.3 * Vpk && "Ripple is " + pct(dV / Vpk) + " of the peak. The conduction-angle model gets rough past ~30 %, and the rail is barely DC."),
+        W("check", Ipk / Idc > 12 && "Crest factor is " + f2(Ipk / Idc) + ". The transformer and diode see currents an order of magnitude above the DC draw."),
+        W("note", "A half-wave rectifier draws unidirectional current. Any transformer ahead of it needs a gap or a much larger core to survive the DC flux."),
+      ),
       groups: [
         G("Output", [
           R("Peak rectified voltage", eng(Vpk, "V")),
@@ -99,11 +105,11 @@ const TD = [
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["power factor", f2(PF)]],
       loss: [["Diode conduction", Pd, "2·V_F·I_dc — two diodes in series each half-cycle"]],
-      warn: [
-        PF < 0.7 && "Power factor is " + f2(PF) + " with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front.",
-        Ipk / Idc > 8 && "Crest factor " + f2(Ipk / Idc) + ": the bridge and the source both see " + eng(Ipk, "A") + " peaks. Size the diode's I_FSM accordingly.",
-        "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", PF < 0.7 && "Power factor is " + f2(PF) + " with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front."),
+        W("check", Ipk / Idc > 8 && "Crest factor " + f2(Ipk / Idc) + ": the bridge and the source both see " + eng(Ipk, "A") + " peaks. Size the diode's I_FSM accordingly."),
+        W("note", "Inrush at switch-on is limited only by line and ESR impedance. Budget an NTC or a relay-bypassed resistor."),
+      ),
       groups: [
         G("Output", [
           R("Peak rectified voltage", eng(Vpk, "V")),
@@ -194,10 +200,10 @@ const TD = [
       wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: Io, vlabel: "v_rect", vhi: "V_sec", ilabel: "i_Lf",
         pulses: 2,
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        D > 0.46 && "D = " + f2(D) + " leaves almost no margin below the 0.5 ceiling. Real drives need dead time between the halves, so keep a few points in hand.",
-        Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", D > 0.46 && "D = " + f2(D) + " leaves almost no margin below the 0.5 ceiling. Real drives need dead time between the halves, so keep a few points in hand."),
+        W("note", Pd > 0.05 * Vo * Io && "Rectifier loss is " + pct(Pd / (Vo * Io)) + " of the output. At this current a synchronous rectifier is justified."),
+      ),
       groups: [
         G("Operating point", [
           R("Output voltage", eng(Vo, "V")),
@@ -255,11 +261,11 @@ const TD = [
       loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"],
         ["Body diode (dead time)", Pbody, "2·V_F·I_out·t_dead·f_sw"],
         ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
-      warn: [
-        Psync > Pdio && "At this current the FET is losing to the diode. R_DS(on) of " + s.rds + " mΩ breaks even at " + eng(Ibe, "A") + " — either parallel devices or keep the Schottky.",
-        Pgate > 0.25 * Psync && "Gate drive is " + pct(Pgate / Psync) + " of the total. At " + s.fsw + " kHz a lower-Q_g device beats a lower-R_DS one.",
-        Pbody > 0.2 * Psync && "Body-diode conduction is " + pct(Pbody / Psync) + " of the loss. Tighten the dead time — " + s.td + " ns is costing " + eng(Pbody, "W") + ".",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Psync > Pdio && "At this current the FET is losing to the diode. R_DS(on) of " + s.rds + " mΩ breaks even at " + eng(Ibe, "A") + " — either parallel devices or keep the Schottky."),
+        W("check", Pgate > 0.25 * Psync && "Gate drive is " + pct(Pgate / Psync) + " of the total. At " + s.fsw + " kHz a lower-Q_g device beats a lower-R_DS one."),
+        W("check", Pbody > 0.2 * Psync && "Body-diode conduction is " + pct(Pbody / Psync) + " of the loss. Tighten the dead time — " + s.td + " ns is costing " + eng(Pbody, "W") + "."),
+      ),
       groups: [
         G("The comparison", [
           R("Schottky loss V_F·I_out", eng(Pdio, "W")),
@@ -326,10 +332,10 @@ const TD = [
          published factor above it. */
       wave: { sat: s.lsag / 100, D: D, dI: dI, iavg: IL, vlabel: "v_sec", vhi: "V_sec", ilabel: "i_L1",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, n: 2 } },
-      warn: [
-        D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period.",
-        Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period."),
+        W("note", Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation."),
+      ),
       groups: [
         G("Operating point", [
           R("Output voltage", eng(Vo, "V")),

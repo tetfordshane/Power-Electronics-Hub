@@ -110,7 +110,10 @@ function HeatCard({ topo, spec }) {
         if (ok) { any = true; lo = Math.min(lo, val); hi = Math.max(hi, val); }
         cells.push({ i, j, v, load: axes.lFull * lf, val: ok ? val : null,
           eta: m ? m.eta : null, loss: m ? m.loss : null,
-          warn: r && r.warn && r.warn.length ? r.warn.length : 0 });
+          /* Notes do not darken the map. A totem-pole PFC carries a standing
+             note on every cell it can reach, and counting those would report
+             308 warnings for a design with none. */
+          warn: r && r.warn ? r.warn.filter((w) => w && w.s !== "note").length : 0 });
       }
     }
     if (!any) return null;

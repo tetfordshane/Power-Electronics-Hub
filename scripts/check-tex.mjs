@@ -91,7 +91,10 @@ for (const topo of TOPOS) {
   ran++;
   const add = (s) => { if (typeof s === "string" && s.trim()) runtime.add(s); };
   for (const [k, v] of res.hi || []) { add(k); add(v); }
-  for (const w of res.warn || []) add(w);
+  /* Warnings are {s, m} now. The string branch is belt-and-braces: if the
+     shape ever changes again, prose must not silently fall out of this gate
+     the way it did when `e:` was anchored to a brace. */
+  for (const w of res.warn || []) add(typeof w === "string" ? w : w && w.m);
   for (const l of res.loss || []) { add(l[0]); add(l[2]); }
   for (const g of res.groups || []) {
     add(g.t);

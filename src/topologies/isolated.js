@@ -1,4 +1,4 @@
-import { G, R, R2, esrOhm, infeasible, swPeriod } from "../fields.js";
+import { G, R, R2, esrOhm, infeasible, swPeriod, W, warns } from "../fields.js";
 import { clamp, eng, pct, f2, f3 } from "../format.js";
 
 /* ===================== topologies — isolated ===================== */
@@ -80,11 +80,13 @@ const TB = [
              cycle after cycle. So the flux ramp sets the shape, I_v/I_pk =
              1 − K, and the load sets the level. */
           i0: Is0, i1: Is1 } },
-      warn: [
-        s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R.",
-        Vds > 600 && "V_DS reaches " + eng(Vds, "V") + " before the leakage spike. That is 900 V+ silicon territory; lower N or use active clamp.",
-        K >= 0.99 && "K_rp = 1 is the DCM boundary: peak currents are at their highest here. Lower K_rp for CCM if rms current is the problem.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", s.vclamp < Vr * 1.2 && "Clamp voltage is too close to V_R (" + eng(Vr, "V") + ") — clamp loss runs away. Use V_clamp ≈ 1.3–1.5·V_R."),
+        W("check", Vds > 600 && "V_DS reaches " + eng(Vds, "V") + " before the leakage spike. That is 900 V+ silicon territory; lower N or use active clamp."),
+        /* Where on the CCM–DCM boundary you are sitting, which is a fact
+           about the operating point rather than a fault in it. */
+        W("note", K >= 0.99 && "K_rp = 1 is the DCM boundary: peak currents are at their highest here. Lower K_rp for CCM if rms current is the problem."),
+      ),
       groups: [
         G("Transformer", [
           R("Turns ratio N_p/N_s", f2(Nt)),
@@ -171,11 +173,12 @@ const TB = [
         ["Turn-on at the valley", Psoft, "½·C_res·V_valley²·f_sw — what is left after waiting"],
         ["Output rectifier", Pdo, "V_F·I_out"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
-      warn: [
-        Vvalley <= 0 && "The ring reaches all the way down to zero volts at V_in max, so the switch can turn on at true zero. This is the ideal case and needs V_R ≥ V_in — check the turns ratio is really giving you that.",
-        saved < 0.02 * Po && "Waiting for the valley saves only " + eng(saved, "W") + " here. At this C_oss and frequency a fixed-frequency flyback is simpler and just as efficient.",
-        tValley > 0.3 / fs && "One half ring is " + eng(tValley, "s") + ", which is a large fraction of the period at " + s.fsw + " kHz. The frequency will move a long way with load.",
-      ].filter(Boolean),
+      warn: warns(
+        /* Good news with a verification attached, not a fault. */
+        W("note", Vvalley <= 0 && "The ring reaches all the way down to zero volts at V_in max, so the switch can turn on at true zero. This is the ideal case and needs V_R ≥ V_in — check the turns ratio is really giving you that."),
+        W("note", saved < 0.02 * Po && "Waiting for the valley saves only " + eng(saved, "W") + " here. At this C_oss and frequency a fixed-frequency flyback is simpler and just as efficient."),
+        W("check", tValley > 0.3 / fs && "One half ring is " + eng(tValley, "s") + ", which is a large fraction of the period at " + s.fsw + " kHz. The frequency will move a long way with load."),
+      ),
       groups: [
         G("The ring", [
           R("Ring frequency", eng(fRing, "Hz"), "L_p against C_res"),
@@ -253,10 +256,12 @@ const TB = [
          pane draws one ripple per drawn period to match. */
       wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time.",
-        Dm < 0.1 && "Duty falls to " + f3(Dm) + " at V_in max; check the controller's minimum on-time and the transformer's utilisation.",
-      ].filter(Boolean),
+      warn: warns(
+        /* The core walks up the B–H curve and saturates. Nothing downstream
+           of this is a design; it is a short. */
+        W("stop", s.dmax >= 0.5 && "D_max must stay below 0.5 with a 1:1 reset — the core will not reset in time."),
+        W("check", Dm < 0.1 && "Duty falls to " + f3(Dm) + " at V_in max; check the controller's minimum on-time and the transformer's utilisation."),
+      ),
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p", f3(n), "= 1/" + f2(1 / n)),
@@ -339,10 +344,10 @@ const TB = [
       wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
         pulses: 2, vbi: true,
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary.",
-        2 * s.vinMax > 200 && "2·V_in max = " + eng(2 * s.vinMax, "V") + " before the spike. Consider a half-bridge instead.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", s.dmax > 0.48 && "D per switch must stay below 0.5 or both switches conduct at once and short the primary."),
+        W("note", 2 * s.vinMax > 200 && "2·V_in max = " + eng(2 * s.vinMax, "V") + " before the spike. Consider a half-bridge instead."),
+      ),
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p (per half)", f3(n)),
@@ -408,9 +413,9 @@ const TB = [
       wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in/2",
         pulses: 2, vbi: true,
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", s.dmax >= 0.5 && "D per switch must stay below 0.5, or both switches conduct at once and short the bus."),
+      ),
       groups: [
         G("Transformer", [
           R("Turns ratio N_s/N_p", f3(n)),
@@ -485,10 +490,10 @@ const TB = [
       wave: { D: Dn, dI, iavg: Io , vlabel: "v_pri", vhi: "V_in",
         pulses: 2, vbi: true,
         cap: { kind: "buck", C: Cout, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio.",
-        zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio."),
+        W("check", zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."),
+      ),
       groups: [
         G("Transformer and duty", [
           R("Turns ratio N_s/N_p", f3(n)),
@@ -593,16 +598,18 @@ const TB = [
         ],
         vmarks: [{ x: fPeak, t: "peak gain — do not go left of this", c: "#F0796C" }],
       },
-      warn: [
-        fnLo === null && "The tank cannot produce the gain of " + f2(Mmax) + " that V_in min demands — its peak is only "
-          + f2(peak) + ". Lower Q (lighter design load), lower L_n, or narrow the input range.",
-        fnLo !== null && peak < Mmax * 1.1 && "Peak gain (" + f2(peak) + ") barely covers the " + f2(Mmax)
-          + " you need at V_in min. Lower Q or L_n, or accept a narrower hold-up window.",
-        fnLo !== null && fnLo < fPeak * 1.1 && "The low-line point (f_n = " + f2(fnLo) + ") sits close to the peak-gain frequency at "
-          + f2(fPeak) + ". Any further down is capacitive, and losing ZVS there is how LLC converters fail.",
-        fnHi === null && "The tank never falls to the gain of " + f2(Mmin) + " that V_in max needs within f_n ≤ " + FN_HI
-          + " — the converter will not regulate at high line without burst mode.",
-      ].filter(Boolean),
+      warn: warns(
+        /* The tank cannot reach the gain the input range asks for. This is
+           not a margin — the converter does not regulate at low line. */
+        W("stop", fnLo === null && "The tank cannot produce the gain of " + f2(Mmax) + " that V_in min demands — its peak is only "
+          + f2(peak) + ". Lower Q (lighter design load), lower L_n, or narrow the input range."),
+        W("check", fnLo !== null && peak < Mmax * 1.1 && "Peak gain (" + f2(peak) + ") barely covers the " + f2(Mmax)
+          + " you need at V_in min. Lower Q or L_n, or accept a narrower hold-up window."),
+        W("check", fnLo !== null && fnLo < fPeak * 1.1 && "The low-line point (f_n = " + f2(fnLo) + ") sits close to the peak-gain frequency at "
+          + f2(fPeak) + ". Any further down is capacitive, and losing ZVS there is how LLC converters fail."),
+        W("stop", fnHi === null && "The tank never falls to the gain of " + f2(Mmin) + " that V_in max needs within f_n ≤ " + FN_HI
+          + " — the converter will not regulate at high line without burst mode."),
+      ),
       groups: [
         G("Tank", [
           R("Turns ratio n", f2(n), "unity gain at f_r"),
@@ -687,13 +694,13 @@ const TB = [
       loss: [["Bridge 1 conduction", Pb1, "2·I_tank(rms)²·R_DS(on), HV side"],
         ["Bridge 2 conduction", Pb2, "n·I_tank through the LV side's own R_DS(on)"],
         ["Turn-off (hard side)", Poff, "only the bridge that lost ZVS"]],
-      warn: [
-        Math.abs(ratio - 1) > 0.15 && "n·V2/V1 = " + f2(ratio) + ". Away from 1.0 the ZVS range shrinks quickly — retune the turns ratio or use an extended modulation scheme.",
-        d > 0.45 && "You are operating close to the power limit (d = " + f2(d) + "). Circulating current and turn-off loss are near their worst here.",
-        E1 < Ereq && "Side 1 loses ZVS at this operating point: the tank stores " + eng(E1, "J")
-          + " at the transition but needs " + eng(Ereq, "J") + " to swing C_oss. Raise the phase shift, lower L, or use lower-C_oss devices.",
-        E2 < Ereq && "Side 2 loses ZVS: " + eng(E2, "J") + " available against " + eng(Ereq, "J") + " required.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Math.abs(ratio - 1) > 0.15 && "n·V2/V1 = " + f2(ratio) + ". Away from 1.0 the ZVS range shrinks quickly — retune the turns ratio or use an extended modulation scheme."),
+        W("check", d > 0.45 && "You are operating close to the power limit (d = " + f2(d) + "). Circulating current and turn-off loss are near their worst here."),
+        W("check", E1 < Ereq && "Side 1 loses ZVS at this operating point: the tank stores " + eng(E1, "J")
+          + " at the transition but needs " + eng(Ereq, "J") + " to swing C_oss. Raise the phase shift, lower L, or use lower-C_oss devices."),
+        W("check", E2 < Ereq && "Side 2 loses ZVS: " + eng(E2, "J") + " available against " + eng(Ereq, "J") + " required."),
+      ),
       groups: [
         G("Power transfer", [
           R("Phase shift", s.phi + "° (d = " + f2(d) + ")", "maximum power transfer at 90°"),

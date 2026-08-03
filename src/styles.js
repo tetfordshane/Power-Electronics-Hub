@@ -492,9 +492,11 @@ export const CSS = `
    in the copper the rest of the app uses for a computed quantity rather than
    the red it uses for a warning — it is not telling you something is broken,
    it is telling you the ideal figure above was optimistic. */
+/* Now that the check tier is amber too, the left edge is what separates
+   them: this one is the simulator reporting, not the equations advising. */
 .ps .warn.measured{
   border-color:#5A431F; background:#17110A; color:#D9C4A4;
-  border-left-width:3px;
+  border-left-width:3px; border-left-color:var(--cu);
 }
 .ps .warn.measured b{color:var(--cu)}
 
@@ -640,12 +642,28 @@ export const CSS = `
 .ps li::marker{color:var(--ghosttxt)}
 
 /* -------------------------------------------------------------- warnings */
+/* Three tiers, three colours, and the colour is the first thing read:
+   red stops you, amber asks you to confirm something, neutral tells you a
+   fact. Every warning used to be this red, so "D falls to 0.04, check the
+   controller's minimum on-time" arrived at exactly the weight of "the core
+   will not reset and the transformer saturates" — and a page carrying five
+   of them taught the reader to skim all five.
+
+   The check tier is the default and by far the most common, so it keeps the
+   plain .warn selector. */
 .ps .warn{
-  border:1px solid #5A3126; background:#1E1210; color:#F2B2A8; padding:10px 13px;
+  border:1px solid #5A4520; background:#1A1408; color:#E8D2A6; padding:10px 13px;
   border-radius:3px; font-size:var(--t-small); margin-bottom:9px; line-height:1.55;
   max-width:none;
 }
-.ps .warn b{color:var(--rd); font-weight:650}
+.ps .warn b{color:var(--cu); font-weight:650}
+/* The red is now spent on one thing only, which is what makes it mean
+   something: this will not work as entered. */
+.ps .warn.stop{
+  border-color:#5A3126; background:#1E1210; color:#F2B2A8;
+  border-left-width:3px;
+}
+.ps .warn.stop b{color:var(--rd)}
 .ps .note{
   border:1px solid var(--line2); background:var(--surf2); color:var(--dim);
   padding:10px 13px; border-radius:3px; font-size:var(--t-small); margin-bottom:9px;

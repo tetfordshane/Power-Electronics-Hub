@@ -1,4 +1,4 @@
-import { G, R, R2, esrOhm, infeasible, swPeriod } from "../fields.js";
+import { G, R, R2, esrOhm, infeasible, swPeriod, W, warns } from "../fields.js";
 import { clamp, eng, pct, f2, f3 } from "../format.js";
 
 /* ===================== topologies — non-isolated ===================== */
@@ -64,12 +64,12 @@ const TA = [
          number, which is the honest one to show beside the nominal duty. */
       wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        Dx > 0.85 && "D reaches " + f3(Dx) + " at V_in min — check the controller's max duty and t_on.",
-        Dm < 0.05 && "D falls to " + f3(Dm) + " at V_in max — t_on may be shorter than the minimum on-time.",
+      warn: warns(
+        W("check", Dx > 0.85 && "D reaches " + f3(Dx) + " at V_in min — check the controller's max duty and t_on."),
+        W("check", Dm < 0.05 && "D falls to " + f3(Dm) + " at V_in max — t_on may be shorter than the minimum on-time."),
         /* The DCM warning is shared now — Results derives it from the same
            test the cycle model draws from, for every topology at once. */
-      ].filter(Boolean),
+      ),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
@@ -163,10 +163,12 @@ const TA = [
         ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair.",
-        dIn / 2 > Io && "Inductor ripple exceeds the DC current: current reverses each cycle. Fine for forced PWM, wasteful at light load.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Ils * Ils * s.rds * 1e-3 > Pc * 2.2 && "The low-side FET carries most of the conduction loss — consider a larger LS device or an asymmetric pair."),
+        /* Reversing current is what a synchronous buck is FOR at light load.
+           It is worth saying and it asks nothing of the reader. */
+        W("note", dIn / 2 > Io && "Inductor ripple exceeds the DC current: current reverses each cycle. Fine for forced PWM, wasteful at light load."),
+      ),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
@@ -242,10 +244,12 @@ const TA = [
          ever wrong, the two disagree visibly instead of agreeing quietly. */
       wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Iph, vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, n: N } },
-      warn: [
+      warn: warns(
         /* Dn ≥ 1 cannot reach here — infeasible() returned above. */
-        K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number.",
-      ].filter(Boolean),
+        /* This one invalidates a number printed above it, which is more than
+           a footnote: the reader is being told not to trust a result. */
+        W("check", K < 0.05 && "You are sitting almost exactly on a cancellation null (D ≈ m/N) — real output ripple will be set by ESR and mismatch, not by this number."),
+      ),
       groups: [
         G("Per phase", [
           R("Phases", String(N)), R("Duty (nom)", f3(Dn)),
@@ -351,10 +355,12 @@ const TA = [
       wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: IL , vlabel: "v_SW", vhi: "V_out", vinv: true,
         cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
           i0: IL + dIn / 2, i1: IL - dIn / 2 } },
-      warn: [
-        Dx > 0.8 && "D = " + f3(Dx) + " at V_in min. Conduction loss and the RHP zero both degrade rapidly beyond about 0.8 — consider two stages or a transformer-based topology.",
-        s.vinMax > Vo && "V_in max exceeds V_out. A boost cannot regulate down; the output will follow the input through the diode.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Dx > 0.8 && "D = " + f3(Dx) + " at V_in min. Conduction loss and the RHP zero both degrade rapidly beyond about 0.8 — consider two stages or a transformer-based topology."),
+        /* Not a margin: over part of the stated input range this converter
+           does not regulate at all, and no component choice fixes it. */
+        W("stop", s.vinMax > Vo && "V_in max exceeds V_out. A boost cannot regulate down; the output will follow the input through the diode."),
+      ),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
@@ -438,7 +444,7 @@ const TA = [
       wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: IL , vlabel: "v_A", vhi: "V_in",
         cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
           i0: IL + dIn / 2, i1: IL - dIn / 2 } },
-      warn: [Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output."].filter(Boolean),
+      warn: warns(W("check", Dx > 0.8 && "D = " + f3(Dx) + " at V_in min — the inductor current is " + eng(ILx, "A") + " for only " + eng(Io, "A") + " of output.")),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
@@ -544,7 +550,7 @@ const TA = [
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
       wave: { rect: "sync", sat: s.lsag / 100, D: Dw, dI, iavg: ILw,
         vlabel: "v_SW", vhi: "V_in", cap: capW },
-      warn: [Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate."].filter(Boolean),
+      warn: warns(W("check", Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate.")),
       groups: [
         G("Modes", [
           R("Buck duty at V_in max", f3(Db)),
@@ -633,7 +639,7 @@ const TA = [
          the input winding's DC level onto the output ripple. */
       wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Iin, vlabel: "v_SW", vhi: "V_in+|V_out|", vinv: true,
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, iavg: Io, dI } },
-      warn: [Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic."].filter(Boolean),
+      warn: warns(W("check", Ic1 > 2 && "C1 carries " + eng(Ic1, "A") + " rms — use film or several ceramics in parallel, never a single electrolytic.")),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
@@ -718,10 +724,12 @@ const TA = [
       wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io * Dn / (1 - Dn), vlabel: "v_SW", vhi: "V_in+V_out", vinv: true,
         cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
           i0: Io / (1 - Dn) + dI / 2, i1: Io / (1 - Dn) - dI / 2 } },
-      warn: [
-        Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback.",
-        Ics > 3 && "C_s rms is " + eng(Ics, "A") + " — plan on several ceramics or a film cap.",
-      ].filter(Boolean),
+      warn: warns(
+        /* An economic observation about the topology, not a fault in the
+           design: at this stress the part count starts to favour a flyback. */
+        W("note", Vst > 60 && "Device stress is " + eng(Vst, "V") + ". Above ~60 V a SEPIC starts to look expensive next to a flyback."),
+        W("check", Ics > 3 && "C_s rms is " + eng(Ics, "A") + " — plan on several ceramics or a film cap."),
+      ),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom / max", f3(Dx) + " · " + f3(Dn) + " · " + f3(Dm)),
@@ -793,11 +801,11 @@ const TA = [
          topology's output is quieter than the SEPIC's. */
       wave: { sat: s.lsag / 100, D: Dn, dI, iavg: Io , vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
-      warn: [
-        Dx > 0.8 && "D = " + f3(Dx) + " at V_in min, so the switch carries " + eng(Isum, "A")
-          + " for most of the period. Conduction loss climbs steeply past here.",
-        s.vinMax + Vo > 60 && "Device stress is " + eng(s.vinMax + Vo, "V") + " — V_in max plus V_out, the same penalty the SEPIC pays.",
-      ].filter(Boolean),
+      warn: warns(
+        W("check", Dx > 0.8 && "D = " + f3(Dx) + " at V_in min, so the switch carries " + eng(Isum, "A")
+          + " for most of the period. Conduction loss climbs steeply past here."),
+        W("note", s.vinMax + Vo > 60 && "Device stress is " + eng(s.vinMax + Vo, "V") + " — V_in max plus V_out, the same penalty the SEPIC pays."),
+      ),
       groups: [
         G("Operating point", [
           R("D at V_in min / nom", f3(Dx) + " · " + f3(Dn)),
@@ -864,12 +872,14 @@ const TA = [
       loss: [["Charge redistribution", Pssl, "the R_SSL share of I_out²·R_out — set by f_sw·C"],
         ["Switch resistance", Pfsl, "the R_FSL share of I_out²·R_out"],
         ["Rectifiers", (N + 1) * s.vf * s.iout, "(N+1)·V_F·I_out — zero with synchronous FETs"]],
-      warn: [
-        Vl <= 0 && "R_out is large enough that the pump collapses under this load — it cannot deliver "
-          + eng(s.iout, "A") + " at all. Raise f_sw or C_pump, or accept far less current.",
-        Vl > 0 && Vl < Vi * 0.8 && "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage.",
-        Rfsl > Rssl * 2 && "R_DS(on) dominates R_out: you are in the fast-switching limit, so raising f_sw will not help. Use bigger switches.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", Vl <= 0 && "R_out is large enough that the pump collapses under this load — it cannot deliver "
+          + eng(s.iout, "A") + " at all. Raise f_sw or C_pump, or accept far less current."),
+        W("check", Vl > 0 && Vl < Vi * 0.8 && "Output droops more than 20 % under load — raise f_sw or C_pump, or drop a stage."),
+        /* Which limit you are in is a fact about the pump, and the useful
+           half of it is that the obvious lever has stopped working. */
+        W("note", Rfsl > Rssl * 2 && "R_DS(on) dominates R_out: you are in the fast-switching limit, so raising f_sw will not help. Use bigger switches."),
+      ),
       groups: [
         G("Output", [
           R("Stages", String(N), N + 1 + " rectifiers in the charge path"),

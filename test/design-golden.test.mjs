@@ -48,11 +48,12 @@ function same(a, b, path = "") {
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? +v.toPrecision(12) : v);
 function shot(res) {
   if (!res) return null;
-  if (res.infeasible) return { infeasible: true, warn: res.warn || [] };
+  const warnOf = (r) => (r.warn || []).map((w) => [w.s, w.m]);
+  if (res.infeasible) return { infeasible: true, warn: warnOf(res) };
   const o = {
     hi: (res.hi || []).map(([k, v]) => [k, v]),
     loss: (res.loss || []).map(([k, w, f]) => [k, num(w), f || ""]),
-    warn: res.warn || [],
+    warn: warnOf(res),
     groups: (res.groups || []).map((g) => ({
       t: g.t, rows: (g.rows || []).map((r) => [r[0], r[1], r[2] || ""]),
     })),

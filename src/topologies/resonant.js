@@ -1,4 +1,4 @@
-import { G, R, R2, esrOhm, infeasible, swPeriod } from "../fields.js";
+import { G, R, R2, esrOhm, infeasible, swPeriod, W, warns } from "../fields.js";
 import { clamp, eng, pct, f2, f3 } from "../format.js";
 
 /* ============ topologies — resonant switching amplifiers (class E) ============ */
@@ -78,11 +78,14 @@ const TE = [
         xmin: 0, xmax: 360, ymin: 0, ymax: 4, xlab: "ωt  (degrees)", ylab: "normalised",
         marks: [{ y: 3.562, t: "peak = 3.562·V_dc", c: "#F0796C" }],
       },
-      warn: [
-        Coss > Csh && "Device C_oss (" + eng(Coss, "F") + ") already exceeds the " + eng(Csh, "F") + " the design calls for. ZVS is impossible here — go below " + eng(fmax, "Hz") + ", raise the power, or find a lower-C_oss device.",
-        Q < 3 && "Loaded Q of " + f2(Q) + " is low. The design equations assume a near-sinusoidal load current; below about 3 the harmonics make the real waveform diverge from this model.",
-        Vpk > 0.8 * 4 * s.vdc && "Plan for a device rated well above " + eng(Vpk, "V") + " — component tolerance and load variation push the peak higher still.",
-      ].filter(Boolean),
+      warn: warns(
+        /* Zero-voltage switching is the entire mechanism of a class E stage.
+           Without it this is a hard-switched amplifier that will not survive
+           its own C_oss loss, so it is a stop rather than a margin. */
+        W("stop", Coss > Csh && "Device C_oss (" + eng(Coss, "F") + ") already exceeds the " + eng(Csh, "F") + " the design calls for. ZVS is impossible here — go below " + eng(fmax, "Hz") + ", raise the power, or find a lower-C_oss device."),
+        W("check", Q < 3 && "Loaded Q of " + f2(Q) + " is low. The design equations assume a near-sinusoidal load current; below about 3 the harmonics make the real waveform diverge from this model."),
+        W("check", Vpk > 0.8 * 4 * s.vdc && "Plan for a device rated well above " + eng(Vpk, "V") + " — component tolerance and load variation push the peak higher still."),
+      ),
       groups: [
         G("Tank and load", [
           R2("Load resistance R", eng(R, "Ω"), "transform the real load to this"),
@@ -155,11 +158,11 @@ const TE = [
         xmin: 0, xmax: 360, ymin: 0, ymax: 4, xlab: "ωt  (degrees)", ylab: "v_DS / V_dc",
         marks: [{ y: 3.562, t: "peak = 3.562·V_dc", c: "#F0796C" }],
       },
-      warn: [
-        Coss > Csh && "C_oss of " + eng(Coss, "F") + " exceeds the " + eng(Csh, "F") + " each half needs. Below " + eng(fmax, "Hz") + " this design closes; above it, it does not.",
-        Q < 3 && "Loaded Q of " + f2(Q) + " is below the range where the sinusoidal-load assumption holds.",
-        "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses.",
-      ].filter(Boolean),
+      warn: warns(
+        W("stop", Coss > Csh && "C_oss of " + eng(Coss, "F") + " exceeds the " + eng(Csh, "F") + " each half needs. Below " + eng(fmax, "Hz") + " this design closes; above it, it does not."),
+        W("check", Q < 3 && "Loaded Q of " + f2(Q) + " is below the range where the sinusoidal-load assumption holds."),
+        W("note", "Match the two halves closely. A few percent of asymmetry in L_2 or C_2 puts even harmonics straight into the load and unbalances the device stresses."),
+      ),
       groups: [
         G("Per half", [
           R2("Power per stage", eng(Ph, "W")),
@@ -225,12 +228,14 @@ const TE = [
       loss: [["Switch conduction", 2 * Irms * Irms * D * s.rds * 1e-3, "2·I_rms²·D·R_DS(on)"],
         ["Lost ZVS", tdMin > td ? 2 * 0.5 * Coss * s.vdc * s.vdc * f : 0,
           "C_oss dumped at turn-on when the dead time is too short"]],
-      warn: [
-        Draw <= 0 && "A " + s.td + " ns dead time at " + s.fsw + " kHz consumes the entire half-period: there is no on-time left and this operating point does not exist. The numbers below are clamped to a nominal duty and mean nothing until you shorten the dead time or lower the frequency.",
-        Draw > 0 && Draw <= 0.02 && "Dead time of " + s.td + " ns at " + s.fsw + " kHz leaves essentially no on-time. Shorten the dead time or drop the frequency.",
-        Coss > Cs && "C_oss (" + eng(Coss, "F") + ") is larger than the " + eng(Cs, "F") + " this dead time can move. Increase t_dead to at least " + f2(tdMin * 1e9) + " ns or the node will not reach the rail before turn-on.",
-        tdMin > td && "Required transition time is " + f2(tdMin * 1e9) + " ns against the " + s.td + " ns allowed — the bridge is switching hard.",
-      ].filter(Boolean),
+      warn: warns(
+        /* The panel below is explicitly clamped nonsense when this fires —
+           the strongest possible case for the top tier. */
+        W("stop", Draw <= 0 && "A " + s.td + " ns dead time at " + s.fsw + " kHz consumes the entire half-period: there is no on-time left and this operating point does not exist. The numbers below are clamped to a nominal duty and mean nothing until you shorten the dead time or lower the frequency."),
+        W("check", Draw > 0 && Draw <= 0.02 && "Dead time of " + s.td + " ns at " + s.fsw + " kHz leaves essentially no on-time. Shorten the dead time or drop the frequency."),
+        W("check", Coss > Cs && "C_oss (" + eng(Coss, "F") + ") is larger than the " + eng(Cs, "F") + " this dead time can move. Increase t_dead to at least " + f2(tdMin * 1e9) + " ns or the node will not reach the rail before turn-on."),
+        W("check", tdMin > td && "Required transition time is " + f2(tdMin * 1e9) + " ns against the " + s.td + " ns allowed — the bridge is switching hard."),
+      ),
       groups: [
         G("Modulation", [
           R2("Duty per device D", f3(D), "0.5 minus the dead-time fraction"),
