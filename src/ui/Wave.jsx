@@ -500,6 +500,9 @@ function Wave(props) {
       data-cappp={C ? C.capPP.toExponential(6) : null}
       data-icrms={C ? C.iCrms.toExponential(6) : null}
       data-cval={C ? C.C.toExponential(6) : null}
+      role="img"
+      aria-label={"Idealised waveforms over " + cycles + " switching cycles: "
+        + panes.map((p) => p.name + " in " + p.unit).join(", ")}
       style={{ width: "100%", height: "auto", display: "block" }}>
       {drawScope("wv", () => (<>
         {band ? Array.from({ length: cycles }, (_, c) => {
@@ -723,7 +726,8 @@ function LineChart({ series, xmin, xmax, ymin, ymax, xlab, ylab, marks = [], vma
     ...sLabs.map((l, i) => ({ ...l, y: sy[i], kind: "s" }))];
 
   return (
-    <div className="sch"><svg viewBox="0 0 660 218" style={{ width: "100%", height: "auto", display: "block" }}>
+    <div className="sch"><svg viewBox="0 0 660 218" style={{ width: "100%", height: "auto", display: "block" }}
+      role="img" aria-label={ylab + " against " + xlab}>
       {drawScope("lc", () => (<>
         {/* the y-axis caption sits above the plot, clear of the top tick.
             One type scale across every plotting surface: captions 10.5,

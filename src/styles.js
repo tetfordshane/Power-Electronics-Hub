@@ -26,6 +26,12 @@ export const CSS = `
   --line:#22303F; --line2:#2C3D50; --line3:#3A4E66;
   /* ink */
   --txt:#E6EDF5; --dim:#94A7BC; --faint:#61748A; --ghost:#455670;
+  /* --ghost is a stroke colour. It reads as 2.6:1 on the page background,
+     which is right for the faint marks on a device that is switched off and
+     wrong for anything made of words — the rail's result count was live-region
+     text nobody could read. Words that want to recede use --ghosttxt, which
+     clears 4.5:1 on all three card surfaces. */
+  --ghosttxt:#7E91A9;
   /* accents */
   --cu:#E3A85C; --cy:#5AD1DE; --gn:#6FD39B; --rd:#F0796C; --vi:#A88BF0;
   --cu-dim:#9C7238; --gn-dim:#3E7F5C;
@@ -56,6 +62,13 @@ export const CSS = `
   letter-spacing:.13em; text-transform:uppercase; color:var(--faint);
   font-feature-settings:"cpsp" 1;
 }
+/* An eyebrow that is the only title a card has IS that card's heading. It was
+   a <span> everywhere, so a reader moving by headings went from the topology
+   name straight to the bottom of the page — the specification, the results and
+   the equations were structurally invisible. The class carries the look, so
+   the element can carry the meaning. Kickers that sit above a real h2/h3
+   (the category over a topology name) stay spans, because they are labels. */
+.ps h3.eyebrow{margin:0; line-height:1.6; color:var(--faint)}
 
 /* ----------------------------------------------------------------- header */
 .ps .hdr{
@@ -96,7 +109,7 @@ export const CSS = `
   color:var(--txt); padding:11px 30px 11px 13px; font-size:var(--t-small); outline:none;
   font-family:var(--ui); border-radius:var(--radius) var(--radius) 0 0;
 }
-.ps .rail input::placeholder{color:var(--ghost)}
+.ps .rail input::placeholder{color:var(--ghosttxt)}
 .ps .rail input:focus{border-bottom-color:var(--cu); background:var(--surf3)}
 .ps .railclear{
   position:absolute; right:6px; top:50%; transform:translateY(-50%);
@@ -105,7 +118,7 @@ export const CSS = `
 }
 .ps .railclear:hover{color:var(--txt); background:var(--surf3)}
 .ps .railcount{
-  display:block; padding:7px 13px 0; font-size:var(--t-micro); color:var(--ghost);
+  display:block; padding:7px 13px 0; font-size:var(--t-micro); color:var(--ghosttxt);
   letter-spacing:.02em;
 }
 .ps .rgrp{padding:12px 10px 4px}
@@ -617,7 +630,7 @@ export const CSS = `
 /* ---------------------------------------------------------------- lists */
 .ps ul{margin:0; padding-left:18px; color:var(--dim)}
 .ps li{margin-bottom:6px; max-width:70ch}
-.ps li::marker{color:var(--ghost)}
+.ps li::marker{color:var(--ghosttxt)}
 
 /* -------------------------------------------------------------- warnings */
 .ps .warn{

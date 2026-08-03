@@ -198,6 +198,26 @@ chart, `hm` heatmap, `sp` spectrum. They must not collide.
 **Do not name anything `Math`.** A hoisted `function Math` shadows the global
 `Math` object for the whole module. The math component is `TeXSpan`.
 
+**`--ghost` is a stroke colour, `--ghosttxt` is an ink.** They look almost
+alike and they are not interchangeable. `--ghost` reads at 2.6:1 on the page
+background, which is what the marks on a switched-off device want and what no
+run of words can afford; the rail's result count was live-region text nobody
+could read. Anything made of letters that should recede uses `--ghosttxt`,
+which clears 4.5:1 on all three card surfaces.
+
+**A drawing says what it is.** Every `role="img"` carries an `aria-label` — the
+role without a name hides the contents from a screen reader and then declines
+to say what was hidden, which is strictly worse than leaving the role off. The
+32 schematics are argument-less thunks, so `SV` takes a `label` and the two
+callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
+clone the element to pass the topology's name in.
+
+**An eyebrow that is a card's only title is a heading.** Write it as
+`<h3 className="eyebrow">`; the class carries the look either way. An eyebrow
+sitting above a real `h2` or `h3` — the category over a topology name — is a
+kicker and stays a `<span>`, because it labels the heading rather than being
+one.
+
 **Formula notation.** Write formulas the way the existing data does —
 `C_out = ΔI_L/(8·f_sw·ΔV)`, `R_DS(on)`, `√(L_r/C_r)`. The parser handles
 subscripts, real fractions, radicals, Greek and units. Run

@@ -235,9 +235,15 @@ const Gnd = (x, y) => (
     {W(`M ${x - 6} ${y + 11} H ${x + 6}`)}{W(`M ${x - 2.5} ${y + 15} H ${x + 2.5}`)}
   </g>
 );
-const SV = ({ children, w = 660, h = 240 }) => (
+/* `role="img"` with no accessible name is worse than no role at all: it hides
+   the drawing's contents from a screen reader and then declines to say what
+   was hidden. The 32 schematics are thunks taking no arguments — the name has
+   to come from whoever knows which topology is being drawn — so the callers
+   clone this element with a `label`, and the fallback covers anything that
+   forgets. */
+const SV = ({ children, w = 660, h = 240, label }) => (
   <div className="sch"><svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", display: "block" }}
-    role="img">{children}</svg></div>
+    role="img" aria-label={label || "Circuit schematic"}>{children}</svg></div>
 );
 
 /* ------------------------------ schematics ------------------------------ */

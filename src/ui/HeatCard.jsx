@@ -119,7 +119,7 @@ function HeatCard({ topo, spec }) {
   if (!axes || !grid) {
     return (
       <div className="card">
-        <span className="eyebrow">Design space · how the operating point behaves when it moves</span>
+        <h3 className="eyebrow">Design space · how the operating point behaves when it moves</h3>
         <p style={{ marginBottom: 0 }}>
           {!axes
             ? "This topology does not expose an input-voltage range and a load together, so there is no two-dimensional space to sweep."
@@ -150,7 +150,7 @@ function HeatCard({ topo, spec }) {
 
   return (
     <div className="card">
-      <span className="eyebrow">Design space · how the operating point behaves when it moves</span>
+      <h3 className="eyebrow">Design space · how the operating point behaves when it moves</h3>
       <div className="ctl" style={{ margin: "0 0 12px" }} role="group" aria-label="Map quantity">
         <button className={mode === "eta" ? "on" : ""} onClick={() => setMode("eta")}
           aria-pressed={mode === "eta"}>efficiency</button>
@@ -160,6 +160,9 @@ function HeatCard({ topo, spec }) {
       <div className="hmwrap">
         <div className="sch">
           <svg viewBox="0 0 660 200" style={{ width: "100%", height: "auto", display: "block" }} role="img"
+            aria-label={(mode === "eta" ? "Efficiency" : "Total loss") + " across "
+              + axes.vLabel.replace(/ · .*$/, "") + " and " + axes.lLabel.replace(/ · .*$/, "")
+              + ", " + grid.NX + " by " + grid.NY + " cells"}
             onMouseLeave={() => setHover(null)}>
             {drawScope("hm", () => (<>
               <g className="hmgrid">

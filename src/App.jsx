@@ -66,7 +66,7 @@ function TermCard({ topo }) {
   if (!hits.length) return null;
   return (
     <div className="card">
-      <span className="eyebrow">Terms used on this page</span>
+      <h3 className="eyebrow">Terms used on this page</h3>
       <dl className="terms">
         {hits.map(([name, , def]) => (
           <div key={name}>
@@ -249,7 +249,9 @@ export default function App() {
                   reasonably assumes they are two different circuits and starts
                   looking for the difference. So the static copy only appears
                   where nothing better follows it. */}
-              {!FLOW[topo.id] && SCH[topo.sch] ? SCH[topo.sch]() : null}
+              {!FLOW[topo.id] && SCH[topo.sch]
+                ? React.cloneElement(SCH[topo.sch](), { label: topo.name + " schematic" })
+                : null}
               <p style={{ margin: "14px 0 0" }}><Sub t={topo.what} /></p>
             </div>
 
@@ -262,12 +264,12 @@ export default function App() {
             <FlowCard topo={topo} res={res} spec={spec} />
 
             <div className="card">
-              <span className="eyebrow">Specification</span>
+              <h3 className="eyebrow">Specification</h3>
               <Fields topo={topo} raw={raw} spec={spec} set={set} />
             </div>
 
             <div className="card">
-              <span className="eyebrow">Design output</span>
+              <h3 className="eyebrow">Design output</h3>
               <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} />
             </div>
 
@@ -276,7 +278,7 @@ export default function App() {
             <SpecCard topo={topo} spec={spec} res={res} />
 
             <div className="card">
-              <span className="eyebrow">Governing equations</span>
+              <h3 className="eyebrow">Governing equations</h3>
               {topo.eqs.map((e, i) => <Eq key={i} e={e.e} n={e.n} />)}
             </div>
 

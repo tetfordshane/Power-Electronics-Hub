@@ -105,9 +105,11 @@ function FlowCard({ topo, res, spec }) {
     () => drawScope("sc", () => {
       if (!SCH[topo.sch]) return null;
       startCapture(topo.sch);
-      try { return SCH[topo.sch](); } finally { endCapture(); }
+      try {
+        return React.cloneElement(SCH[topo.sch](), { label: topo.name + " schematic" });
+      } finally { endCapture(); }
     }),
-    [topo.sch]
+    [topo.sch, topo.name]
   );
   const wv = res && res.wave ? res.wave : null;
   /* Where a topology has no design-derived waveform but does supply its own
@@ -621,9 +623,9 @@ function FlowCard({ topo, res, spec }) {
 
   return (
     <div className="card">
-      <span className="eyebrow">
+      <h3 className="eyebrow">
         How it works · current path and inductor polarity, at the real rate
-      </span>
+      </h3>
       {FAMILY[topo.id] ? (
         <p className="fam">
           This is <Sub t={FAMILY[topo.id]} />

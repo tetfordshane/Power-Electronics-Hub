@@ -68,7 +68,9 @@ function Spectrum({ fsw, D, tr, amp }) {
           would have run past a 660 frame, which left the top of the sweep
           unlabelled on the one axis whose whole point is where in frequency
           the noise lands. */}
-      <svg viewBox="0 0 700 212" style={{ width: "100%", height: "auto", display: "block" }} role="img">
+      <svg viewBox="0 0 700 212" style={{ width: "100%", height: "auto", display: "block" }} role="img"
+        aria-label={"Switching-noise envelope: amplitude in dBµV against frequency, with the "
+          + "switching fundamental, the edge-rate corner and the roll-off marked"}>
         {drawScope("sp", () => (<>
           {/* The unit, once, above the scale — the same place LineChart puts
               its y caption. It used to ride on the topmost tick as "160 dBµV",
@@ -136,7 +138,7 @@ function SpecCard({ topo, spec, res }) {
   const f1 = fsw / (Math.PI * D), fEdge = 1 / (Math.PI * T * 1e-9);
   return (
     <div className="card">
-      <span className="eyebrow">Spectrum · where the switching energy lands</span>
+      <h3 className="eyebrow">Spectrum · where the switching energy lands</h3>
       <div className="fields" style={{ marginBottom: 12 }}>
         <div className="fld">
           <label htmlFor="sp_a">switch-node step<span className="u"> V</span></label>
@@ -148,12 +150,19 @@ function SpecCard({ topo, spec, res }) {
           <input id="sp_t" type="number" step="any" min="0.1" value={trTxt}
             onChange={(e) => setTr(e.target.value)} />
         </div>
+        {/* The one field on the page that cannot be typed into, and the only
+            explanation of why was a title= — invisible to a keyboard and to a
+            screen reader alike. It gets the same popover every field in the
+            specification panel already has. */}
         <div className="fld">
           <label htmlFor="sp_d">duty at the switch node</label>
-          <input id="sp_d" type="number" readOnly value={D.toFixed(3)}
-            title={generic
+          <input id="sp_d" type="number" readOnly aria-readonly="true" value={D.toFixed(3)}
+            aria-describedby="sp_d_help" />
+          <div className="fhelp" id="sp_d_help" role="tooltip">
+            {generic
               ? "This topology publishes no switching waveform, so a 0.5 duty is assumed."
-              : "Taken from the design above."} />
+              : "Read from the design above rather than entered — change the operating point and it follows."}
+          </div>
         </div>
       </div>
       {generic ? (
