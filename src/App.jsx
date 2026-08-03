@@ -8,6 +8,7 @@ import { simFacts, engineFor } from "./engine/adapter.js";
 import { SHEETS } from "./content/sheets.js";
 import { SELECT, SELECT_ID } from "./content/select.js";
 import { EXAMPLES } from "./content/examples.js";
+import { decodeHash, encodeHash } from "./urlstate.js";
 import { termsFor } from "./content/terms.js";
 import { SCH } from "./schematic/sch.jsx";
 import { drawScope } from "./schematic/parts.jsx";
@@ -36,18 +37,13 @@ function carryOver(fromId, toId, prev) {
   return next;
 }
 
-/* The tab and the topology live in the URL hash, so the back button works,
-   a reload lands where you left off, and a specific converter can be sent
-   to someone as a link. */
+/* The tab, the topology AND the entered values live in the URL hash, so the
+   back button works, a reload lands where you left off, and a specific
+   DESIGN — not just a specific converter — can be sent to someone as a link.
+   The format and its tolerances live in urlstate.js. */
 function readHash() {
   if (typeof window === "undefined") return {};
-  const h = window.location.hash.replace(/^#\/?/, "");
-  if (!h) return {};
-  const [tab, tid] = h.split("/");
-  return {
-    tab: ["bench", "cheat", "select"].includes(tab) ? tab : undefined,
-    tid: tid && TOPOS.some((t) => t.id === tid) ? tid : undefined,
-  };
+  return decodeHash(window.location.hash);
 }
 
 /* The words this page used, defined. Scanned out of the page's own prose, so
@@ -95,7 +91,8 @@ export default function App() {
   const [tid, setTid] = useState(start.tid || "buck");
   const [q, setQ] = useState("");
   const [sq, setSq] = useState("");
-  const [raw, setRaw] = useState(() => mkRaw(start.tid || "buck"));
+  /* A link carrying values arrives with the reader's design already in it. */
+  const [raw, setRaw] = useState(() => ({ ...mkRaw(start.tid || "buck"), ...(start.over || {}) }));
   const [scat, setScat] = useState("All");
   /* Which loss mechanism the reader is pointing at, and the devices it heats.
      It lives up here because the loss bar is in the results card and the
@@ -104,20 +101,43 @@ export default function App() {
   const [hot, setHot] = useState(null);
   const tabRefs = useRef([]);
 
+  /* Debounced, because `raw` changes on every keystroke and replaceState is
+     not free. Still replaceState rather than pushState — a design is reached
+     by typing, and giving the back button one entry per character would make
+     it useless for its actual job of leaving the page.
+
+     No guard against our own write coming back at us: replaceState does not
+     fire hashchange, so it cannot. An earlier version remembered the last
+     hash it wrote and ignored a matching event, which did nothing on the way
+     in and broke the FORWARD button on the way out — the remembered string
+     went stale the moment a write was skipped as unnecessary, and then
+     swallowed the one real navigation that happened to match it. */
   useEffect(() => {
-    const want = "#/" + tab + (tab === "bench" ? "/" + tid : "");
-    if (window.location.hash !== want) window.history.replaceState(null, "", want);
-  }, [tab, tid]);
+    const id = setTimeout(() => {
+      const want = encodeHash(tab, tid, raw);
+      if (window.location.hash !== want) window.history.replaceState(null, "", want);
+    }, 250);
+    return () => clearTimeout(id);
+  }, [tab, tid, raw]);
+
   /* A hash change — the back button, a pasted link, an in-page jump — moves
-     to a different topology without reloading, so the inputs have to be
-     rebuilt for it. Setting tid alone left the panel showing the previous
-     topology's values, and blanks wherever the two field lists differed. */
+     to a different design without reloading, so the inputs have to be rebuilt
+     for it. This used to call setRaw from inside a setTid updater, which is a
+     side effect in a state updater and free to run twice; it now computes the
+     whole next state in one place.
+
+     A payload wins outright: a pasted link states what it wants and must not
+     be diluted by whatever was on screen. Without one, the old carry-over
+     behaviour stands, so following a plain `#/bench/boost` link still brings
+     the reader's edited f_sw along. */
   useEffect(() => {
     const on = () => {
       const h = readHash();
       if (h.tab) setTab(h.tab);
-      if (h.tid) setTid((prevId) => {
-        if (h.tid !== prevId) setRaw((prev) => carryOver(prevId, h.tid, prev));
+      if (!h.tid) return;
+      setTid((prevId) => {
+        if (h.over) setRaw({ ...mkRaw(h.tid), ...h.over });
+        else if (h.tid !== prevId) setRaw((prev) => carryOver(prevId, h.tid, prev));
         return h.tid;
       });
     };

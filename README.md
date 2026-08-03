@@ -218,6 +218,29 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**The URL carries the design, not just the topology.**
+`#/<tab>/<tid>/<version>/<payload>`, encoded and decoded in `src/urlstate.js`,
+which is JSX-free so the scripts and the tests read the same implementation
+the app does. Three rules hold it together. Only the DIFFERENCE from that
+topology's defaults travels, using the same "the reader edited this"
+predicate `carryOver` uses — so a design at its defaults still produces the
+short two-segment link. The values are raw strings, not parsed numbers, so
+they round-trip the input boxes byte-for-byte and every value still passes
+through App's one parse-clamp-order path; a hand-edited URL cannot reach a
+state a reader could not have typed. And the decoder drops anything it does
+not recognise — an unknown version, an unknown code, a malformed escape —
+rather than guessing.
+
+`CODES` is permanent: changing a code invalidates every link anyone saved,
+and `check-registry` holds it to a bijection with `FIELDS`. Adding a field
+means adding a code in the same commit.
+
+Do not add a guard against the app's own hash write coming back at it:
+`replaceState` does not fire `hashchange`, so it cannot. A version that
+remembered the last hash it wrote did nothing on the way in and broke the
+forward button on the way out, because the remembered string went stale as
+soon as one write was skipped as unnecessary.
+
 **A loss may name the device it heats.** The fourth element of a `loss:`
 tuple is a device label — or an array of them, for a mechanism shared by a
 pair — and it must be a name the figure actually draws, i.e. one of

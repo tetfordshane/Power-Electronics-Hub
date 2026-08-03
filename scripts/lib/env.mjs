@@ -8,8 +8,13 @@
 export const PORT = Number(process.env.PS_PORT) || 5273;
 export const BASE = process.env.PS_URL || `http://localhost:${PORT}`;
 
-/* The bench address for one topology. */
-export const bench = (id) => `${BASE}/#/bench/${id}`;
+/* The bench address for one topology, optionally at a stated operating point.
+   `over` is a {field: rawString} patch, exactly what the input boxes hold —
+   so a browser-driven check can now measure a design other than the defaults
+   without typing into seventeen fields. */
+import { encodeHash, defaultRaw } from "../../src/urlstate.js";
+export const bench = (id, over) =>
+  `${BASE}/${over ? encodeHash("bench", id, { ...defaultRaw(id), ...over }) : `#/bench/${id}`}`;
 
 /* The same page, forced to load as a new document.
 
@@ -20,4 +25,7 @@ export const bench = (id) => `${BASE}/#/bench/${id}`;
    on the order it was walked in, which is not a property of the app at all.
    A distinct query string makes it a real navigation. */
 let visit = 0;
-export const benchFresh = (id) => `${BASE}/?v=${++visit}#/bench/${id}`;
+export const benchFresh = (id, over) => {
+  const h = over ? encodeHash("bench", id, { ...defaultRaw(id), ...over }) : `#/bench/${id}`;
+  return `${BASE}/?v=${++visit}${h}`;
+};

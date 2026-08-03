@@ -3,16 +3,12 @@ import { Mx } from "../tex.jsx";
 import { FIELDS } from "../fields.js";
 import { eng } from "../format.js";
 import { TOPOS } from "../topologies/index.js";
+import { defaultRaw } from "../urlstate.js";
 
-function mkRaw(id) {
-  const t = TOPOS.find((x) => x.id === id) || TOPOS[0];
-  const o = {};
-  (t.fields || []).forEach((k) => {
-    const dv = (t.defs && t.defs[k] !== undefined) ? t.defs[k] : FIELDS[k].d;
-    o[k] = String(dv);
-  });
-  return o;
-}
+/* The defaults now live in urlstate.js, because the encoder, the check
+   scripts and the tests all need to know what "unchanged" means and two
+   implementations of that is the drift this app keeps designing out. */
+const mkRaw = (id) => defaultRaw((TOPOS.find((x) => x.id === id) || TOPOS[0]).id);
 
 function Fields({ topo, raw, spec, set }) {
   return (

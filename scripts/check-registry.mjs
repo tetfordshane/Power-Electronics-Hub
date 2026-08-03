@@ -18,6 +18,7 @@ import { TOPOS, CATS, FLOW, FAMILY } from "./lib/topos.mjs";
 import { FIELDS, SEV } from "../src/fields.js";
 import { SELECT, SELECT_ID } from "../src/content/select.js";
 import { EXAMPLES } from "../src/content/examples.js";
+import { CODES } from "../src/urlstate.js";
 import { defaultSpec } from "./lib/spec.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -182,6 +183,25 @@ for (const cat of CATS) {
 }
 for (const cat of Object.keys(EXAMPLES)) {
   if (!CATS.includes(cat)) fail(cat, "EXAMPLES has a category that is not in CATS");
+}
+
+/* --------------------------------------------------------- URL codes */
+/* A field with no code silently drops out of every shared link; two fields
+   with the same code silently overwrite each other. Neither throws, and
+   neither is visible without opening a saved URL. */
+for (const k of Object.keys(FIELDS)) {
+  if (!CODES[k]) fail(k, "field has no URL code, so it cannot be shared in a link");
+}
+for (const k of Object.keys(CODES)) {
+  if (!FIELDS[k]) fail(k, "CODES names a field that does not exist");
+}
+const byCode = new Map();
+for (const [k, c] of Object.entries(CODES)) {
+  if (byCode.has(c)) fail(k, `URL code "${c}" is already used by ${byCode.get(c)}`);
+  byCode.set(c, k);
+  /* A code that reads as another field's name is a trap for anyone editing a
+     URL by hand. */
+  if (FIELDS[c] && c !== k) fail(k, `URL code "${c}" is also the name of another field`);
 }
 
 console.log(`check-registry: ${TOPOS.length} topologies, ${SCH_IDS.size} schematics, ` +
