@@ -84,6 +84,11 @@ function outPower(topo, spec, res) {
 function HeatCard({ topo, spec }) {
   const [mode, setMode] = useState("eta");
   const [hover, setHover] = useState(null);
+  /* The keyboard's own cursor over the grid, as {i,j}, or null when the map
+     is not being explored by key. It is deliberately separate from `hover`:
+     the two pointers can be in different places, and a mouse that leaves
+     should not take the keyboard's position with it. */
+  const [kb, setKb] = useState(null);
   const axes = useMemo(() => sweepAxes(topo, spec), [topo, spec]);
 
   const grid = useMemo(() => {
@@ -148,6 +153,46 @@ function HeatCard({ topo, spec }) {
   const opRow = grid.NY - 1 - Math.round(((1 - 0.1) / 0.95) * (grid.NY - 1));
   const opYc = y0 + (clamp(opRow, 0, grid.NY - 1) + 0.5) * ch;
 
+  /* 308 cells, and every one of them was reachable only by pointing at it.
+     Making each a tab stop would be 308 stops to cross one card, so the map
+     takes a single stop and the arrows move one cursor inside it — the same
+     bargain a spreadsheet makes. */
+  const cellAt = (i, j) => grid.cells[j * grid.NX + i];
+  const kbCell = kb ? cellAt(kb.i, kb.j) : null;
+  /* The mouse wins while it is over the map: it is the more recent intent,
+     and the tooltip can only be in one place. */
+  const shown = hover || kbCell;
+  /* Entering the map lands on the design the panel above describes, rather
+     than in a corner — the reader starts where they already are and moves
+     out from it. */
+  const startCell = {
+    i: clamp(Math.round((opX - x0) / cw - 0.5), 0, grid.NX - 1),
+    j: clamp(opRow, 0, grid.NY - 1),
+  };
+  /* Spoken, not drawn, so it carries the units the tooltip gets from the axis
+     captions beside it — "12 V in, 9.8 A load" rather than a pair of bare
+     numbers a listener has no way to place. */
+  const vUnit = (axes.vLabel.split(" · ")[1] || "").trim();
+  const lUnit = (axes.lLabel.split(" · ")[1] || "").trim();
+  const describe = (c) =>
+    (c.val === null ? "no solution" : fmt(c.val))
+    + " at " + eng(c.v, vUnit).trim() + " in, " + eng(c.load, lUnit).trim() + " load"
+    + (c.warn ? ", " + c.warn + " warning" + (c.warn > 1 ? "s" : "") : "");
+  const onKey = (e) => {
+    if (e.key === "Escape") { setKb(null); return; }
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    if (!kb) { setKb(startCell); return; }
+    let { i, j } = kb;
+    if (e.key === "ArrowLeft") i -= 1;
+    else if (e.key === "ArrowRight") i += 1;
+    else if (e.key === "ArrowUp") j -= 1;
+    else if (e.key === "ArrowDown") j += 1;
+    else if (e.key === "Home") i = 0;
+    else i = grid.NX - 1;
+    setKb({ i: clamp(i, 0, grid.NX - 1), j: clamp(j, 0, grid.NY - 1) });
+  };
+
   return (
     <div className="card">
       <h3 className="eyebrow">Design space · how the operating point behaves when it moves</h3>
@@ -162,12 +207,15 @@ function HeatCard({ topo, spec }) {
           <svg viewBox="0 0 660 200" style={{ width: "100%", height: "auto", display: "block" }} role="img"
             aria-label={(mode === "eta" ? "Efficiency" : "Total loss") + " across "
               + axes.vLabel.replace(/ · .*$/, "") + " and " + axes.lLabel.replace(/ · .*$/, "")
-              + ", " + grid.NX + " by " + grid.NY + " cells"}
+              + ", " + grid.NX + " by " + grid.NY + " cells."
+              + " Arrow keys explore the map, Escape leaves it."}
+            tabIndex={0} onKeyDown={onKey} onBlur={() => setKb(null)}
             onMouseLeave={() => setHover(null)}>
             {drawScope("hm", () => (<>
               <g className="hmgrid">
                 {grid.cells.map((c) => (
-                  <rect key={c.j * grid.NX + c.i} className="hmcell"
+                  <rect key={c.j * grid.NX + c.i}
+                    className={"hmcell" + (kb && kb.i === c.i && kb.j === c.j ? " kb" : "")}
                     x={x0 + c.i * cw} y={y0 + c.j * ch}
                     width={cw + 0.6} height={ch + 0.6}
                     fill={colorOf(c.val)}
@@ -197,20 +245,27 @@ function HeatCard({ topo, spec }) {
             </>))}
           </svg>
         </div>
-        {hover ? (
+        {shown ? (
           <div className="hmtip" style={{
-            left: `calc(${((x0 + hover.i * cw + cw / 2) / 660) * 100}% + ${hover.i > grid.NX / 2 ? -170 : 12}px)`,
-            top: `${((y0 + hover.j * ch) / 200) * 100}%`,
+            left: `calc(${((x0 + shown.i * cw + cw / 2) / 660) * 100}% + ${shown.i > grid.NX / 2 ? -170 : 12}px)`,
+            top: `${((y0 + shown.j * ch) / 200) * 100}%`,
           }}>
-            <div><b>{hover.val === null ? "no solution" : fmt(hover.val)}</b></div>
+            <div><b>{shown.val === null ? "no solution" : fmt(shown.val)}</b></div>
             <em>
-              {eng(hover.v, "")} in · {eng(hover.load, "")} load
-              {hover.eta !== null && mode === "loss" ? " · η " + pct(hover.eta) : ""}
-              {hover.loss !== null && mode === "eta" ? " · " + eng(hover.loss, "W") + " lost" : ""}
-              {hover.warn ? " · " + hover.warn + " warning" + (hover.warn > 1 ? "s" : "") : ""}
+              {eng(shown.v, "")} in · {eng(shown.load, "")} load
+              {shown.eta !== null && mode === "loss" ? " · η " + pct(shown.eta) : ""}
+              {shown.loss !== null && mode === "eta" ? " · " + eng(shown.loss, "W") + " lost" : ""}
+              {shown.warn ? " · " + shown.warn + " warning" + (shown.warn > 1 ? "s" : "") : ""}
             </em>
           </div>
         ) : null}
+        {/* Only the keyboard cursor is announced. Putting the live region on
+            the tooltip itself would have every mouse traverse read out 308
+            cells, which is not a reading of the map so much as a denial of
+            service on it. */}
+        <div className="vh" role="status" aria-live="polite">
+          {kbCell ? describe(kbCell) : ""}
+        </div>
       </div>
       <div className="hmscale">
         <span>{fmt(mode === "eta" ? grid.lo : grid.hi)}</span>

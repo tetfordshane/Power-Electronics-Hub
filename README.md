@@ -212,6 +212,19 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**A dense grid takes one tab stop, not one per cell.** The design-space map
+is 308 cells; making each focusable would be 308 stops to cross one card. The
+surface itself is focusable and the arrows move a cursor inside it — the
+bargain a spreadsheet makes. Escape leaves, blur clears, and the keyboard
+cursor is state of its own: a mouse leaving must not carry the keyboard's
+position away with it.
+
+**Announced, not shown.** `.vh` is for text that exists so a screen reader has
+something to read where the sighted reader has a drawing. Put the live region
+beside the figure rather than on the tooltip — a live tooltip reads out every
+cell a mouse crosses, which is not a reading of the map so much as a denial of
+service on it.
+
 **An eyebrow that is a card's only title is a heading.** Write it as
 `<h3 className="eyebrow">`; the class carries the look either way. An eyebrow
 sitting above a real `h2` or `h3` — the category over a topology name — is a

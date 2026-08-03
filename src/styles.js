@@ -55,6 +55,13 @@ export const CSS = `
   text-rendering:optimizeLegibility;
 }
 .ps .mono,.ps .num{font-family:var(--num); font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"zero" 1}
+/* Announced, not shown. For text that exists so a screen reader has
+   something to read where the sighted reader has a drawing. */
+.ps .vh{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%);
+  white-space:nowrap; border:0;
+}
 
 /* ---------------------------------------------------------------- eyebrow */
 .ps .eyebrow{
@@ -678,6 +685,10 @@ export const CSS = `
 .ps .hmwrap{position:relative}
 .ps .hmgrid rect{shape-rendering:crispEdges; transition:opacity .12s}
 .ps .hmcell:hover{stroke:var(--txt); stroke-width:1.4}
+/* The keyboard's cursor. Drawn heavier than the hover ring because there is
+   no pointer sitting on it to say where it is — the ring IS the pointer. */
+.ps .hmcell.kb{stroke:var(--txt); stroke-width:2.2}
+.ps .hmwrap svg:focus-visible{outline:2px solid var(--cu); outline-offset:2px; border-radius:3px}
 .ps .hmop{fill:none; stroke:#0C1017; stroke-width:3}
 .ps .hmop2{fill:none; stroke:var(--txt); stroke-width:1.6}
 .ps .hmtip{
