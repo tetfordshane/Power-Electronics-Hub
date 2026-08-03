@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { TOPOS, CATS, FLOW, FAMILY } from "./lib/topos.mjs";
 import { FIELDS } from "../src/fields.js";
 import { SELECT, SELECT_ID } from "../src/content/select.js";
+import { EXAMPLES } from "../src/content/examples.js";
 import { defaultSpec } from "./lib/spec.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -126,7 +127,44 @@ let unlinked = 0;
 for (const name of rowNames) if (!SELECT_ID[name]) unlinked++;
 if (unlinked) console.log(`  note: ${unlinked} selector rows are not clickable through to a bench page`);
 
+/* ------------------------------------------------------------ examples */
+/* Checked in both directions. A category with no worked example renders an
+   empty space where the card should be, and an example under a misspelled
+   category key renders nowhere at all — neither one throws, and neither is
+   visible from any single file. */
+let exCount = 0;
+for (const cat of CATS) {
+  const list = EXAMPLES[cat];
+  if (!Array.isArray(list) || !list.length) { fail(cat, "no worked example for this category"); continue; }
+  list.forEach((x, i) => {
+    const where = `${cat} example ${i}`;
+    if (!x.t) fail(where, "no title");
+    if (!x.n) fail(where, "no explanation");
+    const go = x.go || {};
+    const t = TOPOS.find((q) => q.id === go.tid);
+    if (!t) { fail(where, `go.tid "${go.tid}" is no topology`); return; }
+    exCount++;
+    for (const [k, v] of Object.entries(go.over || {})) {
+      /* Raw strings, because that is what the bench's inputs hold — an
+         example that loaded numbers would bypass the one parse-and-clamp
+         path every typed entry goes through. */
+      if (typeof v !== "string") { fail(where, `over.${k} is ${typeof v}, not a raw string`); continue; }
+      if (!FIELDS[k]) { fail(where, `over.${k} is not a field`); continue; }
+      if (!t.fields.includes(k)) { fail(where, `over.${k} is not displayed by ${t.id}`); continue; }
+      const n = parseFloat(v);
+      if (!Number.isFinite(n)) fail(where, `over.${k} = "${v}" is not a number`);
+      else if (n < FIELDS[k].mn || n > FIELDS[k].mx) {
+        fail(where, `over.${k} = ${v} is outside ${FIELDS[k].mn}…${FIELDS[k].mx}`);
+      }
+    }
+  });
+}
+for (const cat of Object.keys(EXAMPLES)) {
+  if (!CATS.includes(cat)) fail(cat, "EXAMPLES has a category that is not in CATS");
+}
+
 console.log(`check-registry: ${TOPOS.length} topologies, ${SCH_IDS.size} schematics, ` +
-  `${Object.keys(FLOW).length} flow entries, ${Object.keys(FAMILY).length} family lines`);
+  `${Object.keys(FLOW).length} flow entries, ${Object.keys(FAMILY).length} family lines, ` +
+  `${exCount} worked examples`);
 console.log(fails ? `check-registry: ${fails} problems` : "check-registry: all clear");
 process.exit(fails ? 1 : 0);

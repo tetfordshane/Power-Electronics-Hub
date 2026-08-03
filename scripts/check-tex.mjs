@@ -35,26 +35,36 @@ const sources = [];
 const ps = sources.map((p) => readFileSync(p, "utf8")).join("\n");
 
 const QUOTED = '"((?:[^"\\\\]|\\\\.)*)"';
-const patterns = [
-  new RegExp("\\{\\s*e:\\s*" + QUOTED, "g"),
-  new RegExp("\\bn:\\s*" + QUOTED, "g"),
-  new RegExp("\\bt:\\s*" + QUOTED, "g"),
-  new RegExp("\\bl:\\s*" + QUOTED, "g"),
-  new RegExp("R2?\\(\\s*" + QUOTED, "g"),
-  new RegExp("G\\(\\s*" + QUOTED, "g"),
-  /* The prose fields. These render through <Sub>, which is <Mx>, which is
-     KaTeX — so a stray formula in a sentence falls back to plain text exactly
-     the way a bad equation does, and used to do it unwatched. `what` and the
-     three trade-off lists carry symbols routinely (M = D, i_out, R_DS(on)). */
-  new RegExp("\\bwhat:\\s*" + QUOTED, "g"),
-  new RegExp("\\btag:\\s*" + QUOTED, "g"),
-  new RegExp("\\bfam:\\s*" + QUOTED, "g"),
-  new RegExp("\\bhelp:\\s*" + QUOTED, "g"),
-];
+const BARE = '"(?:[^"\\\\]|\\\\.)*"';
+/* A prose value longer than a line is written as a concatenation, and matching
+   one quoted literal after the key checked the opening clause of a paragraph
+   and silently ignored the rest — which is exactly where the symbols are, a
+   sentence being far more likely to reach for C_bulk or R_DS(on) after it has
+   got going. So the value is matched as the whole `"…" + "…" + "…"` run and
+   every segment of it is scanned. */
+const RUN = BARE + "(?:\\s*\\+\\s*" + BARE + ")*";
+/* The keys whose values are prose or formulas the typesetter will see. These
+   render through <Sub>/<Eq>, which are <Mx>, which is KaTeX — so a stray
+   formula in a sentence falls back to plain text exactly the way a bad
+   equation does, and used to do it unwatched. `what` and the three trade-off
+   lists carry symbols routinely (M = D, i_out, R_DS(on)).
+
+   `e` was anchored to a preceding `{`, which fitted the cheat sheet's rows and
+   nothing else: an `e` written after a title on the line above was invisible
+   to this gate. It is a word-boundary match like every other key now. */
+const KEYS = ["e", "n", "t", "l", "what", "tag", "fam", "help"];
 /* Array-valued prose fields: grab the literal, then every string inside it. */
 const ARRAYS = ["chips", "pros", "cons", "use"];
 const strs = new Set();
-for (const re of patterns) for (const m of ps.matchAll(re)) strs.add(m[1]);
+const addRun = (run) => {
+  for (const q of run.matchAll(new RegExp(QUOTED, "g"))) strs.add(q[1]);
+};
+for (const key of KEYS) {
+  for (const m of ps.matchAll(new RegExp("\\b" + key + ":\\s*(" + RUN + ")", "g"))) addRun(m[1]);
+}
+for (const call of ["R2?", "G"]) {
+  for (const m of ps.matchAll(new RegExp(call + "\\(\\s*(" + RUN + ")", "g"))) addRun(m[1]);
+}
 for (const key of ARRAYS) {
   for (const m of ps.matchAll(new RegExp("\\b" + key + ":\\s*\\[([^\\]]*)\\]", "g"))) {
     for (const q of m[1].matchAll(new RegExp(QUOTED, "g"))) strs.add(q[1]);

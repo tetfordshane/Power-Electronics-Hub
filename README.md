@@ -212,6 +212,21 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**Worked examples are loadable, and their values are raw strings.**
+`src/content/examples.js` is keyed by the six topology `CATS`, and each
+example's `go.over` is a patch over that topology's defaults in exactly the
+shape `mkRaw()` produces — strings, not numbers — so loading one goes through
+the same parse-clamp-order path a typed entry does and cannot put the bench in
+a state a reader could not have reached themselves. Loading an example starts
+from defaults rather than `carryOver`: an example is a specific job, and
+inheriting a half-finished design into it answers a question nobody asked.
+`check-registry` checks both directions — every category has an example, every
+example points at a real topology, every `over` key is a field that topology
+displays, in range. What it cannot check is whether the prose is *true* of the
+page it loads; when you add one, run its numbers and read the result, because
+a worked example that promises a warning the page does not emit is worse than
+no example at all.
+
 **A dense grid takes one tab stop, not one per cell.** The design-space map
 is 308 cells; making each focusable would be 308 stops to cross one card. The
 surface itself is focusable and the arrows move a cursor inside it — the

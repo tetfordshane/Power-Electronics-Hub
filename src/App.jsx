@@ -7,6 +7,7 @@ import { TOPOS, CATS, FLOW, FAMILY } from "./topologies/index.js";
 import { simFacts } from "./engine/adapter.js";
 import { SHEETS } from "./content/sheets.js";
 import { SELECT, SELECT_ID } from "./content/select.js";
+import { EXAMPLES } from "./content/examples.js";
 import { termsFor } from "./content/terms.js";
 import { SCH } from "./schematic/sch.jsx";
 import { drawScope } from "./schematic/parts.jsx";
@@ -61,7 +62,12 @@ function TermCard({ topo }) {
   const text = [topo.tag, topo.what, (topo.chips || []).join(" "),
     (topo.pros || []).join(" "), (topo.cons || []).join(" "), (topo.use || []).join(" "),
     (topo.eqs || []).map((e) => e.e + " " + (e.n || "")).join(" "),
-    FAMILY[topo.id] || "", (F && F.ph ? F.ph.map((q) => q.n).join(" ") : "")].join(" ");
+    FAMILY[topo.id] || "", (F && F.ph ? F.ph.map((q) => q.n).join(" ") : ""),
+    /* The worked examples are prose on this page too, and they are where the
+       vocabulary a beginner has not met yet tends to turn up first — hold-up
+       time, crest factor, loaded Q. A term defined nowhere because it was
+       only ever said in an example is the fault this scan exists to avoid. */
+    (EXAMPLES[topo.cat] || []).map((x) => x.t + " " + x.n).join(" ")].join(" ");
   const hits = termsFor(text);
   if (!hits.length) return null;
   return (
@@ -149,8 +155,12 @@ export default function App() {
     try { return simFacts(topo, spec, res); } catch { return null; }
   }, [topo, spec, res]);
 
-  const pick = useCallback((id) => {
-    setRaw((prev) => carryOver(tid, id, prev));
+  /* Picking a topology carries the reader's edits across; loading a worked
+     example does not. An example is a specific job with its own numbers, and
+     inheriting a half-finished design into it would answer a question nobody
+     asked — so it starts from that topology's defaults and patches them. */
+  const pick = useCallback((id, over) => {
+    setRaw((prev) => (over ? { ...mkRaw(id), ...over } : carryOver(tid, id, prev)));
     setTid(id);
     setTab("bench");
   }, [tid]);
@@ -290,6 +300,30 @@ export default function App() {
                 <div><h3 style={{ color: "#E0A458" }}>Found in</h3><ul>{topo.use.map((x, i) => <li key={i}><Sub t={x} /></li>)}</ul></div>
               </div>
             </div>
+
+            {/* Where the numbers come from. Every other card answers "what do
+                these inputs give me"; a reader who has never sized a converter
+                arrives with no inputs at all, and the defaults are a sensible
+                operating point rather than a job anyone has. These are jobs —
+                loadable, so the question becomes an experiment. */}
+            {(EXAMPLES[topo.cat] || []).length ? (
+              <div className="card">
+                <h3 className="eyebrow">Worked examples · {topo.cat}</h3>
+                {EXAMPLES[topo.cat].map((x, i) => {
+                  const to = TOPOS.find((q) => q.id === x.go.tid);
+                  const here = x.go.tid === topo.id;
+                  return (
+                    <div className="wex" key={i}>
+                      <b><Sub t={x.t} /></b>
+                      <Eq e={x.e} n={x.n} />
+                      <button className="ritem wexgo" onClick={() => pick(x.go.tid, x.go.over)}>
+                        {here ? "Load these numbers" : "Load this on the " + to.name + " page"} →
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
 
             <TermCard topo={topo} /></main>
         </div></div>

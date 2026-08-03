@@ -681,6 +681,18 @@ export const CSS = `
 .ps .stat .eyebrow{display:block; margin-bottom:6px}
 .ps a{color:var(--cy); text-underline-offset:2px}
 
+/* -------------------------------------------------------- worked examples */
+.ps .wex{border-left:2px solid var(--line2); padding:0 0 0 14px; margin-bottom:18px}
+.ps .wex:last-child{margin-bottom:0}
+.ps .wex > b{display:block; color:var(--txt); font-size:var(--t-lead); font-weight:600;
+  letter-spacing:-.008em; margin-bottom:8px}
+.ps .wexgo{
+  width:auto; display:inline-block; margin-top:2px; padding:5px 11px;
+  border:1px solid var(--line2); border-radius:3px; color:var(--cu);
+  font-size:var(--t-fine); font-weight:500;
+}
+.ps .wexgo:hover{background:var(--surf2); color:var(--cu); border-color:var(--cu-dim)}
+
 /* ---------------------------------------------------------------- heatmap */
 .ps .hmwrap{position:relative}
 .ps .hmgrid rect{shape-rendering:crispEdges; transition:opacity .12s}
