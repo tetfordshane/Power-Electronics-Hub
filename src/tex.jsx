@@ -124,6 +124,7 @@ function lex(src) {
       }
       t.push({ k: "deg" }); i++; continue;
     }
+    if (c === "~") { t.push({ k: "approx" }); i++; continue; }
     if (c === "%") { t.push({ k: "raw", v: "\\%" }); i++; continue; }
     if (c === ",") { t.push({ k: "raw", v: "{,}\\;" }); i++; continue; }
     if (c === "∫") { t.push({ k: "raw", v: "\\int" }); i++; continue; }
@@ -194,6 +195,11 @@ function parse(tokens) {
       return "\\left" + L + inner + "\\right" + Rr;
     }
     if (t.k === "add") { eat(); return ADD[t.v] + atom(false); }   // unary sign
+    /* "~60 V" is "about 60 volts". Binding the marker tight to the number it
+       qualifies keeps it out of the implicit-multiplication path, which would
+       otherwise wedge a thin space in and set it as "∼ 60". Braced so KaTeX
+       treats it as an ordinary symbol rather than a relation. */
+    if (t.k === "approx") { eat(); return "{\\sim}" + atom(false); }
     eat();
     return "";
   }
@@ -289,8 +295,28 @@ const PROSE1 = new Set(["a", "A", "I", "o", "O"]);
 
 const OPS_ONLY = /^[=<>+\-−/*|·×∝≈≤≥≡∓±:,]+$/;
 
+/* A token that is prose whatever surrounds it: an English word that is not one
+   of the names the parser sets as an operator, or the bare indefinite article.
+
+   These are the tokens a math run must never swallow. A swallowed word still
+   parses — "V a SEPIC" is a perfectly good product of three symbols — so the
+   damage is invisible to "did toLatex return null", and shows up only as word
+   spaces rendered at 3/18 em: "Above ~60 V a SEPIC" set as "Above ∼60VaSEPIC".
+   Exported so scripts/check-tex.mjs can assert on the same rule the splitter
+   applies, rather than keeping a second copy of it that drifts. */
+export function isProseWord(w) {
+  const s = String(w);
+  if (s === "a") return true;
+  const core = s.replace(/^[([{]+/, "").replace(/[)\]}]+$/, "");
+  return WORDY.test(core) && !FUNCS.has(core) && !OPNAME.has(core);
+}
+
 function classify(tok) {
   if (!tok) return "w";
+  /* The article, before the single-letter rule below can call it a variable.
+     Left as "?" it joined whichever side surrounded it, and between a unit and
+     an acronym — "~60 V a SEPIC" — both sides are maths. */
+  if (tok === "a") return "w";
   /* Judge the token by its core: "(m" is the variable m, not a word. */
   const core = tok.replace(/^[([{]+/, "").replace(/[)\]}]+$/, "");
   if (core === "") return "?";
@@ -353,7 +379,10 @@ export function splitRuns(src) {
     const opens = (words[i].match(/[([]/g) || []).length;
     const closes = (words[i].match(/[)\]]/g) || []).length;
     const entering = depth;
-    if (entering > 0 && holder) cls[i] = holder;
+    /* — but an English word inside the brackets is still an English word.
+       "Clamp cap (5 % ripple)" opened its group on a number, and binding
+       dragged "ripple" in after it to be set as a variable. */
+    if (entering > 0 && holder && !isProseWord(words[i])) cls[i] = holder;
     depth = Math.max(0, depth + opens - closes);
     if (entering === 0 && depth > 0) holder = cls[i];
     if (depth === 0) holder = null;
