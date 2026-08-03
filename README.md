@@ -212,6 +212,15 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**Sparklines come from the CycleView, never from a second pass over the
+data.** `Spark` takes a polyline the cycle model already emits — `cyc.pts`,
+the output capacitor's `vTot` against its `iC` timebase, `inCap.pts` — so the
+shapes beside the numbers cannot drift away from the shapes in the figure. A
+topology with no `wave` shows no strip at all rather than an empty box, and a
+topology whose cycle has no capacitor model simply shows fewer rows. The
+component is deliberately not wrapped in `.sch`: that class paints the 22px
+dotted grid, which at this size is a texture rather than a grid.
+
 **Worked examples are loadable, and their values are raw strings.**
 `src/content/examples.js` is keyed by the six topology `CATS`, and each
 example's `go.over` is a patch over that topology's defaults in exactly the

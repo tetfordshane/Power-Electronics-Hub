@@ -681,6 +681,24 @@ export const CSS = `
 .ps .stat .eyebrow{display:block; margin-bottom:6px}
 .ps a{color:var(--cy); text-underline-offset:2px}
 
+/* ------------------------------------------------------------ sparklines */
+/* One row per quantity: symbol, shape, figure, what the shape means. The
+   columns are fixed so three rows read as a small table rather than three
+   sentences of different lengths. */
+.ps .sparks{
+  border:1px solid var(--line); border-radius:var(--radius); background:var(--surf2);
+  padding:10px 14px; margin-bottom:14px;
+}
+.ps .sprow{
+  display:grid; grid-template-columns:64px 118px minmax(0,1fr) minmax(0,1.1fr);
+  align-items:center; gap:12px; padding:3px 0;
+}
+.ps .sprow > .eyebrow{letter-spacing:.06em}
+.ps .sprow b{font-family:var(--num); font-size:var(--t-fine); font-weight:600;
+  color:var(--txt); font-variant-numeric:tabular-nums}
+.ps .sprow em{font-style:normal; font-size:var(--t-micro); color:var(--faint)}
+.ps .spark{display:block; overflow:visible}
+
 /* -------------------------------------------------------- worked examples */
 .ps .wex{border-left:2px solid var(--line2); padding:0 0 0 14px; margin-bottom:18px}
 .ps .wex:last-child{margin-bottom:0}

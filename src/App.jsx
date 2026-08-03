@@ -4,7 +4,7 @@ import { Eq, Mx, Mixed, Sub } from "./tex.jsx";
 import { FIELDS, order } from "./fields.js";
 import { clamp } from "./format.js";
 import { TOPOS, CATS, FLOW, FAMILY } from "./topologies/index.js";
-import { simFacts } from "./engine/adapter.js";
+import { simFacts, engineFor } from "./engine/adapter.js";
 import { SHEETS } from "./content/sheets.js";
 import { SELECT, SELECT_ID } from "./content/select.js";
 import { EXAMPLES } from "./content/examples.js";
@@ -159,6 +159,15 @@ export default function App() {
      example does not. An example is a specific job with its own numbers, and
      inheriting a half-finished design into it would answer a question nobody
      asked — so it starts from that topology's defaults and patches them. */
+  /* The cycle the results panel draws its sparklines from. Same engine, same
+     cache key, same operating point as the figure and as simFacts above — so
+     this is a lookup rather than a second run to steady state, and the shapes
+     beside the numbers cannot disagree with the shapes in the figure. */
+  const cyc = useMemo(() => {
+    if (!res || res.error || res.infeasible || !res.wave) return null;
+    try { return engineFor(topo, spec, res).cycle(); } catch { return null; }
+  }, [topo, spec, res]);
+
   const pick = useCallback((id, over) => {
     setRaw((prev) => (over ? { ...mkRaw(id), ...over } : carryOver(tid, id, prev)));
     setTid(id);
@@ -280,7 +289,7 @@ export default function App() {
 
             <div className="card">
               <h3 className="eyebrow">Design output</h3>
-              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} />
+              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} cyc={cyc} />
             </div>
 
             <HeatCard topo={topo} spec={spec} />

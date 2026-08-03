@@ -4,9 +4,49 @@ import { isDCM } from "../cycle.js";
 import { swPeriod } from "../fields.js";
 import { Wave, LineChart } from "./Wave.jsx";
 import { LossBar } from "./LossBar.jsx";
+import { Spark } from "./Spark.jsx";
 import { eng, f2 } from "../format.js";
 
-function Results({ res, spec, hideWave, sim }) {
+/* The shapes worth seeing without leaving the numbers.
+
+   Each entry is the same polyline the waveform pane plots, at the size of a
+   word, with the one figure that names it. Built from the CycleView the
+   figure uses, so a topology gets whichever of these its own cycle actually
+   has — a converter with no output-capacitor model simply shows two. */
+function glanceRows(cyc, wv) {
+  const rows = [];
+  if (cyc.pts && cyc.pts.length > 1) {
+    rows.push({
+      k: (wv && wv.ilabel) || "i_L", col: "#E0A458", pts: cyc.pts,
+      v: eng(cyc.iValley, "A") + " → " + eng(cyc.iPeak, "A"),
+      /* The one thing the shape says that the numbers above it do not. */
+      note: cyc.mode === "dcm" ? "reaches zero" : "continuous",
+      label: "Inductor current over one switching cycle, from "
+        + eng(cyc.iValley, "A") + " to " + eng(cyc.iPeak, "A")
+        + (cyc.mode === "dcm" ? ", falling to zero before the period ends" : ""),
+    });
+  }
+  if (cyc.cap && cyc.cap.iC && cyc.cap.vTot) {
+    rows.push({
+      k: "ΔV_out", col: "#5AD1DE",
+      pts: cyc.cap.iC.map((p, i) => ({ u: p.u, v: cyc.cap.vTot[i] })),
+      v: eng(cyc.cap.vPP, "V") + " p-p", note: "ripple on V_out",
+      label: "Output ripple voltage over one cycle, "
+        + eng(cyc.cap.vPP, "V") + " peak to peak",
+    });
+  }
+  if (cyc.inCap && cyc.inCap.pts && cyc.inCap.pts.length > 1) {
+    rows.push({
+      k: "i_Cin", col: "#A88BF0", pts: cyc.inCap.pts,
+      v: eng(cyc.inCap.ipk, "A") + " peak", note: "input cap current",
+      label: "Input capacitor current over one cycle, peaking at "
+        + eng(cyc.inCap.ipk, "A"),
+    });
+  }
+  return rows;
+}
+
+function Results({ res, spec, hideWave, sim, cyc }) {
   if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
   if (res.error) {
     return (
@@ -46,6 +86,25 @@ function Results({ res, spec, hideWave, sim }) {
           </div>
         ))}
       </div>
+      {/* The shape of the cycle, beside the numbers that describe it. A
+          reader scanning the results for "does the current reach zero" had to
+          stop reading and study the full pane below to find out. */}
+      {cyc ? (() => {
+        const rows = glanceRows(cyc, res.wave);
+        if (!rows.length) return null;
+        return (
+          <div className="sparks">
+            {rows.map((r) => (
+              <div className="sprow" key={r.k}>
+                <span className="eyebrow"><Mx t={r.k} /></span>
+                <Spark pts={r.pts} col={r.col} label={r.label} />
+                <b><Mx t={r.v} /></b>
+                <em><Mx t={r.note} /></em>
+              </div>
+            ))}
+          </div>
+        );
+      })() : null}
       {/* Said once, for every topology, from the same test the drawing uses.
           A converter that has fallen into discontinuous conduction is not
           described by any of the ratios above it, and thirty design functions
