@@ -97,6 +97,11 @@ export default function App() {
   const [sq, setSq] = useState("");
   const [raw, setRaw] = useState(() => mkRaw(start.tid || "buck"));
   const [scat, setScat] = useState("All");
+  /* Which loss mechanism the reader is pointing at, and the devices it heats.
+     It lives up here because the loss bar is in the results card and the
+     schematic it lights up is in the figure card — two siblings that cannot
+     see each other. Null means nothing is singled out. */
+  const [hot, setHot] = useState(null);
   const tabRefs = useRef([]);
 
   useEffect(() => {
@@ -284,7 +289,7 @@ export default function App() {
                 not the schematic above it; what that figure was genuinely
                 good at — placing a converter in its family — survives as the
                 `fam` line inside the card. */}
-            <FlowCard topo={topo} res={res} spec={spec} />
+            <FlowCard topo={topo} res={res} spec={spec} hot={hot} />
 
             <div className="card">
               <h3 className="eyebrow">Specification</h3>
@@ -293,7 +298,8 @@ export default function App() {
 
             <div className="card">
               <h3 className="eyebrow">Design output</h3>
-              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} cyc={cyc} />
+              <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} cyc={cyc}
+                hot={hot} onHot={setHot} />
             </div>
 
             <HeatCard topo={topo} spec={spec} />

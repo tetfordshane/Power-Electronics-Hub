@@ -90,14 +90,18 @@ const Chevron = (m, i, flip, cls) => (
    A diode has no gate. Nothing commands it; it responds to the voltage
    across it. It keeps the ring, and the bar across it when it is blocking,
    which reads as the barrier it is holding up against reverse voltage. */
-const DevMark = (x, y, label, on, rot) => {
+/* `hl` is not a device state — the device is on or off regardless. It marks
+   the part the reader is pointing at in the loss breakdown, so it is a class
+   rather than a per-frame value and rides the same transition the rest of
+   the figure's persistent state does. */
+const DevMark = (x, y, label, on, rot, hl) => {
   if (isDiode(label)) {
     const r = 12;
     /* The bar is drawn in both states and faded, not added and removed. A
        mounting element cannot run a CSS transition, so a conditional bar
        snapped in rather than appearing. */
     return (
-      <g key={nk()} className={"devr" + (on ? " on" : "") + " di"}>
+      <g key={nk()} className={"devr" + (on ? " on" : "") + (hl ? " hl" : "") + " di"}>
         <circle className="halo" cx={x} cy={y} r={r + 3} />
         <circle className="ring" cx={x} cy={y} r={r} />
         {/* Inline, per frame, and not a CSS transition.
@@ -142,7 +146,7 @@ const DevMark = (x, y, label, on, rot) => {
   const [c1x, c1y] = at(-5, -13), [c2x, c2y] = at(-5, 13);
   const chan = `M ${c1x.toFixed(1)} ${c1y.toFixed(1)} L ${c2x.toFixed(1)} ${c2y.toFixed(1)}`;
   return (
-    <g key={nk()} className={"devg" + (on ? " on" : "")}>
+    <g key={nk()} className={"devg" + (on ? " on" : "") + (hl ? " hl" : "")}>
       <path className="chanbg" d={chan} />
       <path className="chan" d={chan} />
       {/* The drive pip sits on the gate TERMINAL, well outside the device

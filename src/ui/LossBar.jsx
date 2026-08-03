@@ -4,28 +4,57 @@ import { eng, pct } from "../format.js";
 
 /* stacked bar showing where the watts actually go */
 const LCOL = ["#E0A458", "#5AD1DE", "#F0796C", "#6FD39B", "#A88BF0", "#8DA0B4"];
-function LossBar({ items }) {
+
+/* A loss may name the device it heats. Normalise to an array so a mechanism
+   shared by two parts — gate drive across both FETs of a synchronous pair —
+   is the same shape as one that heats a single device. */
+const devsOf = (it) => (it[3] === undefined ? [] : Array.isArray(it[3]) ? it[3] : [it[3]]);
+
+/* `onHot` lifts the highlight to App, because the bar and the schematic live
+   in different cards. Null means nothing is singled out.
+
+   The isolation is the point: the bar answers "where do the watts go" and
+   the figure answers "which part is that", and a reader had to hold the two
+   together from memory. */
+function LossBar({ items, onHot, hot }) {
   const list = (items || []).filter((x) => isFinite(x[1]) && x[1] > 0);
   const tot = list.reduce((a, b) => a + b[1], 0);
   if (!(tot > 0)) return null;
+  /* Colour is keyed off position in the FILTERED list, so the bar and its
+     legend agree; anything comparing indices has to use the same list. */
+  const isHot = (i) => hot != null && hot.i === i;
+  const dim = hot != null;
+  const enter = (i, it) => () => onHot && onHot({ i, devs: devsOf(it) });
+  const leave = () => onHot && onHot(null);
   return (
     <div style={{ marginBottom: 16 }}>
       <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
         Loss breakdown · {eng(tot, "W")} total
       </span>
-      <div className="lbar">
+      <div className="lbar" role="img" aria-label={"Loss breakdown, " + eng(tot, "W")
+        + " total: " + list.map((it) => it[0] + " " + pct(it[1] / tot)).join(", ")}>
         {list.map((it, i) => (
-          <div key={i} className="lseg" style={{ width: (100 * it[1] / tot) + "%", background: LCOL[i % 6] }} />
+          <div key={i} className={"lseg" + (dim && !isHot(i) ? " dim" : "")}
+            style={{ width: (100 * it[1] / tot) + "%", background: LCOL[i % 6] }}
+            onMouseEnter={enter(i, it)} onMouseLeave={leave} />
         ))}
       </div>
       <div className="lleg">
-        {list.map((it, i) => (
-          <span key={i} className="lit">
-            <i style={{ background: LCOL[i % 6] }} />
-            <b><Mx t={it[0]} /></b> {eng(it[1], "W")} · {pct(it[1] / tot)}
-            {it[2] ? <em><Mx t={it[2]} /></em> : null}
-          </span>
-        ))}
+        {list.map((it, i) => {
+          const devs = devsOf(it);
+          return (
+            <span key={i} className={"lit" + (isHot(i) ? " hot" : "") + (dim && !isHot(i) ? " dim" : "")}
+              tabIndex={0}
+              aria-label={it[0] + ", " + eng(it[1], "W") + ", " + pct(it[1] / tot) + " of the total"
+                + (devs.length ? " — highlights " + devs.join(" and ") + " on the circuit" : "")}
+              onMouseEnter={enter(i, it)} onMouseLeave={leave}
+              onFocus={enter(i, it)} onBlur={leave}>
+              <i style={{ background: LCOL[i % 6] }} />
+              <b><Mx t={it[0]} /></b> {eng(it[1], "W")} · {pct(it[1] / tot)}
+              {it[2] ? <em><Mx t={it[2]} /></em> : null}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

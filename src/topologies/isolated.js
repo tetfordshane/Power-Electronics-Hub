@@ -58,9 +58,11 @@ const TB = [
          numbers printed beside it cannot be different converters. */
       sim: { L: Lp, C: Co, n: Nt },
       hi: [["turns ratio N_p:N_s", f2(Nt) + " : 1"], ["primary L_p", eng(Lp, "H")], ["V_DS stress", eng(Vds, "V")]],
-      loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)"],
+      loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)", "Q1"],
+        /* The clamp is a snubber network, not a marked device on the
+           schematic, so this one links to nothing. */
         ["Clamp (leakage)", Pcl, "½·L_lk·I_pk²·f_sw, scaled by the clamp ratio"],
-        ["Output rectifier", Pdo, "V_F·I_out"],
+        ["Output rectifier", Pdo, "V_F·I_out", "D1"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
       /* The plotted trace is the PRIMARY current, which stops dead at
          turn-off. The capacitor is on the other side of the transformer: it
@@ -169,9 +171,9 @@ const TB = [
     return {
       hi: [["ring frequency", eng(fRing, "Hz")], ["turn-on saved", eng(saved, "W")],
         ["switch V at the valley", eng(Vvalley, "V")]],
-      loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)"],
-        ["Turn-on at the valley", Psoft, "½·C_res·V_valley²·f_sw — what is left after waiting"],
-        ["Output rectifier", Pdo, "V_F·I_out"],
+      loss: [["Primary conduction", Pq, "I_pri(rms)²·R_DS(on)", "Q1"],
+        ["Turn-on at the valley", Psoft, "½·C_res·V_valley²·f_sw — what is left after waiting", "Q1"],
+        ["Output rectifier", Pdo, "V_F·I_out", "D1"],
         ["Output cap ESR", Pesr, "I_C(rms)²·ESR"]],
       warn: warns(
         /* Good news with a verification attached, not a fault. */

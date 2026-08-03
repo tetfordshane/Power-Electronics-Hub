@@ -699,6 +699,29 @@ export const CSS = `
 .ps .stat .eyebrow{display:block; margin-bottom:6px}
 .ps a{color:var(--cy); text-underline-offset:2px}
 
+/* -------------------------------------------- loss bar ↔ schematic link */
+/* Pointing at a loss mechanism recedes the others and lights the part it
+   heats. Isolation rather than emphasis: the reader is asking "which of
+   these is which", and dimming the rest answers it faster than decorating
+   the one. */
+/* Scoped to .lleg throughout. .lit is two different classes in this app —
+   a loss item here, an illuminated device in .devleg — and an unscoped rule
+   reaches both. */
+.ps .lseg.dim,.ps .lleg .lit.dim{opacity:.34}
+.ps .lseg,.ps .lleg .lit{transition:opacity .14s}
+.ps .lleg .lit{border-radius:3px; padding:2px 4px; margin:-2px -4px}
+.ps .lleg .lit.hot{background:var(--surf3)}
+.ps .lleg .lit.hot em{color:var(--txt)}
+.ps .lleg .lit:focus-visible{outline:2px solid var(--cu); outline-offset:1px}
+/* The device the mechanism heats. A persistent state class, not a per-frame
+   value — the inline-opacity rule governs quantities that change sixty times
+   a second, and this changes when a pointer moves. */
+.ps .fig .devr.hl .halo,.ps .fig .devg.hl .gglow{fill:var(--cu); opacity:.30}
+.ps .fig .devr.hl .ring{stroke:var(--cu); opacity:1; stroke-width:2.2}
+.ps .fig .devg.hl .chan{stroke:var(--cu); opacity:1}
+.ps .fig .devr.hl .halo,.ps .fig .devg.hl .gglow,
+.ps .fig .devr.hl .ring,.ps .fig .devg.hl .chan{transition:opacity .14s, stroke .14s, fill .14s}
+
 /* ------------------------------------------------------------ sparklines */
 /* One row per quantity: symbol, shape, figure, what the shape means. The
    columns are fixed so three rows read as a small table rather than three

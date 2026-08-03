@@ -62,7 +62,7 @@ function glanceRows(cyc, wv) {
   return rows;
 }
 
-function Results({ res, spec, hideWave, sim, cyc }) {
+function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
   if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
   if (res.error) {
     return (
@@ -168,7 +168,7 @@ function Results({ res, spec, hideWave, sim, cyc }) {
             + "as it loads. Raise C_out, lower the ripple, or accept the larger figure."} />
         </div>
       ) : null}
-      <LossBar items={res.loss} />
+      <LossBar items={res.loss} hot={hot} onHot={onHot} />
       {res.wave && !hideWave ? <div style={{ margin: "14px 0" }}>
         <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
           Idealised waveforms · one cycle, drawn three times

@@ -54,10 +54,15 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["output cap", eng(Co, "F")]],
-      loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot"],
-        ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
-        ["Diode reverse recovery", Prr, "Q_rr·V_in·f_sw — dissipated in Q1, not the diode"],
-        ["Diode", Pd, "V_F·I_out·(1−D)"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
+      /* The fourth element names the device on the schematic this mechanism
+         heats, so hovering the bar lights the part up. Reverse recovery
+         points at Q1 rather than the diode, which is what the formula beside
+         it has always said and what the drawing can now show. Mechanisms with
+         no device mark — the inductor, the capacitor — simply omit it. */
+      loss: [["Q1 conduction", Pc, "I_rms²·R_DS(on), hot", "Q1"],
+        ["Q1 switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw", "Q1"],
+        ["Diode reverse recovery", Prr, "Q_rr·V_in·f_sw — dissipated in Q1, not the diode", "Q1"],
+        ["Diode", Pd, "V_F·I_out·(1−D)", "D1"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       /* The capacitor sees the inductor ripple and nothing else — output
          current is continuous. C_out was sized at V_in max, where the ripple
          is worst, so the pane's ripple at nominal input is the smaller
@@ -157,10 +162,12 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
-      loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)"], ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw"],
-        ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)"],
-        ["Body diode", Pdt, "2·V_body·I_out·t_dead·f_sw at " + f2(Vbody) + " V"],
-        ["Gate drive", Pg, "2·Q_g·V_gate·f_sw"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
+      loss: [["HS conduction", Pc, "I_HS(rms)²·R_DS(on)", "Q_HS"],
+        ["HS switching", Psw, "½·V_in·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_in²·f_sw", "Q_HS"],
+        ["LS conduction", Pls, "I_LS(rms)²·R_DS(on)", "Q_LS"],
+        /* The body diode is inside the low-side FET, so it heats that part. */
+        ["Body diode", Pdt, "2·V_body·I_out·t_dead·f_sw at " + f2(Vbody) + " V", "Q_LS"],
+        ["Gate drive", Pg, "2·Q_g·V_gate·f_sw", ["Q_HS", "Q_LS"]], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Io , vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: warns(
@@ -343,10 +350,11 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["RHP zero", eng(frhp, "Hz")]],
-      loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot"],
-        ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_out²·f_sw"],
-        ["Diode reverse recovery", Prr, "Q_rr·V_out·f_sw — often the largest term in CCM"],
-        ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
+      loss: [["Switch conduction", Pc, "I_rms²·R_DS(on), hot", "Q1"],
+        ["Switch switching", Psw, "½·V_out·I_L·(t_r+t_f)·f_sw + ½·C_oss·V_out²·f_sw", "Q1"],
+        /* Swept through the switch, so it heats Q1 and not D1. */
+        ["Diode reverse recovery", Prr, "Q_rr·V_out·f_sw — often the largest term in CCM", "Q1"],
+        ["Diode", Pd, "V_F·I_out", "D1"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       /* Pulse-fed output: while the switch is on the diode is blocking and the
          capacitor alone holds the rail up, then takes the whole inductor
          current at turn-off — peak first, decaying to the valley. That step is
@@ -438,9 +446,9 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L, C: Co },
       hi: [["duty (nom)", f3(Dn)], ["inductor", eng(L, "H")], ["device stress", eng(Vst, "V")]],
-      loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)"],
-        ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw"],
-        ["Diode", Pd, "V_F·I_out"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
+      loss: [["Switch conduction", Pc, "I_rms²·R_DS(on)", "Q1"],
+        ["Switching", Psw, "½·(V_in+V_out)·I_L·(t_r+t_f)·f_sw", "Q1"],
+        ["Diode", Pd, "V_F·I_out", "D1"], ["Inductor DCR", Pl, "I_rms²·DCR"]],
       wave: { sat: s.lsag / 100, D: Dn, dI: dIn, iavg: IL , vlabel: "v_A", vhi: "V_in",
         cap: { kind: "boost", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs,
           i0: IL + dIn / 2, i1: IL - dIn / 2 } },
@@ -630,8 +638,8 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L1, L2: L2, C: Co, Cc: C1 },
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
-      loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
-        ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
+      loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)", "Q1"],
+        ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)", "D1"]],
       /* The pane plots L1, the input inductor — but the capacitor faces L2.
          Both windings see V_in during t_on so their ripples are equal, and L2
          carries I_out rather than I_in, so the capacitor's own current is
@@ -715,8 +723,8 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L, L2: L, C: Co, Cc: Cs },
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
-      loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
-        ["Diode", Pd, "V_F·I_out"]],
+      loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min", "Q1"],
+        ["Diode", Pd, "V_F·I_out", "D1"]],
       /* The output diode carries both winding currents, and only while the
          switch is off — so the output is pulse-fed exactly as a boost's is.
          Their sum averages I_out/(1−D) over that interval, which is what
@@ -794,8 +802,8 @@ const TA = [
          numbers printed beside it cannot be different converters. */
       sim: { L: L1, L2: L2, C: Co, Cc: Io * Dx / (fs * 0.05 * s.vinMin) },
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
-      loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
-        ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
+      loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)", "Q1"],
+        ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)", "D1"]],
       /* The Zeta's output inductor faces the load, so the plotted current is
          already the one the capacitor sees — which is the whole reason this
          topology's output is quieter than the SEPIC's. */

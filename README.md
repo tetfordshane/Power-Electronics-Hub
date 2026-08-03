@@ -198,6 +198,12 @@ chart, `hm` heatmap, `sp` spectrum. They must not collide.
 **Do not name anything `Math`.** A hoisted `function Math` shadows the global
 `Math` object for the whole module. The math component is `TeXSpan`.
 
+**No backticks inside `src/styles.js`.** The whole stylesheet is one template
+literal, so a backtick anywhere in it — including in a comment, quoting a
+class name — ends the string early and the build fails somewhere far from the
+character that caused it (`Expected a semicolon`, or an identifier from the
+middle of your CSS). Write class names bare: `.lit`, not the quoted form.
+
 **`--ghost` is a stroke colour, `--ghosttxt` is an ink.** They look almost
 alike and they are not interchangeable. `--ghost` reads at 2.6:1 on the page
 background, which is what the marks on a switched-off device want and what no
@@ -211,6 +217,18 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 32 schematics are argument-less thunks, so `SV` takes a `label` and the two
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
+
+**A loss may name the device it heats.** The fourth element of a `loss:`
+tuple is a device label — or an array of them, for a mechanism shared by a
+pair — and it must be a name the figure actually draws, i.e. one of
+`FLOW[id].sw`'s third fields. Pointing at that mechanism in the loss bar
+lights the part up on the schematic. Attribute it to the device that gets
+hot, not the one named in the label: reverse recovery is swept through the
+switch, so it points at `Q1` and not `D1`, which is what the formula beside
+it already said. Mechanisms with no marked device — the inductor, the output
+capacitor, a clamp network — simply omit the element. `check-registry`
+rejects a name the figure does not draw; the golden file never sees it, so
+topologies can be linked a few at a time.
 
 **Warnings carry a severity, and the tier is the first thing read.** Write
 them with the helpers in `src/fields.js`:

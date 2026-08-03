@@ -19,7 +19,7 @@ import { isDiode, Swap, Chevron, DevMark, PolMark } from "./marks.jsx";
 /* the operation card: the conduction path, animated at the real current.
    Dash offset advances with accumulated charge, so the flow speeds up as
    the inductor charges and slows as it discharges.                       */
-function FlowCard({ topo, res, spec }) {
+function FlowCard({ topo, res, spec, hot }) {
   const period = swPeriod(spec);
   const F = FLOW[topo.id];
   const reduce = usePrefersReducedMotion();
@@ -840,7 +840,8 @@ function FlowCard({ topo, res, spec }) {
             </>
           )}
           {drawScope("db", () => (F.sw || []).map((q, j) =>
-            DevMark(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false, q[3])))}
+            DevMark(q[0], q[1], q[2], ph.on ? !!ph.on[j] : false, q[3],
+              !!(hot && hot.devs && hot.devs.includes(q[2])))))}
         </svg>
       </div>
       {devs.length ? (

@@ -102,6 +102,19 @@ for (const t of TOPOS) {
     if (typeof l[0] !== "string" || !l[0]) fail(t.id, `loss ${i} has no label`);
     if (!Number.isFinite(l[1])) fail(t.id, `loss ${i} ("${l[0]}") is ${l[1]}, not a number`);
     else if (l[1] < 0) fail(t.id, `loss ${i} ("${l[0]}") is negative`);
+    /* A loss may name the device it heats, which is what lets hovering the
+       bar light that part up on the schematic. The name has to be one the
+       figure actually draws — a typo would simply highlight nothing, in
+       silence, on one topology out of thirty-two. */
+    if (l[3] !== undefined) {
+      const marks = new Set(((FLOW[t.id] || {}).sw || []).map((q) => q[2]));
+      for (const d of Array.isArray(l[3]) ? l[3] : [l[3]]) {
+        if (!marks.has(d)) {
+          fail(t.id, `loss "${l[0]}" points at device "${d}", which the figure does not draw`
+            + (marks.size ? ` (has ${[...marks].join(", ")})` : " (no devices at all)"));
+        }
+      }
+    }
   });
   /* Warnings carry a severity from a closed set. An unrecognised tier falls
      back to `check` in the renderer, so a typo would silently downgrade a
