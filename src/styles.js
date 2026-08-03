@@ -699,6 +699,37 @@ export const CSS = `
 .ps .stat .eyebrow{display:block; margin-bottom:6px}
 .ps a{color:var(--cy); text-underline-offset:2px}
 
+/* ------------------------------------------------------- comparison mode */
+/* Pinning is a quiet affordance until it is used, then a persistent strip
+   that says what the panel is being read against. */
+.ps .pinbar{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin:0 0 12px; font-size:var(--t-fine); color:var(--dim);
+}
+.ps .pinbtn{
+  width:auto; display:inline-block; padding:4px 10px; border:1px solid var(--line2);
+  border-radius:3px; color:var(--dim); font-size:var(--t-fine);
+}
+.ps .pinbtn:hover:not(:disabled){background:var(--surf2); color:var(--txt); border-color:var(--line3)}
+.ps .pinbtn:disabled{opacity:.4; cursor:not-allowed}
+.ps .pinwhat b{color:var(--cu); font-weight:600}
+.ps .pinsum{display:inline-flex; gap:14px; flex-wrap:wrap;
+  font-family:var(--num); font-variant-numeric:tabular-nums; color:var(--dim)}
+.ps .pinsum em{font-style:normal; color:var(--faint)}
+.ps .pinlink{color:var(--cy); text-decoration:none; border-bottom:1px dotted var(--line3)}
+.ps .pinlink:hover{color:var(--txt)}
+/* What moved since the pin. The mark is on the row, not the number, so a
+   column of values still scans straight down. */
+.ps .stat.moved{border-left:2px solid var(--cu-dim)}
+.ps .waspin{font-family:var(--num); font-size:var(--t-micro); color:var(--faint); margin-top:2px}
+.ps td.wasv{
+  font-family:var(--num); font-variant-numeric:tabular-nums; text-align:right;
+  color:var(--faint); font-size:var(--t-fine); padding-left:10px; white-space:nowrap;
+}
+.ps td.wasv .same{color:var(--line3)}
+.ps tr.moved td.k,.ps tr.moved td.v{color:var(--txt)}
+.ps .ldelta{font-family:var(--num); font-size:var(--t-micro); color:var(--cu); font-style:normal}
+
 /* -------------------------------------------- loss bar ↔ schematic link */
 /* Pointing at a loss mechanism recedes the others and lights the part it
    heats. Isolation rather than emphasis: the reader is asking "which of

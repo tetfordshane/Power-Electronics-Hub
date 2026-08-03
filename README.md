@@ -218,6 +218,19 @@ to say what was hidden, which is strictly worse than leaving the role off. The
 callers (the static card in `App.jsx`, the animated figure in `FlowCard.jsx`)
 clone the element to pass the topology's name in.
 
+**A pin is a snapshot, and it never runs the engine.** Pinning stores the
+already-computed result, not a second live design: nothing re-runs `design()`
+and nothing touches the adapter, whose cache is eight entries deep and would
+be halved by a second operating point. Row-by-row comparison only happens
+when the pinned topology IS the current one, because result values are
+pre-formatted strings whose labels line up by construction within a topology
+and not at all across one. Across topologies only the totals compare — watts
+lost, efficiency, and how many warnings are not merely notes — read through
+`readEta`/`outPower`, the same helpers the design-space map uses, so
+"efficiency" means one thing on this page. Rows are diffed by string
+equality; re-parsing a formatted value to invent a delta would be a second,
+quieter model of what it means.
+
 **The URL carries the design, not just the topology.**
 `#/<tab>/<tid>/<version>/<payload>`, encoded and decoded in `src/urlstate.js`,
 which is JSX-free so the scripts and the tests read the same implementation

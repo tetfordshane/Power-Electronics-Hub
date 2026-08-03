@@ -16,10 +16,20 @@ const devsOf = (it) => (it[3] === undefined ? [] : Array.isArray(it[3]) ? it[3] 
    The isolation is the point: the bar answers "where do the watts go" and
    the figure answers "which part is that", and a reader had to hold the two
    together from memory. */
-function LossBar({ items, onHot, hot }) {
+function LossBar({ items, onHot, hot, was }) {
   const list = (items || []).filter((x) => isFinite(x[1]) && x[1] > 0);
   const tot = list.reduce((a, b) => a + b[1], 0);
   if (!(tot > 0)) return null;
+  /* The pinned design's watts, by mechanism label. Matching on the label is
+     safe here because both sides came out of the same design function — this
+     only ever runs when the pinned topology is the current one. */
+  const before = new Map((was || []).map((x) => [x[0], x[1]]));
+  const wasTot = (was || []).reduce((a, b) => a + (isFinite(b[1]) && b[1] > 0 ? b[1] : 0), 0);
+  const dOf = (label, now) => {
+    if (!before.has(label)) return null;
+    const d = now - before.get(label);
+    return Math.abs(d) < 1e-9 ? null : (d > 0 ? "+" : "−") + eng(Math.abs(d), "W");
+  };
   /* Colour is keyed off position in the FILTERED list, so the bar and its
      legend agree; anything comparing indices has to use the same list. */
   const isHot = (i) => hot != null && hot.i === i;
@@ -30,6 +40,10 @@ function LossBar({ items, onHot, hot }) {
     <div style={{ marginBottom: 16 }}>
       <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
         Loss breakdown · {eng(tot, "W")} total
+        {wasTot > 0 && Math.abs(tot - wasTot) > 1e-9 ? (
+          <em className="ldelta"> · was {eng(wasTot, "W")}
+            {" ("}{tot > wasTot ? "+" : "−"}{eng(Math.abs(tot - wasTot), "W")}{")"}</em>
+        ) : null}
       </span>
       <div className="lbar" role="img" aria-label={"Loss breakdown, " + eng(tot, "W")
         + " total: " + list.map((it) => it[0] + " " + pct(it[1] / tot)).join(", ")}>
@@ -51,6 +65,7 @@ function LossBar({ items, onHot, hot }) {
               onFocus={enter(i, it)} onBlur={leave}>
               <i style={{ background: LCOL[i % 6] }} />
               <b><Mx t={it[0]} /></b> {eng(it[1], "W")} · {pct(it[1] / tot)}
+              {dOf(it[0], it[1]) ? <span className="ldelta">{dOf(it[0], it[1])}</span> : null}
               {it[2] ? <em><Mx t={it[2]} /></em> : null}
             </span>
           );

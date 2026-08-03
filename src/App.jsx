@@ -99,6 +99,13 @@ export default function App() {
      schematic it lights up is in the figure card — two siblings that cannot
      see each other. Null means nothing is singled out. */
   const [hot, setHot] = useState(null);
+  /* A pinned design: a snapshot of what was on screen when the reader pinned
+     it, kept for comparison. Deliberately a copy of the ALREADY-COMPUTED
+     result rather than a second live design — nothing here re-runs design()
+     and nothing here touches the engine, so the adapter's eight-entry cache
+     is never split between two operating points. Session-only; the URL
+     describes one design, and the version segment leaves room for two. */
+  const [pin, setPin] = useState(null);
   const tabRefs = useRef([]);
 
   /* Debounced, because `raw` changes on every keystroke and replaceState is
@@ -319,7 +326,10 @@ export default function App() {
             <div className="card">
               <h3 className="eyebrow">Design output</h3>
               <Results res={res} spec={spec} hideWave={!!FLOW[topo.id]} sim={sim} cyc={cyc}
-                hot={hot} onHot={setHot} />
+                hot={hot} onHot={setHot}
+                tid={tid} pin={pin} onUnpin={() => setPin(null)}
+                onPin={() => setPin({ tid, name: topo.name, raw: { ...raw }, spec, res,
+                  link: encodeHash("bench", tid, raw) })} />
             </div>
 
             <HeatCard topo={topo} spec={spec} />

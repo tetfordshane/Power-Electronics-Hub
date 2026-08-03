@@ -5,7 +5,29 @@ import { swPeriod, SEV, W, warns } from "../fields.js";
 import { Wave, LineChart } from "./Wave.jsx";
 import { LossBar } from "./LossBar.jsx";
 import { Spark } from "./Spark.jsx";
-import { eng, f2 } from "../format.js";
+import { eng, f2, pct } from "../format.js";
+import { readEta, outPower } from "./HeatCard.jsx";
+
+/* What can honestly be said about two designs of DIFFERENT topologies.
+
+   Result rows are pre-formatted strings and their labels only line up within
+   one topology, so a row-by-row diff across topologies would be inventing
+   correspondences that do not exist. Three things are genuinely comparable
+   because they are real numbers in a shared unit: the watts lost, the
+   efficiency, and how many warnings are not merely notes. Read through the
+   same helpers the design-space map uses, so "efficiency" means one thing on
+   this page. */
+function summarise(res, spec) {
+  if (!res || res.error || res.infeasible) return null;
+  /* outPower ignores its first argument — it reads the result and the spec. */
+  const m = readEta(res, outPower(null, spec, res));
+  const loss = (res.loss || []).reduce((a, b) => a + (isFinite(b[1]) && b[1] > 0 ? b[1] : 0), 0);
+  return {
+    loss: loss > 0 ? loss : (m ? m.loss : null),
+    eta: m ? m.eta : null,
+    flags: (res.warn || []).filter((w) => w && w.s !== "note").length,
+  };
+}
 
 /* How each tier presents itself, in one place.
 
@@ -62,7 +84,7 @@ function glanceRows(cyc, wv) {
   return rows;
 }
 
-function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
+function Results({ res, spec, hideWave, sim, cyc, hot, onHot, tid, pin, onPin, onUnpin }) {
   if (!res) return <p>This topology has no calculator yet — the equations and trade-offs below still apply.</p>;
   if (res.error) {
     return (
@@ -79,8 +101,59 @@ function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
   const hi = res.hi || [];
   const allBlank = hi.length > 0 && hi.every(([, v]) => String(v).trim() === "—");
   const negative = hi.some(([, v]) => /^−/.test(String(v).trim()));
+  /* A pin of the SAME topology can be compared row by row, because both sides
+     came out of the same design function and the labels line up by
+     construction. A pin of a different one gets the summary only. */
+  const sameTopo = !!(pin && pin.tid === tid);
+  const pinHi = sameTopo ? (pin.res.hi || []) : [];
+  const pinRow = (gi, ri) => {
+    const g = sameTopo ? (pin.res.groups || [])[gi] : null;
+    const r = g && (g.rows || [])[ri];
+    return r ? r[1] : null;
+  };
+  const now = pin ? summarise(res, spec) : null;
+  const then = pin ? summarise(pin.res, pin.spec) : null;
+  /* Null when nothing moved. Saying "no change" against every figure the
+     instant a design is pinned is noise standing where a signal will be. */
+  const delta = (a, b, unit) => {
+    if (a == null || b == null) return null;
+    const d = a - b;
+    if (Math.abs(d) < Math.abs(b) * 1e-6) return null;
+    return (d > 0 ? "+" : "−") + eng(Math.abs(d), unit);
+  };
   return (
     <div>
+      {/* Pin a design and the panel starts answering "compared with what".
+          The comparison is against a SNAPSHOT — the numbers as they were when
+          it was pinned — so editing the bench moves one side and not the
+          other, which is the whole point. */}
+      <div className="pinbar">
+        {pin ? (
+          <>
+            <span className="pinwhat">
+              vs <b>{pin.name}</b>
+              {sameTopo ? "" : " · different topology, so only the totals compare"}
+            </span>
+            {now && then ? (
+              <span className="pinsum">
+                {then.loss != null ? <span>{eng(then.loss, "W")} lost
+                  {delta(now.loss, then.loss, "W") ? <em> ({delta(now.loss, then.loss, "W")})</em> : null}
+                </span> : null}
+                {then.eta != null ? <span>η {pct(then.eta)}
+                  {now.eta != null && pct(now.eta) !== pct(then.eta)
+                    ? <em> (now {pct(now.eta)})</em> : null}
+                </span> : null}
+                <span>{then.flags} to check{now.flags !== then.flags ? <em> (now {now.flags})</em> : null}</span>
+              </span>
+            ) : null}
+            {pin.link ? <a className="pinlink" href={pin.link}>link to it</a> : null}
+            <button className="ritem pinbtn" onClick={onUnpin}>Unpin</button>
+          </>
+        ) : (
+          <button className="ritem pinbtn" onClick={onPin}
+            disabled={!!res.infeasible}>Pin this design to compare</button>
+        )}
+      </div>
       {res.infeasible ? (
         <div className="warn stop">
           <b>This operating point is outside the topology.</b> There is nothing to size, because
@@ -95,12 +168,16 @@ function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
         </div>
       ) : null}
       <div className="grid3" style={{ marginBottom: 14 }}>
-        {hi.map(([k, v], i) => (
-          <div className="stat" key={i}>
-            <span className="eyebrow"><Mx t={k} /></span>
-            <div className={"big " + ["cu", "cy", "gn"][i % 3]}>{v}</div>
-          </div>
-        ))}
+        {hi.map(([k, v], i) => {
+          const was = pinHi[i] && pinHi[i][0] === k ? pinHi[i][1] : null;
+          return (
+            <div className={"stat" + (was != null && was !== v ? " moved" : "")} key={i}>
+              <span className="eyebrow"><Mx t={k} /></span>
+              <div className={"big " + ["cu", "cy", "gn"][i % 3]}>{v}</div>
+              {was != null && was !== v ? <div className="waspin">was {was}</div> : null}
+            </div>
+          );
+        })}
       </div>
       {/* The shape of the cycle, beside the numbers that describe it. A
           reader scanning the results for "does the current reach zero" had to
@@ -168,7 +245,10 @@ function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
             + "as it loads. Raise C_out, lower the ripple, or accept the larger figure."} />
         </div>
       ) : null}
-      <LossBar items={res.loss} hot={hot} onHot={onHot} />
+      {/* The loss bar is where the comparison is most honest, because its
+          numbers are real watts rather than formatted strings. */}
+      <LossBar items={res.loss} hot={hot} onHot={onHot}
+        was={sameTopo ? pin.res.loss : null} />
       {res.wave && !hideWave ? <div style={{ margin: "14px 0" }}>
         <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>
           Idealised waveforms · one cycle, drawn three times
@@ -191,18 +271,28 @@ function Results({ res, spec, hideWave, sim, cyc, hot, onHot }) {
           <div key={i}>
             <span className="eyebrow" style={{ display: "block", marginBottom: 6 }}>{g.t}</span>
             <table><tbody>
-              {g.rows.map((r, j) => (
-                <tr key={j}>
-                  {/* The note belongs under the LABEL, left-aligned. Hanging it
-                      right-aligned under the value left every row ragged and
-                      made the numbers impossible to scan down. */}
-                  <td className="k">
-                    <Mx t={r[0]} />
-                    {r[2] ? <div className="n"><Mx t={r[2]} /></div> : null}
-                  </td>
-                  <td className="v"><Mx t={r[1]} /></td>
-                </tr>
-              ))}
+              {g.rows.map((r, j) => {
+                /* String comparison, not a numeric one: these values are
+                   already formatted, and re-parsing them to invent a delta
+                   would be a second, quieter model of what they mean. */
+                const was = sameTopo ? pinRow(i, j) : null;
+                const moved = was != null && was !== r[1];
+                return (
+                  <tr key={j} className={moved ? "moved" : undefined}>
+                    {/* The note belongs under the LABEL, left-aligned. Hanging it
+                        right-aligned under the value left every row ragged and
+                        made the numbers impossible to scan down. */}
+                    <td className="k">
+                      <Mx t={r[0]} />
+                      {r[2] ? <div className="n"><Mx t={r[2]} /></div> : null}
+                    </td>
+                    <td className="v"><Mx t={r[1]} /></td>
+                    {sameTopo ? (
+                      <td className="wasv">{moved ? <Mx t={was} /> : <span className="same">·</span>}</td>
+                    ) : null}
+                  </tr>
+                );
+              })}
             </tbody></table>
           </div>
         ))}
