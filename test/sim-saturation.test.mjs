@@ -24,7 +24,7 @@ import { runSteady, rippleOf } from "../src/engine/run.js";
 import { buildCycle } from "../src/cycle.js";
 
 const topoOf = (id) => TOPOS.find((t) => t.id === id);
-const PILOTS = ["buck", "syncbuck", "boost", "buckboost", "flyback"];
+const PILOTS = ["buck", "syncbuck", "boost", "buckboost", "flyback", "cuk", "sepic", "zeta"];
 
 const at = (id, lsag) => {
   const topo = topoOf(id);

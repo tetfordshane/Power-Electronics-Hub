@@ -256,4 +256,124 @@ export const flyback = (spec, res) => {
   };
 };
 
-export const SIM = { buck, syncbuck, boost, buckboost, flyback };
+
+
+/* ------------------------------------------- the coupled-capacitor family */
+/* SEPIC, Ćuk and Zeta are the same five parts in three arrangements, and the
+   arrangement is the whole lesson: where the series capacitor sits decides
+   which port pulsates and which sign the output takes. Wiring them as
+   circuits rather than as three sets of equations is what makes that visible
+   — the same components, moved.
+
+   Each has two windings and a capacitor that carries the full load current
+   between them, so the states are i_L1, i_L2, v_Cc, v_Cout and the switch
+   node's own capacitance. */
+
+/* Ćuk: inverting, and quiet at both ports because a winding faces each. */
+export const cuk = (spec, res) => {
+  const c = common(spec);
+  const ipk = peakOf(res);
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      /* The coupling capacitor is the whole converter: energy crosses it in
+         an electric field rather than in a core, which is what makes this
+         the dual of the buck-boost rather than a variation on it. */
+      { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
+      /* Anode at the capacitor's far side, cathode at ground. During the
+         off-time the input winding charges the coupling capacitor, and that
+         current has to return to the source — it does so out of this node,
+         through the diode, to ground. Pointed the other way the converter
+         still runs and settles on a positive rail, which a Ćuk does not
+         have. */
+      { id: "D1", type: "D", n: ["mid", "0"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "L2", type: "L", n: ["mid", "out"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    gates: { kind: "pwm1", sw: "Q1" },
+    seed: { L1: spec.iout, L2: -spec.iout, Cc: spec.vinNom + spec.vout, C1: -spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      iL2: { kind: "branch", id: "L2" },
+      vsw: { kind: "node", id: "sw" },
+      vout: { kind: "node", id: "out" },
+      iQ: { kind: "branch", id: "Q1" },
+      iD: { kind: "branch", id: "D1" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    plot: "iL",
+  };
+};
+
+/* SEPIC: the series capacitor blocks DC, so a shorted output cannot drag the
+   input down through the rectifier — which is the reason to choose it. */
+export const sepic = (spec, res) => {
+  const c = common(spec);
+  const ipk = peakOf(res);
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
+      /* The second winding returns to ground rather than to the output, and
+         that single difference is what turns a Ćuk's inverted rail the right
+         way up. */
+      { id: "L2", type: "L", n: ["mid", "0"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "D1", type: "D", n: ["mid", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    gates: { kind: "pwm1", sw: "Q1" },
+    seed: { L1: spec.iout, L2: spec.iout, Cc: spec.vinNom, C1: spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      iL2: { kind: "branch", id: "L2" },
+      vsw: { kind: "node", id: "sw" },
+      vout: { kind: "node", id: "out" },
+      iQ: { kind: "branch", id: "Q1" },
+      iD: { kind: "branch", id: "D1" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    plot: "iL",
+  };
+};
+
+/* Zeta: a SEPIC turned around, so the winding faces the load and the output
+   current is continuous. The switch moves to the high side with it. */
+export const zeta = (spec, res) => {
+  const c = common(spec);
+  const ipk = peakOf(res);
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "D1", type: "D", n: ["0", "mid"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
+      { id: "L2", type: "L", n: ["mid", "out"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    gates: { kind: "pwm1", sw: "Q1" },
+    seed: { L1: spec.iout, L2: spec.iout, Cc: spec.vinNom, C1: spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L2" },
+      iL1: { kind: "branch", id: "L1" },
+      vsw: { kind: "node", id: "sw" },
+      vout: { kind: "node", id: "out" },
+      iQ: { kind: "branch", id: "Q1" },
+      iD: { kind: "branch", id: "D1" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    plot: "iL",
+  };
+};
+
+export const SIM = { buck, syncbuck, boost, buckboost, flyback, cuk, sepic, zeta };

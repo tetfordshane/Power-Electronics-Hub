@@ -619,6 +619,10 @@ const TA = [
     const Pd = s.vf * Isum * (1 - Dn);
     const Pt = Pc + Pd, eta = Vo * Io / (Vo * Io + Pt);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L1, L2: L2, C: Co, Cc: C1 },
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L1, "H")], ["C1 rms current", eng(Ic1, "A")]],
       loss: [["Switch conduction", Pc, "((I_in+I_out)·√D)²·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_in+I_out)·(1−D)"]],
@@ -700,6 +704,10 @@ const TA = [
     const Pd = Vf * Io;
     const Pt = Pc + Pd, eta = Vo * Io / (Vo * Io + Pt);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L, L2: L, C: Co, Cc: Cs },
       hi: [["duty (nom)", f3(Dn)], ["L1 = L2", eng(L, "H")], ["C_s rms", eng(Ics, "A")]],
       loss: [["Switch conduction", Pc, "((I_L1+I_L2)·√D)²·R_DS(on), at V_in min"],
         ["Diode", Pd, "V_F·I_out"]],
@@ -773,6 +781,10 @@ const TA = [
     const Pq = Isum * Isum * Dx * s.rds * 1e-3;
     const Pd = s.vf * Isum * (1 - Dx);
     return {
+      /* The components the simulator builds its circuit from, in SI.
+         Published rather than re-derived so the running converter and the
+         numbers printed beside it cannot be different converters. */
+      sim: { L: L1, L2: L2, C: Co, Cc: Io * Dx / (fs * 0.05 * s.vinMin) },
       hi: [["duty (nom)", f3(Dn)], ["L2 (output)", eng(L2, "H")], ["C_out", eng(Co, "F")]],
       loss: [["Switch conduction", Pq, "(I_L1+I_L2)²·D·R_DS(on)"],
         ["Diode", Pd, "V_F·(I_L1+I_L2)·(1−D)"]],
