@@ -10,6 +10,11 @@ const LCOL = ["#E0A458", "#5AD1DE", "#F0796C", "#6FD39B", "#A88BF0", "#8DA0B4"];
    is the same shape as one that heats a single device. */
 const devsOf = (it) => (it[3] === undefined ? [] : Array.isArray(it[3]) ? it[3] : [it[3]]);
 
+/* "S1 and S2 and S3 and S4 and D1 and D2" is not a sentence anyone wants
+   read aloud. Six devices is a list; two is a pair. */
+const nameList = (d) => (d.length < 2 ? d.join("")
+  : d.slice(0, -1).join(", ") + " and " + d[d.length - 1]);
+
 /* `onHot` lifts the highlight to App, because the bar and the schematic live
    in different cards. Null means nothing is singled out.
 
@@ -60,7 +65,7 @@ function LossBar({ items, onHot, hot, was }) {
             <span key={i} className={"lit" + (isHot(i) ? " hot" : "") + (dim && !isHot(i) ? " dim" : "")}
               tabIndex={0}
               aria-label={it[0] + ", " + eng(it[1], "W") + ", " + pct(it[1] / tot) + " of the total"
-                + (devs.length ? " — highlights " + devs.join(" and ") + " on the circuit" : "")}
+                + (devs.length ? " — highlights " + nameList(devs) + " on the circuit" : "")}
               onMouseEnter={enter(i, it)} onMouseLeave={leave}
               onFocus={enter(i, it)} onBlur={leave}>
               <i style={{ background: LCOL[i % 6] }} />

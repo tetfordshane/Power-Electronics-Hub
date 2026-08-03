@@ -248,9 +248,11 @@ const TB = [
     const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["D at V_in nom", f3(Dn)]],
-      loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series"],
-        ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw"],
-        ["Output rectifiers", Pdo, "V_F·I_out"]],
+      /* D_a and D_b are the clamp diodes that return the magnetising
+         volt-seconds; the output rectifiers are D3 and D4. */
+      loss: [["Primary conduction", Pq, "2·I_pri(rms)²·R_DS(on) — two devices in series", ["Q1", "Q2"]],
+        ["Primary switching", Psw, "2·½·V_in·I_pri·(t_r+t_f)·f_sw", ["Q1", "Q2"]],
+        ["Output rectifiers", Pdo, "V_F·I_out", ["D3", "D4"]]],
       /* An output inductor sits between the rectifier and the load, so output
          current is continuous and the capacitor takes the ripple alone — a
          buck filter behind a transformer, which is what a forward is. One
@@ -324,9 +326,9 @@ const TB = [
     const Psw = 2 * 0.5 * (2 * s.vinNom) * Ipri * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(2 * s.vinMax, "V")]],
-      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
-        ["Primary switching", Psw, "hard switched against 2·V_in"],
-        ["Output rectifiers", Pdo, "V_F·I_out"]],
+      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)", ["Q1", "Q2"]],
+        ["Primary switching", Psw, "hard switched against 2·V_in", ["Q1", "Q2"]],
+        ["Output rectifiers", Pdo, "V_F·I_out", ["D1", "D2"]]],
       /* DOUBLE-PULSE OUTPUT FILTERS. A push-pull, half-bridge, phase-shifted
          bridge or centre-tapped rectifier delivers TWO power pulses per
          switching period, so its choke ramps up over D·T and back down over
@@ -406,9 +408,9 @@ const TB = [
     const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
     return {
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(s.vinMax, "V")]],
-      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)"],
-        ["Primary switching", Psw, "hard switched against V_in"],
-        ["Output rectifiers", Pdo, "V_F·I_out"]],
+      loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)", ["Q1", "Q2"]],
+        ["Primary switching", Psw, "hard switched against V_in", ["Q1", "Q2"]],
+        ["Output rectifiers", Pdo, "V_F·I_out", ["D1", "D2"]]],
       /* Two power pulses per period and a bipolar primary — see the note on
          the push-pull. The series blocking capacitor exists precisely because
          the mean this pane draws has to be zero. */
@@ -484,8 +486,9 @@ const TB = [
     const Pdo = s.vf * Io;
     return {
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
-      loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period"],
-        ["Output rectifiers", Pdo, "V_F·I_out"]],
+      loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period",
+          ["Q1", "Q2", "Q3", "Q4"]],
+        ["Output rectifiers", Pdo, "V_F·I_out", ["D1", "D2"]]],
       /* Two power pulses per period and a bipolar primary — see the note on
          the push-pull. The duty loss above is a separate effect: it shortens
          the pulses without changing how many there are. */
@@ -589,8 +592,9 @@ const TB = [
     series.push({ pts: opPts, c: "#E0A458", w: 2.4, label: "Q=" + Qd + " ←" });
     return {
       hi: [["turns ratio", f2(n) + " : 1"], ["L_r and C_r", eng(Lr, "H") + " · " + eng(Cr, "F")], ["L_m", eng(Lm, "H")]],
-      loss: [["Primary conduction", Icr * Icr * s.rds * 1e-3, "I_Cr(rms)²·R_DS(on) — one device conducts at a time"],
-        ["Output rectifiers", s.vf * Io, "V_F·I_out; ZCS means no reverse-recovery term"]],
+      loss: [["Primary conduction", Icr * Icr * s.rds * 1e-3,
+          "I_Cr(rms)²·R_DS(on) — one device conducts at a time", ["Q1", "Q2"]],
+        ["Output rectifiers", s.vf * Io, "V_F·I_out; ZCS means no reverse-recovery term", ["D1", "D2"]]],
       chart: {
         title: "Tank gain vs normalised frequency",
         series, xmin: 0.35, xmax: xTop, ymin: 0, ymax: yTop, xlab: "f_n = f_sw / f_r", ylab: "gain M",
@@ -693,8 +697,12 @@ const TB = [
       + (E2 < Ereq ? 0.5 * V1 * Math.abs(id) * s.tsw * 1e-9 * fs : 0);
     return {
       hi: [["series inductance", eng(L, "H")], ["peak tank current", eng(Ipk, "A")], ["voltage match n·V2 : V1", f2(ratio)]],
-      loss: [["Bridge 1 conduction", Pb1, "2·I_tank(rms)²·R_DS(on), HV side"],
-        ["Bridge 2 conduction", Pb2, "n·I_tank through the LV side's own R_DS(on)"],
+      loss: [["Bridge 1 conduction", Pb1, "2·I_tank(rms)²·R_DS(on), HV side", ["S1", "S2", "S3", "S4"]],
+        ["Bridge 2 conduction", Pb2, "n·I_tank through the LV side's own R_DS(on)",
+          ["S5", "S6", "S7", "S8"]],
+        /* Deliberately unlinked: this term belongs to whichever bridge fell
+           out of ZVS, and the loss array does not say which. Highlighting
+           all eight would claim more than the number knows. */
         ["Turn-off (hard side)", Poff, "only the bridge that lost ZVS"]],
       warn: warns(
         W("check", Math.abs(ratio - 1) > 0.15 && "n·V2/V1 = " + f2(ratio) + ". Away from 1.0 the ZVS range shrinks quickly — retune the turns ratio or use an extended modulation scheme."),

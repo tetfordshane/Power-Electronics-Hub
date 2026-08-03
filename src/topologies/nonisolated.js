@@ -243,7 +243,13 @@ const TA = [
     const Pl = N * Iph_rms * Iph_rms * s.dcr * 1e-3;
     return {
       hi: [["per-phase current", eng(Iph, "A")], ["ripple cancellation", "×" + f2(K)], ["output ripple f", eng(N * fs, "Hz")]],
-      loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)"], ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw"],
+      /* The figure draws three phases whatever N is, so the marks name those
+         six devices. Only the high-side devices switch hard — the low-side
+         turns on into a node the body diode has already pulled down — so the
+         switching term lights three parts and the conduction term six. */
+      loss: [["Conduction", Pc, "N·D·I_phase(rms)²·R_DS(on)",
+          ["Q1H", "Q1L", "Q2H", "Q2L", "Q3H", "Q3L"]],
+        ["Switching", Psw, "N·½·V_in·I_ph·(t_r+t_f)·f_sw", ["Q1H", "Q2H", "Q3H"]],
         ["Inductor DCR", Pl, "N·I_phase(rms)²·DCR"]],
       /* One phase is plotted; the capacitor sees all N. Handing the model the
          phase count rather than the cancelled ripple means the pane derives
@@ -553,8 +559,9 @@ const TA = [
         i0: ILw + dI / 2, i1: ILw - dI / 2 };
     return {
       hi: [["mode at V_in nom", mode], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
-      loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg"],
-        ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw"],
+      loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg",
+          ["Q1", "Q2", "Q3", "Q4"]],
+        ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw", ["Q1", "Q2", "Q3", "Q4"]],
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
       wave: { rect: "sync", sat: s.lsag / 100, D: Dw, dI, iavg: ILw,
         vlabel: "v_SW", vhi: "V_in", cap: capW },
@@ -879,7 +886,10 @@ const TA = [
       pout: Math.max(Vl, 0) * s.iout,
       loss: [["Charge redistribution", Pssl, "the R_SSL share of I_out²·R_out — set by f_sw·C"],
         ["Switch resistance", Pfsl, "the R_FSL share of I_out²·R_out"],
-        ["Rectifiers", (N + 1) * s.vf * s.iout, "(N+1)·V_F·I_out — zero with synchronous FETs"]],
+        /* The first two heat the flying capacitors and the switches, neither
+           of which the pump's figure marks — only its rectifiers are drawn. */
+        ["Rectifiers", (N + 1) * s.vf * s.iout, "(N+1)·V_F·I_out — zero with synchronous FETs",
+          ["D1", "D2", "D3"]]],
       warn: warns(
         W("stop", Vl <= 0 && "R_out is large enough that the pump collapses under this load — it cannot deliver "
           + eng(s.iout, "A") + " at all. Raise f_sw or C_pump, or accept far less current."),

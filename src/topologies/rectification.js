@@ -36,7 +36,7 @@ const TD = [
     const PF = (Vdc * Idc) / (s.vacIn * Irms);
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["diode peak", eng(Ipk, "A")]],
-      loss: [["Diode conduction", s.vf * Idc, "V_F·I_dc"]],
+      loss: [["Diode conduction", s.vf * Idc, "V_F·I_dc", "D1"]],
       /* This array is why the tiers exist. It used to run a physical
          impossibility, a model that no longer applies, a roughness caveat, a
          stress figure and an unconditional footnote through one red box, in
@@ -104,7 +104,10 @@ const TD = [
     const Pd = 2 * s.vf * Idc;
     return {
       hi: [["DC output", eng(Vdc, "V")], ["ripple p-p", eng(dV, "V")], ["power factor", f2(PF)]],
-      loss: [["Diode conduction", Pd, "2·V_F·I_dc — two diodes in series each half-cycle"]],
+      /* All four, because over a whole line cycle every diode carries a
+         half-cycle — the "two in series" is per half-cycle, not per part. */
+      loss: [["Diode conduction", Pd, "2·V_F·I_dc — two diodes in series each half-cycle",
+        ["D1", "D2", "D3", "D4"]]],
       warn: warns(
         W("check", PF < 0.7 && "Power factor is " + f2(PF) + " with badly distorted line current. Above 75 W this will not pass IEC 61000-3-2 — put a PFC stage in front."),
         W("check", Ipk / Idc > 8 && "Crest factor " + f2(Ipk / Idc) + ": the bridge and the source both see " + eng(Ipk, "A") + " peaks. Size the diode's I_FSM accordingly."),
@@ -191,7 +194,7 @@ const TD = [
          winding voltage. The efficiency map divides by this, and was reading
          roughly half the real output power for every point on the surface. */
       pout: Vo * Io,
-      loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time"],
+      loss: [["Rectifiers", Pd, "V_F·I_out — one diode drop in the path at a time", ["D1", "D2"]],
         ["Output cap ESR", Pesr, "(ΔI²/12)·ESR"]],
       /* Two power pulses per period — but NOT bipolar. This node is behind
          the rectifiers, so both half-cycles arrive positive and its mean is
@@ -258,9 +261,11 @@ const TD = [
     const Po = s.vout * Io;
     return {
       hi: [["diode loss", eng(Pdio, "W")], ["synchronous loss", eng(Psync, "W")], ["efficiency gained", pct((Pdio - Psync) / Po)]],
-      loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)"],
-        ["Body diode (dead time)", Pbody, "2·V_F·I_out·t_dead·f_sw"],
-        ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw"]],
+      loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)", ["SR1", "SR2"]],
+        /* The body diode is inside the same two parts, which is the point:
+           the dead time heats the device it was meant to protect. */
+        ["Body diode (dead time)", Pbody, "2·V_F·I_out·t_dead·f_sw", ["SR1", "SR2"]],
+        ["Gate drive", Pgate, "2·Q_g·V_gate·f_sw", ["SR1", "SR2"]]],
       warn: warns(
         W("check", Psync > Pdio && "At this current the FET is losing to the diode. R_DS(on) of " + s.rds + " mΩ breaks even at " + eng(Ibe, "A") + " — either parallel devices or keep the Schottky."),
         W("check", Pgate > 0.25 * Psync && "Gate drive is " + pct(Pgate / Psync) + " of the total. At " + s.fsw + " kHz a lower-Q_g device beats a lower-R_DS one."),
@@ -324,7 +329,7 @@ const TD = [
     const Pd = s.vf * Io;
     return {
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
-      loss: [["Rectifiers", Pd, "V_F·I_out"]],
+      loss: [["Rectifiers", Pd, "V_F·I_out", ["D1", "D2"]]],
       /* One inductor is plotted; the capacitor sees both, half a period apart.
          Handing the model the phase count rather than the cancelled ripple
          means the pane derives K from the two waveforms — so the drawn ripple

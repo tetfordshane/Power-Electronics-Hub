@@ -66,9 +66,9 @@ const TE = [
     const Vc2 = isFinite(C2) ? Itank / (w * C2) : NaN;
     return {
       hi: [["load resistance", eng(R, "Ω")], ["shunt C", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
-      loss: [["Switch conduction", Pc, "I_SW(rms)²·R_DS(on); ZVS makes the switching term ≈ 0"],
+      loss: [["Switch conduction", Pc, "I_SW(rms)²·R_DS(on); ZVS makes the switching term ≈ 0", "Q1"],
         ["C_oss shortfall", Coss > Csh ? 0.5 * (Coss - Csh) * s.vdc * s.vdc * f : 0,
-          "charge the tuning cannot absorb is dumped at turn-on"]],
+          "charge the tuning cannot absorb is dumped at turn-on", "Q1"]],
       chart: {
         title: "Drain voltage and switch current over one RF cycle",
         series: [
@@ -146,9 +146,9 @@ const TE = [
     const fmax = 0.18359 / (2 * Math.PI * R * Coss);
     return {
       hi: [["load (differential)", eng(2 * R, "Ω")], ["shunt C per side", eng(Csh, "F")], ["peak V_DS", eng(Vpk, "V")]],
-      loss: [["Switch conduction", Pc, "2·I_SW(rms)²·R_DS(on), both halves"],
+      loss: [["Switch conduction", Pc, "2·I_SW(rms)²·R_DS(on), both halves", ["Q1", "Q2"]],
         ["C_oss shortfall", Coss > Csh ? 2 * 0.5 * (Coss - Csh) * s.vdc * s.vdc * f : 0,
-          "per side, when C_oss exceeds the tuning"]],
+          "per side, when C_oss exceeds the tuning", ["Q1", "Q2"]]],
       chart: {
         title: "Drain voltage of both halves over one RF cycle",
         series: [
@@ -225,9 +225,9 @@ const TE = [
     const VAe = 3.562 * 2.862;
     return {
       hi: [["duty per device", f3(D)], ["load resistance", eng(R, "Ω")], ["device blocking V", eng(s.vdc, "V")]],
-      loss: [["Switch conduction", 2 * Irms * Irms * D * s.rds * 1e-3, "2·I_rms²·D·R_DS(on)"],
+      loss: [["Switch conduction", 2 * Irms * Irms * D * s.rds * 1e-3, "2·I_rms²·D·R_DS(on)", ["Q1", "Q2"]],
         ["Lost ZVS", tdMin > td ? 2 * 0.5 * Coss * s.vdc * s.vdc * f : 0,
-          "C_oss dumped at turn-on when the dead time is too short"]],
+          "C_oss dumped at turn-on when the dead time is too short", ["Q1", "Q2"]]],
       warn: warns(
         /* The panel below is explicitly clamped nonsense when this fires —
            the strongest possible case for the top tier. */

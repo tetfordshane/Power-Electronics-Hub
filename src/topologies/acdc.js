@@ -66,11 +66,14 @@ const TC = [
     const Poss = 0.5 * s.coss * 1e-12 * Vb * Vb * fs;
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["peak line current", eng(Ipk, "A")]],
+      /* The input bridge is upstream of the marked devices and has none of
+         its own, so it links to nothing. Reverse recovery and C_oss are both
+         dumped through the switch at turn-on, so both point at Q1. */
       loss: [["Bridge diodes", Pbr, "2·V_F·I_in(avg) — deleted by a totem-pole"],
-        ["Boost switch conduction", Psw, "I_sw(rms)²·R_DS(on)"],
-        ["Boost diode reverse recovery", Prr, "Q_rr·V_bus·f_sw — why CCM PFC went SiC"],
-        ["Switch C_oss", Poss, "½·C_oss·V_bus²·f_sw, dumped at every turn-on"],
-        ["Boost diode", Pbd, "V_F·I_out(avg)"]],
+        ["Boost switch conduction", Psw, "I_sw(rms)²·R_DS(on)", "Q1"],
+        ["Boost diode reverse recovery", Prr, "Q_rr·V_bus·f_sw — why CCM PFC went SiC", "Q1"],
+        ["Switch C_oss", Poss, "½·C_oss·V_bus²·f_sw, dumped at every turn-on", "Q1"],
+        ["Boost diode", Pbd, "V_F·I_out(avg)", "D"]],
       warn: warns(
         W("check", Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak."),
         W("check", Vpp > 20 && "Bus ripple is " + eng(Vpp, "V") + " peak-to-peak. Keep the voltage loop below ~20 Hz so this does not distort the current reference."),
@@ -159,10 +162,10 @@ const TC = [
     return {
       hi: [["per-leg inductor", eng(L, "H")], ["ripple cancellation", "×" + f2(K)], ["input ripple f", eng(2 * fs, "Hz")]],
       loss: [["Bridge diodes", Pbr, "2·V_F·I_in(avg) — a totem-pole deletes these"],
-        ["Switch conduction (both legs)", Psw, "2·I_sw(rms)²·R_DS(on)"],
-        ["Boost diodes reverse recovery", Prr, "2·Q_rr·V_bus·f_sw"],
-        ["Switch C_oss (both legs)", Poss, "2·½·C_oss·V_bus²·f_sw"],
-        ["Boost diodes", Pbd, "V_F·I_out(avg)"]],
+        ["Switch conduction (both legs)", Psw, "2·I_sw(rms)²·R_DS(on)", ["Q1", "Q2"]],
+        ["Boost diodes reverse recovery", Prr, "2·Q_rr·V_bus·f_sw", ["Q1", "Q2"]],
+        ["Switch C_oss (both legs)", Poss, "2·½·C_oss·V_bus²·f_sw", ["Q1", "Q2"]],
+        ["Boost diodes", Pbd, "V_F·I_out(avg)", ["D1", "D2"]]],
       warn: warns(
         W("check", Vb < Math.SQRT2 * s.vacMax * 1.05 && "V_bus must sit comfortably above √2·V_ac(max) = " + eng(Math.SQRT2 * s.vacMax, "V") + " or the boost loses control at the line peak."),
         W("check", K < 0.15 && "At the line peak the duty is " + f2(Dpk) + ", almost exactly where the two ripples cancel completely. Real cancellation will be set by how well the two inductors match, not by this number."),
@@ -234,8 +237,8 @@ const TC = [
     const Plf = Iin * Iin * s.rds * 1e-3;
     return {
       hi: [["boost inductor", eng(L, "H")], ["bulk cap", eng(C, "F")], ["bridge loss removed", eng(Pbr, "W")]],
-      loss: [["Fast-leg conduction", Iin * Iin * s.rds * 1e-3, "I_in(rms)²·R_DS(on)"],
-        ["Line-frequency leg", Plf, "one device conducts per half cycle"]],
+      loss: [["Fast-leg conduction", Iin * Iin * s.rds * 1e-3, "I_in(rms)²·R_DS(on)", ["Q1", "Q2"]],
+        ["Line-frequency leg", Plf, "one device conducts per half cycle", ["Q3", "Q4"]]],
       /* Unconditional, so it is a standing property of the topology rather
          than a fault in this design — a note, not a stop, however severe the
          consequence. A red banner on every render of a page that is working
@@ -305,9 +308,12 @@ const TC = [
     const Vdt = s.td * 1e-9 * fs * Vdc;
     return {
       hi: [["modulation index", f3(m)], ["filter inductor", eng(Lf, "H")], ["filter cap", eng(Cf, "F")]],
-      loss: [["Conduction", 2 * Io * Io * s.rds * 1e-3, "2·I_out(rms)²·R_DS(on) — two devices in the path"],
+      loss: [["Conduction", 2 * Io * Io * s.rds * 1e-3, "2·I_out(rms)²·R_DS(on) — two devices in the path",
+          ["Q1", "Q2", "Q3", "Q4"]],
         ["Switching", 4 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
-          "four devices, averaged over the output sine"],
+          "four devices, averaged over the output sine", ["Q1", "Q2", "Q3", "Q4"]],
+        /* Unlinked on purpose: this is output the load never receives, not
+           heat in a part. Lighting up a device would say the opposite. */
         ["Dead-time distortion", Vdt * Io, "energy the output never receives"]],
       warn: warns(
         W("stop", m > 1 && "m = " + f2(m) + " exceeds 1: the bridge cannot make " + Vac + " V rms from " + Vdc + " V DC without overmodulation. Raise V_dc above " + eng(Math.SQRT2 * Vac, "V") + "."),
@@ -361,9 +367,10 @@ const TC = [
     const Mratio = fs / s.fo;
     return {
       hi: [["m (SVPWM)", f3(mV)], ["phase current", eng(Iph, "A")], ["DC link ripple", eng(Icdc, "A")]],
-      loss: [["Conduction", 6 * 0.5 * Iph * Iph * s.rds * 1e-3, "six devices, each conducting half the time"],
+      loss: [["Conduction", 6 * 0.5 * Iph * Iph * s.rds * 1e-3, "six devices, each conducting half the time",
+          ["A+", "A−", "B+", "B−", "C+", "C−"]],
         ["Switching", 6 * (2 / Math.PI) * Ipk * Vdc * s.tsw * 1e-9 * fs / 2,
-          "six devices, averaged over the output sine"]],
+          "six devices, averaged over the output sine", ["A+", "A−", "B+", "B−", "C+", "C−"]]],
       warn: warns(
         W("stop", mV > 1 && "SVPWM needs m = " + f2(mV) + " — beyond the linear range. Minimum V_dc for " + s.vac + " V is " + eng(s.vac / 0.707, "V") + "."),
         W("check", Mratio < 15 && "f_sw/f_out = " + f2(Mratio) + ". Below ~15 use synchronous modulation or the low-order harmonics become significant."),
@@ -413,9 +420,14 @@ const TC = [
     const Cnp = Ipk / (2 * Math.PI * 3 * s.fo * (0.02 * Vdc / 2));
     return {
       hi: [["device blocking V", eng(Vdc / 2, "V")], ["m (SVPWM)", f3(mV)], ["phase current", eng(Iph, "A")]],
-      loss: [["Conduction", 12 * 0.5 * Iph * Iph * s.rds * 1e-3, "twelve devices share the phase current"],
+      /* The figure draws one leg of the three: four series switches and the
+         two clamp diodes. Conduction reaches the clamp path, the transitions
+         belong to the switches. */
+      loss: [["Conduction", 12 * 0.5 * Iph * Iph * s.rds * 1e-3, "twelve devices share the phase current",
+          ["S1", "S2", "S3", "S4", "D1", "D2"]],
         ["Switching", 12 * (2 / Math.PI) * Ipk * (Vdc / 2) * s.tsw * 1e-9 * fs / 2,
-          "each transition only steps half the link — the point of the topology"]],
+          "each transition only steps half the link — the point of the topology",
+          ["S1", "S2", "S3", "S4"]]],
       warn: warns(W("stop", mV > 1 && "m = " + f2(mV) + " is beyond the linear range; raise V_dc above " + eng(s.vac / 0.707, "V") + ".")),
       groups: [
         G("Voltage structure", [
