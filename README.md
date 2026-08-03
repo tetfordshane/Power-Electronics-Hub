@@ -526,14 +526,35 @@ backgrounded browser tab either — `requestAnimationFrame` is suspended there,
 so the figure simply does not advance. These drive their own headless
 Chromium, which does composite:
 
-- `node scripts/record-animation.mjs <topology> <seconds> [emc|fld]` then
+- `node scripts/record-animation.mjs <topology> <seconds> [emc|fld] [--perturb]` then
   `node scripts/analyse-frames.mjs` — captures the cursor rake, the arrow
   field (including the fields lens's circulation marks), the EMC rings, the
   dash offset and each device's on/off state per frame, then reports the
   continuity metrics. The optional third argument clicks that lens before
   sampling. The metric that matters: nothing may *appear* at an opacity you
-  could see. Anything entering or leaving has to dissolve, so a mark with no
-  near predecessor on the previous frame must be faint.
+  could see. Anything entering or leaving has to dissolve, so a mark that was
+  not there on the previous frame must be faint.
+
+  `--perturb[=2x|=0.5x]` steps the load a third of the way in, so a settle
+  gets measured and not only a steady loop. Run it after touching anything
+  the transient draws — its first run found arrows appearing at 0.92.
+
+  Two details of the metric are load-bearing. It judges only frames whose
+  mark COUNT grew, because a nearest-neighbour radius cannot tell a mark that
+  appeared from one that merely moved fast, and a capacitor chevron sprinting
+  through its zero crossing covers three times the ground a flow arrow does.
+  And it reads opacity from the inline style as well as the attribute: for a
+  while it was blind to the very fade it exists to police.
+
+**A dissolve is a duration.** Written as a fraction of a cycle, or as a
+distance along a path, it keeps its size and loses its time the moment the
+figure plays faster — the commutation cross-fade, the arrow end fade and the
+transient's own advance each made that mistake, and at the six times speed a
+settle plays at, a twelve-millisecond fade is under one frame on a 60 Hz
+display. Anything that fades scales with `rateMul` (`spd` × the transient
+rush), and the transient advances on the phase wrap rather than on a timer of
+its own, so the phase and the drawn period can never land in different
+renders.
 - `node scripts/handoff-filmstrip.mjs <topology>` — a strip of live frames
   through a hand-off, with the rake's positions and opacities beside each one.
   Use this to look at the result; the metrics only say whether to.
