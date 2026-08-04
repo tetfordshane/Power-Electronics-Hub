@@ -196,6 +196,18 @@ export function simView(base, run) {
       traces: run.traces,
       u: run.u_grid,
       probe: (name) => run.traces[name] || null,
+      /* The views carry `slope`, which is di/dt for a current probe and dv/dt
+         for a node one. Both were being computed and then dropped at this
+         boundary, while the lenses above drew edge brightness from a
+         conduction current because it was the only thing that reached them —
+         the EMC ring in particular claimed to be a common-mode current driven
+         by dv/dt and was sized by a current. Handing the views over is the
+         whole of what makes that claim true. */
+      views: run.views,
+      slopeAt: (name, uu) => {
+        const v = run.views && run.views[name];
+        return v && v.slope ? v.slope(uu) : null;
+      },
     },
     /* Discontinuous conduction, from the circuit rather than from a test
        applied to a spec: an interval where nothing conducts. */

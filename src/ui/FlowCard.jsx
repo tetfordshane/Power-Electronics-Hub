@@ -599,12 +599,45 @@ function FlowCard({ topo, res, spec, hot }) {
      tPer: scrubbing shows the same pulse the loop played. */
   let emcLive = null;
   if (lens === "emc" && F.emc && emcGeo) {
-    const S = starts.map((s) => {
+    /* WHERE the edges are.
+
+       The authored phase-window starts are what the drawing has always used,
+       and they are a description of the intended schedule. Where a circuit
+       was solved, the solver recorded when devices actually changed state —
+       which is the same thing in continuous conduction and is NOT the same
+       thing in DCM, where the freewheel ends when the current reaches zero
+       rather than when the modulator says so. Prefer the measured ones. */
+    const edges = (M.sim && M.sim.events && M.sim.events.length)
+      ? M.sim.events : starts;
+
+    /* HOW HARD each one snaps.
+
+       This is the lens's whole claim and it used to be wrong. The rings are
+       described, in the phase note below and in the README, as the
+       common-mode current stray capacitance injects into earth — which is
+       C_par·dv/dt, a voltage rate. They were sized by |flowAt|, a conduction
+       current, because the current was the only quantity that reached this
+       file. dv/dt is now computed for every simulated topology and handed
+       over, so the mark can be driven by the thing it stands for.
+
+       Normalised against the fastest edge in this cycle rather than an
+       absolute volts-per-second, because the lens compares edges with each
+       other — which is loud, not how many volts per microsecond. Without a
+       circuit it falls back to the commutated current, which is the honest
+       proxy the closed form can offer and what it has always used. */
+    const dvdt = edges.map((s) => {
+      const t = ((s - 0.005) % 1 + 1) % 1;
+      const g = M.sim && M.sim.slopeAt ? M.sim.slopeAt("vsw", t) : null;
+      return g === null || !Number.isFinite(g) ? null : Math.abs(g);
+    });
+    const dvPk = Math.max(...dvdt.map((v) => (v === null ? 0 : v)), 0);
+    const S = edges.map((s, k) => {
+      if (dvdt[k] !== null && dvPk > 1e-9) return Math.min(dvdt[k] / dvPk, 1);
       const t = ((s - 0.005) % 1 + 1) % 1;
       return Math.min(Math.abs(M.flowAt(t)) / iPk, 1);
     });
     let heat = 0;
-    starts.forEach((s, k) => {
+    edges.forEach((s, k) => {
       let dk = tPer - s;
       dk -= Math.round(dk);
       heat += S[k] * Math.exp(-(dk / 0.012) * (dk / 0.012));
@@ -613,13 +646,24 @@ function FlowCard({ topo, res, spec, hot }) {
     /* one ring per switching edge, always mounted; radius and opacity are
        functions of the time since that edge, zero at both ends of the ride */
     const RING_W = 0.12;
-    const rings = starts.map((s, k) => {
+    const rings = edges.map((s, k) => {
       const age = ((tPer - s) % 1 + 1) % 1;
       const x = age / RING_W;
       if (x >= 1) return { r: 10, o: 0 };
       return { r: 10 + 55 * x, o: S[k] * 0.8 * 6.75 * x * (1 - x) * (1 - x) };
     });
-    emcLive = { heat, rings };
+    /* The node itself, which is the one mark in this lens that never moved.
+       It is drawn at a fixed radius and a fixed fill, representing the node
+       whose swinging is the entire reason the lens exists. Where the circuit
+       was solved, its potential is known at every instant. */
+    const vsw = M.sim && M.sim.traces && M.sim.traces.vsw
+      ? M.sim.views && M.sim.views.vsw : null;
+    let swing = null;
+    if (vsw && Number.isFinite(vsw.iMin) && Number.isFinite(vsw.iMax) && vsw.at) {
+      const span = vsw.iMax - vsw.iMin;
+      if (span > 1e-9) swing = clamp((vsw.at(tPer) - vsw.iMin) / span, 0, 1);
+    }
+    emcLive = { heat, rings, swing };
   }
 
   return (
@@ -739,13 +783,24 @@ function FlowCard({ topo, res, spec, hot }) {
                     pointInLoop(m.x, m.y, emcGeo.loop, 10) ? "hot" : ""))}
                 </g>
               ))}
-              {/* the loop itself flares at each switching edge, sized by the
-                  current being commutated there — a DCM edge is honestly quiet */}
+              {/* the loop itself flares at each switching edge, sized by how
+                  fast the node is moving there — a DCM edge is honestly quiet */}
               <path d={F.emc.loop} className="emcloop"
                 style={{ opacity: (0.30 + 0.65 * emcLive.heat).toFixed(3) }} />
               <circle cx={F.emc.node[0]} cy={F.emc.node[1]} r={20} className="emcn2"
                 style={{ opacity: (0.10 + 0.35 * emcLive.heat).toFixed(3) }} />
-              <circle cx={F.emc.node[0]} cy={F.emc.node[1]} r={10} className="emcn" />
+              {/* The node's own potential, where the circuit knows it.
+
+                  This mark stands for the thing that swings, and it was the
+                  one element of the lens that never changed: a fixed radius
+                  at a fixed fill. It now rides the switch-node voltage
+                  between its own rails, so a reader watching it sees the node
+                  arrive at the top before the ring leaves it. Without a
+                  solved circuit it keeps its fixed presence, which is the
+                  ladder's rule for a quantity nothing computed. */}
+              <circle cx={F.emc.node[0]} cy={F.emc.node[1]} r={10} className="emcn"
+                style={emcLive.swing === null ? undefined
+                  : { opacity: (0.25 + 0.75 * emcLive.swing).toFixed(3) }} />
               {/* one ring per switching edge — the common-mode injection the
                   swinging node commits at that instant, rippling outward */}
               {emcLive.rings.map((r, k) => (

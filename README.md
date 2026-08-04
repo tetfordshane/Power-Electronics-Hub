@@ -562,6 +562,18 @@ same way, for the fields lens. Never hand-list a component's extent anywhere
 — the registries are derived from the drawing precisely so the two cannot
 drift.
 
+**A moving mark names what moves it.** `src/ui/drivers.js` lists every
+time-varying mark against the path its value comes from, and
+`scripts/check-honesty.mjs` resolves those paths against a real solved cycle.
+It catches the failure that actually happened: the EMC rings were described
+as the common-mode current stray capacitance injects into earth — `C_par·dv/dt`
+— and were sized by a *conduction current*, because for a long time a current
+was the only quantity that reached the drawing. A mark whose driver is `null`
+is claiming presence only, which is the ladder's other rung and needs no
+evidence beyond saying so. What the script cannot prove is that the drawing
+reads the path it declares; what it does prove is that the ground a claim
+stands on has not quietly gone away.
+
 **The lenses claim only what the model computed.** The fields lens drives
 each mark from a real quantity: a winding's field from the conducting flow
 current (or the plotted current, for the pol-marked inductor), a modelled
@@ -574,8 +586,11 @@ taps), a supplied `{ shape }` (the forward's store/reset/idle triangle), or
 and bare-mode transformers — `"vs"` degrades to this when there is no wave).
 A coil on a `dim` branch gets the same static treatment: its current is real
 but uncomputed. The EMC lens times its flares and node rings off the
-phase-window starts — the switching instants — sized by the commutated
-current, so a DCM edge is honestly quiet, and the hot/cold split of the
+switching instants — **the solver's own `events` where a circuit was solved,
+the authored phase-window starts where it was not**, which differ in DCM,
+where the freewheel ends when the current reaches zero rather than when the
+modulator says so — sized by **dv/dt at the node**, so a DCM edge is honestly
+quiet, and the hot/cold split of the
 copper is geometric (`splitByLoop`, cut on the raw path, spliced per piece,
 dash offset carried across the cut by the piece's own arc length).
 
