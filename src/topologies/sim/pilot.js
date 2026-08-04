@@ -91,6 +91,11 @@ export const buck = (spec, res) => {
       iL: { kind: "branch", id: "L1" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -144,6 +149,11 @@ export const syncbuck = (spec, res) => {
       iL: { kind: "branch", id: "L1" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iQ2: { kind: "branch", id: "Q2" },
       iD: { kind: "branch", id: "Dbody" },
@@ -172,6 +182,11 @@ export const boost = (spec, res) => {
       iL: { kind: "branch", id: "L1" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -200,6 +215,11 @@ export const buckboost = (spec, res) => {
       iL: { kind: "branch", id: "L1" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -236,7 +256,7 @@ export const flyback = (spec, res) => {
          is what a flyback does. Wired the wrong way it still converges, still
          regulates, and reads about 20 % high: a plausible answer from the
          wrong circuit. */
-      { id: "XF1", type: "XF", n: ["in", "sw", "0", "sec"], ratio: n },
+      { id: "XF1", type: "XF", n: ["in", "sw", "0", "sec"], ratio: n, phase: "opposing" },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
       { id: "D1", type: "D", n: ["sec", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
@@ -248,6 +268,11 @@ export const flyback = (spec, res) => {
       iL: { kind: "branch", id: "Lm" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -301,6 +326,11 @@ export const cuk = (spec, res) => {
       iL2: { kind: "branch", id: "L2" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -336,6 +366,11 @@ export const sepic = (spec, res) => {
       iL2: { kind: "branch", id: "L2" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },
@@ -368,6 +403,11 @@ export const zeta = (spec, res) => {
       iL1: { kind: "branch", id: "L1" },
       vsw: { kind: "node", id: "sw" },
       vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
       iQ: { kind: "branch", id: "Q1" },
       iD: { kind: "branch", id: "D1" },
       iC: { kind: "branch", id: "C1" },

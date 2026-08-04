@@ -22,9 +22,20 @@
       through the commutation, which is the thing the animation is judged on. */
 import { compile, readAt } from "./mna.js";
 import { discretize, matvec } from "./linalg.js";
-import { expand, validate } from "./netlist.js";
+import { expand, validate, structure } from "./netlist.js";
 
 const KEY = (cond, ids) => ids.map((id) => (cond[id] ? "1" : "0")).join("");
+
+/* compile() returns null when the conductance matrix will not factor. Saying
+   so here, with the configuration that failed, is the difference between a
+   report and a riddle: the same fault used to surface as a TypeError reading
+   a property of null, in a caller that knew nothing about circuits. */
+const orThrow = (m, where) => {
+  if (m) return m;
+  throw new Error("solver: the circuit has no solution " + where
+    + ". Some node's potential is not determined — check for a section with no "
+    + "reference, or a node reached only by inductors.");
+};
 
 /* `period` puts the whole engine on the same clock as the drawings.
 
@@ -37,8 +48,8 @@ const KEY = (cond, ids) => ids.map((id) => (cond[id] ? "1" : "0")).join("");
    clock it is holding. Getting this wrong does not fail loudly: a step of
    1/512 is read as a fraction of a second, the inductor charges for two
    milliseconds, and the converter appears to explode. */
-export function makeSolver(branches, { maxConfigs = 8192, period = 1 } = {}) {
-  const net = expand(validate(branches));
+export function makeSolver(branches, { maxConfigs = 8192, period = 1, isolated } = {}) {
+  const net = structure(expand(validate(branches), { isolated }), { isolated });
   const scaleTime = (m) => {
     if (period === 1) return m;
     for (let i = 0; i < m.A.length; i++) {
@@ -111,8 +122,8 @@ export function makeSolver(branches, { maxConfigs = 8192, period = 1 } = {}) {
     let c = cache.get(k);
     if (!c) {
       if (cache.size > maxConfigs) cache.clear();
-      const m = scaleTime(compile(net, cond, lmap));
-      if (!m) throw new Error("solver: this conduction state has no solution");
+      const m = scaleTime(orThrow(compile(net, cond, lmap),
+        "in the conduction state " + KEY(cond, ids)));
       c = { m, steps: new Map(), probes: new Map() };
       cache.set(k, c);
     }
@@ -138,7 +149,13 @@ export function makeSolver(branches, { maxConfigs = 8192, period = 1 } = {}) {
     return p;
   };
 
-  const m0 = scaleTime(compile(net, Object.fromEntries(ids.map((id) => [id, false]))));
+  /* Everything open. If this one is singular the circuit is unsolvable in
+     every configuration, so it is the cheapest complete test there is — one
+     LU against a structural argument that cannot be made in general. It used
+     to read `.A` off a null and throw a TypeError from here, which named
+     neither the circuit nor the reason. */
+  const m0 = scaleTime(orThrow(compile(net, Object.fromEntries(ids.map((id) => [id, false]))),
+    "with every device open"));
   const nx = m0.nx, nu = m0.nu;
 
   /* The input vector, with the trailing 1 the affine terms ride on. */

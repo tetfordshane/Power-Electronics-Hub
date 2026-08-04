@@ -44,7 +44,7 @@ export function prepare(topo, spec, res) {
   if (!make || !res || res.infeasible || !res.sim) return null;
   const circuit = make(spec, res);
   const period = 1 / (spec.fsw * 1e3);
-  const S = makeSolver(circuit.branches, { period });
+  const S = makeSolver(circuit.branches, { period, isolated: circuit.isolated });
   const D = res.wave && res.wave.D !== undefined ? res.wave.D : 0.5;
   const mod = modulatorFor(circuit.gates, D, period);
   return { S, circuit, period, D, mod, u: S.inputs({}) };

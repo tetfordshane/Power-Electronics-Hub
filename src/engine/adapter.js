@@ -228,18 +228,30 @@ export function engineFor(topo, spec, res) {
   const ck = cacheKey(topo, spec, res);
   const hit = CACHE.get(ck);
   if (hit) return hit;
-  let run = null;
-  try { run = runSteady(topo, spec, res); } catch { run = null; }
-  /* A circuit that did not converge is not a better answer than a closed
-     form that did. Falling back silently is right here: the reader is owed a
-     figure, and the honest signal is the absent "simulated" mark rather than
-     an empty pane. */
+  let run = null, simError = null;
+  /* A circuit that did not converge is not a better answer than a closed form
+     that did, so the READER still gets a figure and the honest signal is the
+     absent "simulated" mark. But the reason used to be destroyed here, which
+     made a miswired netlist indistinguishable from a topology that simply has
+     no circuit yet — the same silence for "not written" and "written wrong".
+     The cause is kept, surfaced in development, and asserted null by
+     scripts/check-sim.mjs, which is what stops a wiring fault reaching main. */
+  try {
+    run = runSteady(topo, spec, res);
+  } catch (e) {
+    run = null;
+    simError = e;
+    if (typeof process !== "undefined" && process.env && process.env.PS_SIM_LOUD) throw e;
+    if (import.meta.env && import.meta.env.DEV) {
+      console.error(`[sim] ${topo.id}: ${e && e.message ? e.message : e}`);
+    }
+  }
   /* 1e-4 is a hundredth of a per cent of change from one period to the next,
      which is far below anything a drawn waveform can express. The looser
      bound exists because a saturating winding is piecewise linear, so its
      residual bottoms out at the width of a bucket rather than at zero. */
   if (!run || !(run.residual < 1e-4)) {
-    return { kind: "closed", cycle: closed, run: null };
+    return { kind: "closed", cycle: closed, run: null, simError };
   }
   /* The cycle is built once and kept: several surfaces read it per frame,
      and rebuilding a view is wasted work even though it is cheap. */

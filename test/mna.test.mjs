@@ -102,7 +102,7 @@ test("an ideal transformer scales voltage up and current down", () => {
   const m = build([
     { id: "Vin", type: "V", n: ["p0", "0"], value: 1 },
     { id: "Rs", type: "R", n: ["p0", "p1"], value: 1e-6 },
-    { id: "XF1", type: "XF", n: ["p1", "0", "s0", "0"], ratio: r },
+    { id: "XF1", type: "XF", n: ["p1", "0", "s0", "0"], ratio: r, phase: "aiding" },
     { id: "Rload", type: "R", n: ["s0", "0"], value: RL },
     { id: "Lm", type: "L", n: ["p1", "0"], value: 1e3 },
   ], {});

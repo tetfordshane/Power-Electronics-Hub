@@ -85,6 +85,44 @@ Wire a new one against the textbook ratio before trusting anything else —
 every error so far has been wiring, and every one of them produced a
 converter that ran, settled, and regulated to a plausible wrong number.
 
+`scripts/check-sim.mjs` is what stops that reaching main. It walks `SIM`
+itself rather than a hand-kept list, at every operating point `casesFor` pins,
+and asks the three questions an invariant cannot: does power arrive, does it
+arrive where the design said, and does what leaves match what went in. Those
+are deliberately not balances — a converter delivering nothing satisfies every
+balance in the suite, because zero is balanced. A switch returned to the wrong
+node solves in seven periods to a residual of 4e-10 and delivers zero volts,
+and until this existed nothing noticed.
+
+The design function is the second opinion: it chose the duty to reach a
+particular output, so a circuit wired differently runs at that same duty and
+lands somewhere else. There is no textbook formula written down anywhere to
+drift out of date, because it is already written down, in the design.
+
+Four things a netlist must now say, each of which used to be a silent fault:
+
+- **A transformer declares `phase`**, `"aiding"` or `"opposing"`. The dot
+  convention is otherwise expressed only as the ORDER of two node names, and
+  wired the wrong way a flyback becomes a forward converter that still
+  converges and reads 21.7 % high. check-sim compares the claim against which
+  half of the period the rectifier's charge actually flows in.
+- **Every section has a reference.** A galvanically separate secondary whose
+  potential nothing fixes makes the matrix singular; `validate` names the
+  nodes. If the isolation is real, say `isolated: ["sgnd"]` and it gets an
+  explicit 1 GΩ tie — the leakage and Y-capacitance a real supply has anyway.
+- **No node is reached only by inductors.** An `L` is stamped as a current
+  source and contributes nothing to Y, so such a node's row is empty. This is
+  the likeliest trap when composing multi-winding magnetics.
+- **`compile()` returning null is an error that says which configuration.**
+  It used to surface as a TypeError reading `.A` of null, in a caller that
+  knew nothing about circuits.
+
+`test/golden/sim.json` pins where each circuit's limit cycle sits, to four
+figures, independently of `design.json`. It is there for the changes that are
+supposed to alter nothing: a different route to the same fixed point must land
+on the same fixed point. Regenerate with `node scripts/gen-sim-golden.mjs`,
+deliberately, and read the diff.
+
 ### Transients
 
 `runTransient(topo, spec, res, fromRun)` applies new parameters to the state a
