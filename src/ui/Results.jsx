@@ -245,6 +245,24 @@ function Results({ res, spec, hideWave, sim, cyc, hot, onHot, tid, pin, onPin, o
             + "as it loads. Raise C_out, lower the ripple, or accept the larger figure."} />
         </div>
       ) : null}
+      {/* Where the circuit actually regulates to, when that is not where the
+          design asked. The duty above is an estimate of what a controller
+          will settle at, and the figure runs open loop at exactly it — so
+          this gap is that estimate's own error, and it is the one number a
+          reader would otherwise have to derive from a sparkline. */}
+      {sim && sim.vOff ? (
+        <div className="warn measured">
+          <b>measured ·</b>{" "}
+          <Mx t={"The circuit settles at " + eng(sim.vsim, "V") + " against the "
+            + eng(sim.vwant, "V") + " asked for, " + f2(sim.vRatio) + "× the target. The figure runs "
+            + "open loop at the duty above, and that duty is an estimate: a control loop would "
+            + "move it until the output matched, and nothing here does. The two usual causes "
+            + "pull opposite ways. A duty computed as V_out/(V_in·η) carries an allowance for "
+            + "losses, so where the modelled parts do not consume it the output sits high; and "
+            + "dead time is on-time the switch never receives, which sends it low. Set η to 1, "
+            + "or model the losses the design is allowing for, and the two meet."} />
+        </div>
+      ) : null}
       {/* The loss bar is where the comparison is most honest, because its
           numbers are real watts rather than formatted strings. */}
       <LossBar items={res.loss} hot={hot} onHot={onHot}
