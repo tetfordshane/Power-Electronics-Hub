@@ -233,23 +233,35 @@ function FlowCard({ topo, res, spec, hot }) {
      the old expression when there is no transient to accumulate. */
   const flowOff = -((tr ? ti : 0) + M.qFlowAt(tPer) / (M.flowTot || 1)) * 240;
 
+  /* Which set of phases this operating point is actually in.
+
+     Most converters have one conduction pattern and FLOW lists it. A few
+     change topology with their input — a four-switch buck-boost is a buck
+     below V_out and a boost above it, running different switches in each —
+     and FLOW is static data, so it carries both sets and the design says
+     which one these numbers landed in. Without this the page drew one mode's
+     phases beside the other mode's waveform, lighting devices that were not
+     working. */
+  const phKey = F.phSets && res && F.phSets[res.mode] ? res.mode : "";
+  const PH = phKey ? F.phSets[phKey].map((i) => F.ph[i]) : F.ph;
+
   /* Phase lookup. Some topologies define windows that do not tile the
      cycle (a rectifier conducts for a slice and idles for the rest), so
      falling outside every window has to resolve to the last phase that
      started rather than sticking on whatever was previously showing. */
-  const bounds = F.ph.map((q, k) =>
-    (q.f ? q.f(D) : [k / F.ph.length, (k + 1) / F.ph.length]));
+  const bounds = PH.map((q, k) =>
+    (q.f ? q.f(D) : [k / PH.length, (k + 1) / PH.length]));
   let idx = 0;
   for (let k = 0; k < bounds.length; k++) {
     if (tPer >= bounds[k][0] && tPer < bounds[k][1]) { idx = k; break; }
     if (tPer >= bounds[k][0]) idx = k;
   }
-  const ph = F.ph[idx];
+  const ph = PH[idx];
   const band = ph.f ? ph.f(D) : null;
   /* Stepping to a phase parks the marker in the middle of that phase in the
      FIRST drawn period, so the highlighted band and the marker agree. */
   const jump = (k) => {
-    const b = F.ph[k].f ? F.ph[k].f(D) : [0, 1];
+    const b = PH[k].f ? PH[k].f(D) : [0, 1];
     const at = ((b[0] + b[1]) / 2) / WAVE_CYCLES;
     setPlay(false); setP(at); pRef.current = at;
   };
@@ -279,7 +291,7 @@ function FlowCard({ topo, res, spec, hot }) {
      two phases' geometry in the same frame to cross-fade between them. */
   const phGeo = useMemo(() => {
     const coils = COILS[topo.sch] || [];
-    return F.ph.map((q) => {
+    return PH.map((q) => {
       const d = (q.d || []).map((s) => coilSplice(s, coils));
       /* Which windings this phase's routes actually climb — the fields lens
          lights a coil's field only where the figure itself claims a current.
@@ -391,7 +403,7 @@ function FlowCard({ topo, res, spec, hot }) {
     const loop = closeLoop(F.emc.loop);
     return {
       loop,
-      ph: F.ph.map((q) => (q.d || []).map((raw) => {
+      ph: PH.map((q) => (q.d || []).map((raw) => {
         let s0 = 0;
         return splitByLoop(raw, loop).map((p) => {
           const d = coilSplice(p.d, coils);
@@ -402,7 +414,9 @@ function FlowCard({ topo, res, spec, hot }) {
         });
       })),
     };
-  }, [F, topo.sch]);
+    /* phKey, because a converter that changes mode changes which phases
+       these geometries describe. */
+  }, [F, topo.sch, phKey]);
 
   /* ---- commutation cross-fade ----
 
@@ -720,7 +734,7 @@ function FlowCard({ topo, res, spec, hot }) {
       <PlayBar
         play={play} onPlay={() => setPlay(!play)}
         spd={spd} onSpd={(v) => { setSpd(v); setPlay(true); }}
-        phases={F.ph.map((q) => q.t)} phase={play ? -1 : idx} onPhase={jump}
+        phases={PH.map((q) => q.t)} phase={play ? -1 : idx} onPhase={jump}
         pos={p} onPos={(v) => { setPlay(false); setP(v); pRef.current = v; }}
         extra={
           <>
@@ -964,10 +978,10 @@ function FlowCard({ topo, res, spec, hot }) {
           runs. See Swap. */}
       <p className="flownote">
         <Swap
-          items={[...F.ph.map((q, j) => <Sub key={j} t={q.n} />),
+          items={[...PH.map((q, j) => <Sub key={j} t={q.n} />),
             <Sub key="emc" t="Red marks the loop carrying switched current: its enclosed area sets the magnetic field it radiates, so minimising it is the first layout job. The copper inside it runs hot, and the loop flares at each switching edge, sized by the current being commutated there. Violet marks the node that swings the full rail every cycle — the ring it emits at each edge is the common-mode current it injects through stray capacitance to earth. Keep its copper no larger than the current requires." />,
             <Sub key="fld" t="Green loops are each inductor's magnetic field — the converter's magnetic energy store, breathing with the current the figure claims in that branch and collapsing where it rests. Cyan strokes are the electric field between capacitor plates, the dual store; on the modelled capacitors it swells as charge arrives. The copper racetrack is the transformer's core flux — the magnetising current on a flyback, the volt-second integral on a bridge, alternating sign so the core cannot walk. The faint static fields claim presence, not a waveform: nothing computed stands behind more." />]}
-          active={lens === "emc" ? F.ph.length : lens === "fld" ? F.ph.length + 1 : idx} />
+          active={lens === "emc" ? PH.length : lens === "fld" ? PH.length + 1 : idx} />
       </p>
       {wv || bare ? (
         <div style={{ marginTop: 12 }}>

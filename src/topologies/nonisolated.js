@@ -564,12 +564,17 @@ const TA = [
         i0: ILw + dI / 2, i1: ILw - dI / 2 };
     return {
       hi: [["mode at V_in nom", mode], ["inductor", eng(L, "H")], ["est. efficiency", pct(eta)]],
+      /* Which half of the hardware is actually switching. The figure carries
+         both conduction patterns and picks by this; without it the drawing
+         showed the buck pair working while the numbers described the boost. */
+      mode,
       loss: [["Switch conduction", Pcond, "2·I_L(rms)²·R_DS(on) — one device per leg",
           ["Q1", "Q2", "Q3", "Q4"]],
         ["Switching", Psw, "½·max(V_in,V_out)·I_L·(t_r+t_f)·f_sw", ["Q1", "Q2", "Q3", "Q4"]],
         ["Inductor DCR", Pdcr, "I_L(rms)²·DCR"]],
       wave: { rect: "sync", sat: s.lsag / 100, D: Dw, dI, iavg: ILw,
         vlabel: "v_SW", vhi: "V_in", cap: capW },
+      sim: { L, C: Co },
       warn: warns(W("check", Math.abs(s.vinNom - Vo) / Vo < 0.1 && "V_in nom is inside the transition band. Plan the buck↔boost handover explicitly — this is where most designs oscillate.")),
       groups: [
         G("Modes", [

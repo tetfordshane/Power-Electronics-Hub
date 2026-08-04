@@ -211,7 +211,18 @@ const FLOW = {
       d: ["M 40 70 H 600 V 200 H 40"], dim: ["M 330 70 V 200"] },
     { on: [0,1,0,1], t: "Q2 on (buck mode)", f: (D) => [D, 1], n: "Q2 takes over as the synchronous freewheel path. Because both devices only ever block the larger of the two rails — never their sum — this topology stays efficient right through V_in ≈ V_out, where an inverting buck-boost is at its worst.",
       d: ["M 215 200 V 70 H 600 V 200 H 215"], dim: ["M 330 70 V 200"] },
-  ]},
+    /* Boost mode: the other half of the same hardware. Which pair the figure
+       draws is chosen by phSets below, from the mode the design landed in —
+       the page used to draw these two buck phases beside a boost-mode
+       waveform, lighting the devices that were standing still. */
+    { on: [1,0,1,0], t: "Q3 on (boost mode)", f: (D) => [0, D], n: "In boost mode the buck leg is static: Q1 stays on, Q2 stays off, and the input feeds the inductor continuously. Q3 shorts the far end to ground and the current ramps up, storing energy — the output is carried by the capacitor alone through this interval.",
+      d: ["M 40 70 H 330 V 200 H 40"], dim: ["M 215 70 V 200"] },
+    { on: [1,0,0,1], t: "Q4 on (boost mode)", f: (D) => [D, 1], n: "Q3 opens and the inductor's current has nowhere to go but through Q4 into the output, at whatever voltage the capacitor has reached. That is the boost: the same current, delivered at a higher voltage than the input, for a shorter part of the period.",
+      d: ["M 40 70 H 600 V 200 H 40"], dim: ["M 215 70 V 200"] },
+  ],
+  /* Two conduction patterns, one drawing. `mode` on the design result says
+     which the operating point produced. */
+  phSets: { buck: [0, 1], boost: [2, 3] }},
   multiphase: { w: 700, h: 270,
     sw: [[170, 75, "Q1H", 0], [170, 165, "Q1L", 0], [270, 90, "Q2H", 0], [270, 180, "Q2L", 0],
          [370, 105, "Q3H", 0], [370, 195, "Q3L", 0]],

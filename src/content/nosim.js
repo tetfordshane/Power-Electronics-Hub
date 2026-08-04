@@ -43,10 +43,6 @@ export const NOSIM_REASON = {
   /* Turn-on is triggered by the circuit's own state rather than by a clock. */
   qrflyback: "gating",
 
-  /* The drawn conduction pattern is authored for one mode; the converter
-     runs in whichever the operating point selects. */
-  fsbb: "mode",
-
   /* No inductor anywhere: the state is capacitor voltages and every switch
      closure is a charge redistribution. */
   chargepump: "nomagnetics",
@@ -86,14 +82,6 @@ export const NOSIM_WHY = {
     n: "This converter decides its own turn-on instant from the ringing on the switch node, "
       + "so the schedule is not known before the circuit is solved. The equations place the "
       + "valley exactly; the figure shows the intervals rather than discovering them.",
-  },
-  mode: {
-    t: "closed form · two modes",
-    n: "This converter is a buck below the output voltage and a boost above it, and the "
-      + "figure's phases are written for one of them while the operating point chooses. "
-      + "Solving the circuit would light the devices the other mode uses, so the drawing and "
-      + "the solve would disagree about which switches are working. The panel computes both "
-      + "modes and says which one these numbers land in, which is the question that matters.",
   },
   nomagnetics: {
     t: "closed form · switched capacitor",

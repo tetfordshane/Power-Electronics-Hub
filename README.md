@@ -292,6 +292,18 @@ remembered the last hash it wrote did nothing on the way in and broke the
 forward button on the way out, because the remembered string went stale as
 soon as one write was skipped as unnecessary.
 
+**A converter that changes topology with its input carries every conduction
+pattern, and names which one it is in.** `FLOW.<id>.ph` lists all of them and
+`phSets` groups them by name — `{ buck: [0,1], boost: [2,3] }` — while
+`design()` publishes `mode` and the figure selects. Before this, the
+four-switch buck-boost drew its buck phases beside a boost-mode waveform at
+its own defaults: the notes described switches that were standing still.
+`check-registry` holds the three ways that goes wrong silently — an index
+past the end of `ph`, a phase in no set (drawn by nothing, yet still validated
+geometrically, so it looks maintained and is dead), and a `mode` no set
+answers to. Every phase stays in `ph`, so `check-flow` keeps validating all of
+their geometry whether or not the current operating point draws them.
+
 **A loss may name the device it heats.** The fourth element of a `loss:`
 tuple is a device label — or an array of them, for a mechanism shared by a
 pair — and it must be a name the figure actually draws, i.e. one of

@@ -495,7 +495,68 @@ export const multiphase = (spec, res) => {
   };
 };
 
+/* ------------------------------------------------ four-switch buck-boost -- */
+/* One inductor between two half bridges, and which pair switches depends on
+   where the input sits relative to the output.
+
+   The netlist is the same in both modes because the HARDWARE is the same in
+   both modes — that is the entire idea of the topology. Only the schedule
+   differs: below V_out the input leg chops and the output leg is a wire;
+   above it the input leg is a wire and the output leg chops. Expressing that
+   needs a part to carry its own duty rather than inherit the design's, which
+   is what `d` on a gate spec is for: a switch held on is `d: 1`, one held off
+   is `d: 0`, and neither is a special case in the modulator.
+
+   Both devices only ever block the larger of the two rails, never their sum,
+   which is why this converter stays efficient through V_in ≈ V_out where an
+   inverting buck-boost is at its worst. */
+export const fsbb = (spec, res) => {
+  const c = common(spec);
+  const boost = res.mode === "boost";
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "Q1", type: "SW", n: ["in", "a"], ron: c.ron, roff: ROFF },
+      { id: "Q2", type: "SW", n: ["a", "0"], ron: c.ron, roff: ROFF },
+      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "L1", type: "L", n: ["a", "b"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "Q3", type: "SW", n: ["b", "0"], ron: c.ron, roff: ROFF },
+      { id: "Q4", type: "SW", n: ["b", "out"], ron: c.ron, roff: ROFF },
+      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    gates: boost
+      /* Input leg is a wire; the output leg chops. Q3 shorts the far end of
+         the inductor to ground for D, then Q4 delivers into the output. */
+      ? { kind: "combine", parts: [
+        { kind: "pwm1", sw: "Q1", d: 1 },
+        { kind: "pwm1", sw: "Q2", d: 0 },
+        { kind: "complementary", hi: "Q3", lo: "Q4", td: c.td },
+      ] }
+      /* Output leg is a wire; the input leg chops, and it is a plain buck. */
+      : { kind: "combine", parts: [
+        { kind: "complementary", hi: "Q1", lo: "Q2", td: c.td },
+        { kind: "pwm1", sw: "Q3", d: 0 },
+        { kind: "pwm1", sw: "Q4", d: 1 },
+      ] },
+    seed: { L1: (res.wave && res.wave.iavg) || spec.iout, C1: spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      /* The node that is actually swinging, which is a different one in each
+         mode — the static leg's node sits at a rail. */
+      vsw: { kind: "node", id: boost ? "b" : "a" },
+      vout: { kind: "node", id: "out" },
+      iin: { kind: "branch", id: "Vin" },
+      iQ: { kind: "branch", id: boost ? "Q3" : "Q1" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    plot: "iL",
+  };
+};
+
 export const SIM = {
   buck, syncbuck, boost, buckboost, flyback, cuk, sepic, zeta,
-  multiphase,
+  multiphase, fsbb,
 };

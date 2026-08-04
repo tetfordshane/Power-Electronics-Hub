@@ -68,6 +68,34 @@ for (const t of TOPOS) {
       fail(t.id, `phase ${k}: ${q.on.length} conduction flags for ${F.sw.length} devices`);
     }
   });
+  /* A topology that changes conduction pattern with its operating point
+     carries every pattern in `ph` and selects one by name. Three ways that
+     goes wrong silently: an index past the end of `ph` (the figure loses a
+     phase), a phase in no set at all (drawn by nothing, yet still validated
+     geometrically by check-flow, so it looks maintained and is dead), and a
+     design that never publishes a key any set answers to (the figure falls
+     back to every phase at once, which is how this was found). */
+  if (F.phSets) {
+    const claimed = new Set();
+    for (const [key, ix] of Object.entries(F.phSets)) {
+      if (!Array.isArray(ix) || !ix.length) { fail(t.id, `phSets.${key} is empty`); continue; }
+      for (const i of ix) {
+        if (!Number.isInteger(i) || i < 0 || i >= F.ph.length) {
+          fail(t.id, `phSets.${key} names phase ${i}, and there are ${F.ph.length}`);
+        } else claimed.add(i);
+      }
+    }
+    for (let i = 0; i < F.ph.length; i++) {
+      if (!claimed.has(i)) fail(t.id, `phase ${i} ("${F.ph[i].t}") is in no phSet, so nothing draws it`);
+    }
+    /* And the design must actually name one of them. */
+    let res = null;
+    try { res = t.design(defaultSpec(t)); } catch { res = null; }
+    if (res && !res.infeasible && !F.phSets[res.mode]) {
+      fail(t.id, `design() reports mode "${res.mode}", which is not one of `
+        + `${Object.keys(F.phSets).join(", ")}`);
+    }
+  }
   for (const c of F.capFlow || []) {
     if (!["in", "out"].includes(c.src)) fail(t.id, `capFlow src "${c.src}" is neither "in" nor "out"`);
     if (!c.d) fail(t.id, "capFlow entry with no path");
