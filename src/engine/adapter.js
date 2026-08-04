@@ -28,13 +28,27 @@ export const engineKey = (topo, spec) => {
 
 /* The conducting current, from the devices themselves.
 
-   Only one path conducts at a time, so the magnitudes add to the current
-   actually flowing through the circuit at that instant — the primary while
-   the switch is on, the secondary once the rectifier takes over. This is
-   what the dashes ride, and taking it from the devices means it cannot
-   disagree with which device the figure is showing as conducting. */
+   The magnitudes add to the current actually flowing round the circuit at
+   that instant — the primary while the switch is on, the secondary once the
+   rectifier takes over. Taking it from the devices means it cannot disagree
+   with which device the figure shows as conducting.
+
+   Adding is only correct over paths that EXCLUDE one another. Every pilot has
+   one device per path, so matching probe names on /^i[QD]/ was right for
+   them; a bridge is not like that. Two of its diodes carry the same current
+   in series through the same half-cycle, and summing the pair reports twice
+   the current that exists.
+
+   So a circuit may declare its conducting paths: `flow: ["iD1", "iQ"]`, one
+   probe per path, where a path is a series chain. Then the sum runs over
+   genuinely alternative routes and cannot double count by construction. The
+   regex remains the default, so every circuit that has not declared one
+   behaves exactly as it did. */
 function flowTrace(run) {
-  const names = Object.keys(run.traces).filter((n) => /^i[QD]/.test(n));
+  const declared = run.circuit && run.circuit.flow;
+  const names = declared && declared.length
+    ? declared.filter((n) => run.traces[n])
+    : Object.keys(run.traces).filter((n) => /^i[QD]/.test(n));
   if (!names.length) return null;
   const us = run.u_grid;
   const n = us.length;

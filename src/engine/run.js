@@ -53,7 +53,22 @@ export function prepare(topo, spec, res) {
   const make = SIM[topo.id];
   if (!make || !res || res.infeasible || !res.sim) return null;
   const circuit = make(spec, res);
-  const period = 1 / (spec.fsw * 1e3);
+  /* How much of the converter's real cycle one solved period covers.
+
+     Almost always one: a buck repeats every switching period, so that is what
+     the limit cycle is a limit cycle OF. A leg-alternating bridge does not.
+     A push-pull fires one primary switch, then the other on the next
+     switching period, and the transformer only comes back to where it started
+     after both — so its state repeats at half the switching frequency and the
+     one-period map has no fixed point at all.
+
+     That failure is quiet in the worst way: converge would burn its whole
+     period budget, miss the residual bound, and the adapter would fall back
+     to the closed form without anything saying why. `periodMul: 2` makes the
+     solved period the transformer's period, which is also the period the FLOW
+     entry already draws — a push-pull authors four phases across the full
+     cycle, not two across half of it. */
+  const period = (circuit.periodMul || 1) / (spec.fsw * 1e3);
   const S = makeSolver(circuit.branches, { period, isolated: circuit.isolated });
   const D = res.wave && res.wave.D !== undefined ? res.wave.D : 0.5;
   const mod = modulatorFor(circuit.gates, D, period);
