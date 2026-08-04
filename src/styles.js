@@ -548,6 +548,15 @@ export const CSS = `
   font-family:var(--ui); font-size:var(--t-micro); font-weight:600;
   letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
 }
+/* The same slot on the twenty-four that are drawn from equations. Quiet
+   rather than green, because it is stating which model this is and not
+   reporting a fault — the reader is owed the fact, not an alarm about it. */
+.ps .nosimmark{
+  margin-left:8px; padding:1px 7px; border-radius:99px; cursor:help;
+  border:1px solid var(--line2); color:var(--faint); background:var(--surf2);
+  font-family:var(--ui); font-size:var(--t-micro); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
+}
 
 /* The glossary under each topology. Two columns of term-and-definition, the
    term set in the number face so it reads as a label rather than as more

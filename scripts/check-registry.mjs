@@ -19,6 +19,8 @@ import { FIELDS, SEV } from "../src/fields.js";
 import { SELECT, SELECT_ID } from "../src/content/select.js";
 import { EXAMPLES } from "../src/content/examples.js";
 import { CODES } from "../src/urlstate.js";
+import { SIM } from "../src/topologies/sim/pilot.js";
+import { NOSIM_REASON, NOSIM_WHY } from "../src/content/nosim.js";
 import { defaultSpec } from "./lib/spec.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -204,8 +206,33 @@ for (const [k, c] of Object.entries(CODES)) {
   if (FIELDS[c] && c !== k) fail(k, `URL code "${c}" is also the name of another field`);
 }
 
+/* ------------------------------------------------ simulated or explained */
+/* Exactly one of the two, for every topology. A converter with neither has a
+   figure whose provenance the page never states; one with both is claiming to
+   be solved and apologising for not being, which cannot both be true. The
+   counts print because they are the conversion backlog: every capability the
+   engine grows should move topologies from the right column to the left. */
+const byReason = new Map();
+for (const t of TOPOS) {
+  const sim = !!SIM[t.id], why = NOSIM_REASON[t.id];
+  if (sim && why) fail(t.id, "is simulated AND carries a closed-form reason");
+  if (!sim && !why) {
+    fail(t.id, "is neither simulated nor given a reason — see src/content/nosim.js");
+  }
+  if (why && !NOSIM_WHY[why]) fail(t.id, `closed-form reason "${why}" has no explanation`);
+  if (!sim && why) byReason.set(why, (byReason.get(why) || 0) + 1);
+}
+for (const key of Object.keys(NOSIM_WHY)) {
+  if (!byReason.has(key)) {
+    console.log(`  note: no topology is waiting on "${key}" any more — that capability is done`);
+  }
+}
+
 console.log(`check-registry: ${TOPOS.length} topologies, ${SCH_IDS.size} schematics, ` +
   `${Object.keys(FLOW).length} flow entries, ${Object.keys(FAMILY).length} family lines, ` +
   `${exCount} worked examples`);
+const simmed = TOPOS.filter((t) => SIM[t.id]).length;
+console.log(`check-registry: ${simmed} simulated, ${TOPOS.length - simmed} closed-form `
+  + `(${[...byReason].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(", ")})`);
 console.log(fails ? `check-registry: ${fails} problems` : "check-registry: all clear");
 process.exit(fails ? 1 : 0);

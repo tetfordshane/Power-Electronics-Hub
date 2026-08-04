@@ -10,6 +10,7 @@ import { polySegs, polyPoints, arrowsAt, coilSplice, coilsOnSegment,
 import { SCH } from "../schematic/sch.jsx";
 import { COILS, CAPS, CORES, startCapture, endCapture, drawScope, nk } from "../schematic/parts.jsx";
 import { FLOW, FAMILY } from "../topologies/index.js";
+import { NOSIM_REASON, NOSIM_WHY } from "../content/nosim.js";
 import { swPeriod } from "../fields.js";
 import { usePrefersReducedMotion } from "../hooks.js";
 import { WAVE_CYCLES, Wave } from "./Wave.jsx";
@@ -646,6 +647,16 @@ function FlowCard({ topo, res, spec, hot }) {
               + `${steady.sim.residual.toExponential(1)}. Conduction is worked out `
               + `from the circuit, not scripted.`
             }>simulated</span>
+          ) : NOSIM_WHY[NOSIM_REASON[topo.id]] ? (
+            /* The other twenty-four. An absent badge explains nothing — it
+               reads like a feature that broke, or one nobody noticed was
+               missing — so the same slot says which model drew this and what
+               it still stands behind. Not an apology: a closed-form figure is
+               what the whole app was before there was a solver, and for
+               several of these it remains the more useful of the two. */
+            <span className="nosimmark" title={NOSIM_WHY[NOSIM_REASON[topo.id]].n}>
+              {NOSIM_WHY[NOSIM_REASON[topo.id]].t}
+            </span>
           ) : null}
         </p>
       ) : null}
