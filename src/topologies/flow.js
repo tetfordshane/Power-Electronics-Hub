@@ -73,10 +73,14 @@ const FLOW = {
     emc: { loop: "M 90 55 H 250 V 235 H 90 Z", node: [250, 144] },
     capFlow: [{ d: "M 450 60 V 215", src: "out" }],
     ph: [
+    /* `rides` names the current each drawn path carries. A flyback conducts
+       on one side at a time, so this is the same answer the summed device
+       trace already gives — which is exactly why it is declared here: it is
+       the one topology where the two routes can be compared. */
     { on: [1,0], t: "Q1 on — store", f: (D) => [0, D], n: "Primary current ramps and energy accumulates in the gap. The secondary diode is reverse-biased, so no power crosses the barrier yet; the output is held up by C_out alone.",
-      d: ["M 40 55 H 250 V 235 H 40"], dim: ["M 450 60 H 600 V 215 H 450"] },
+      d: ["M 40 55 H 250 V 235 H 40"], rides: ["iQ"], dim: ["M 450 60 H 600 V 215 H 450"] },
     { on: [0,1], t: "Q1 off — release", f: (D) => [D, 1], n: "The winding voltages reverse, D1 conducts and the stored energy transfers to the output. The primary now sees V_in plus the reflected V_R — the quantity that sets the primary device rating.",
-      d: ["M 274 80 V 60 H 600 V 215 H 274 V 144"] },
+      d: ["M 274 80 V 60 H 600 V 215 H 274 V 144"], rides: ["iD"] },
   ]},
   pfcboost: { w: 780, h: 280, sw: [[360, 155, "Q1", 0], [425, 105, "D"]],
     /* One switching period taken at the crest of the line cycle, where the

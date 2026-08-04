@@ -75,16 +75,32 @@ function flowTrace(run) {
      at it. The spike is still in the probe traces, where it belongs and
      where the loss figures can see it — this is only about what the flow
      animation is scaled against. */
-  const order = out.map((v, k) => [v, k]).sort((a, b) => a[0] - b[0]);
-  let acc = 0, cap = out[0];
+  const cap = quantilePeak(us, out);
+  return out.map((v) => Math.min(v, cap));
+}
+
+/* The magnitude a trace spends essentially all of its time below.
+
+   A time-weighted quantile rather than a maximum, for the reason above: the
+   turn-on spike is real and is over in a picosecond, so it belongs in the loss
+   arithmetic and not in the number every brightness is divided by. Shared,
+   because anything that normalises a drawn quantity against a peak wants the
+   same answer — a per-path dash scaled against its own unclipped maximum goes
+   invisible on exactly the topologies where the spike is largest. */
+export function quantilePeak(us, vals) {
+  const n = vals.length;
+  if (!n) return 0;
+  const order = Array.from({ length: n }, (_, k) => k)
+    .sort((a, b) => Math.abs(vals[a]) - Math.abs(vals[b]));
+  let acc = 0, cap = Math.abs(vals[0]);
   const total = us[n - 1] - us[0] || 1;
-  for (const [v, k] of order) {
+  for (const k of order) {
     const w = (k > 0 ? us[k] - us[k - 1] : 0) + (k < n - 1 ? us[k + 1] - us[k] : 0);
     acc += w / 2;
-    cap = v;
+    cap = Math.abs(vals[k]);
     if (acc / total > 0.995) break;
   }
-  return out.map((v) => Math.min(v, cap));
+  return cap;
 }
 
 /* Thin a sampled trace down to the points that carry its shape.
@@ -230,6 +246,18 @@ export function simView(base, run) {
          by dv/dt and was sized by a current. Handing the views over is the
          whole of what makes that claim true. */
       views: run.views,
+      /* The peak a per-path mark should scale against, spike-clipped and
+         memoised — the same treatment the summed conduction trace gets. */
+      peak: (() => {
+        const seen = new Map();
+        return (name) => {
+          if (seen.has(name)) return seen.get(name);
+          const tr = run.traces[name];
+          const p = tr ? quantilePeak(run.u_grid, tr) : 0;
+          seen.set(name, p);
+          return p;
+        };
+      })(),
       slopeAt: (name, uu) => {
         const v = run.views && run.views[name];
         return v && v.slope ? v.slope(uu) : null;

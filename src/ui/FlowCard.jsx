@@ -510,7 +510,54 @@ function FlowCard({ topo, res, spec, hot }) {
      hold at a floor rather than vanishing, and everything is continuous in
      t, so nothing ever appears at a visible opacity. */
   const flowLive = 0.30 + 0.70 * mag;
-  const arrows = flows.map((fl) => arrowsAt(fl.segs, -flowOff, 120, rateMul));
+
+  /* What each drawn path is actually carrying.
+
+     One magnitude for the whole figure is right while one path conducts at a
+     time: the primary while the switch is on, the secondary once the
+     rectifier takes over, and the sum of device currents is the current going
+     round the circuit. A transformer that delivers through its turns ratio is
+     not like that. Both sides conduct at the same instant carrying different
+     currents, and a single number would move the primary's dashes at the
+     secondary's rate — a mark travelling at a speed nothing computed, which
+     is the one thing the lenses are not allowed to do.
+
+     So a phase's paths may name the probe each one rides. The dash offset
+     then comes from that probe's own charge integral and the brightness from
+     its own peak, which is exactly what makes the arrows slow, stop and
+     reverse with the current in THAT branch. A path that names nothing keeps
+     the summed flow, so every topology that has not declared one is
+     unchanged. */
+  const rideOf = (k, j) => (PH[k] && PH[k].rides && PH[k].rides[j]) || null;
+  const viewOf = (name) => (name && M.sim && M.sim.views ? M.sim.views[name] : null);
+  const offOf = (v) => {
+    /* A branch whose charge nets to nothing over a period — a bipolar
+       winding — has no meaningful travel to normalise against, so it keeps
+       the figure's own. */
+    if (!v || !Number.isFinite(v.qTot) || Math.abs(v.qTot) < 1e-12) return flowOff;
+    return -((tr ? ti : 0) + v.qAt(tPer) / v.qTot) * 240;
+  };
+  const magOf = (v, name) => {
+    if (!v) return mag;
+    /* Scaled against the spike-clipped peak, not the raw maximum. A switch
+       closing onto its own C_oss passes kiloamps for a picosecond, and
+       dividing by that would leave the conducting path invisible for the rest
+       of the period — the same reason the summed trace is clipped. */
+    const pk = Math.max(
+      (M.sim && M.sim.peak ? M.sim.peak(name) : 0),
+      Math.abs(v.iMin), 1e-9,
+    );
+    return Math.min(Math.abs(v.at(tPer)) / pk, 1);
+  };
+  flows.forEach((fl) => {
+    const name = rideOf(fl.k, fl.j);
+    const v = viewOf(name);
+    fl.off = offOf(v);
+    fl.mag = magOf(v, name);
+    fl.live = 0.30 + 0.70 * fl.mag;
+  });
+
+  const arrows = flows.map((fl) => arrowsAt(fl.segs, -fl.off, 120, rateMul));
 
   /* ---- the capacitor branches ----
 
@@ -792,20 +839,23 @@ function FlowCard({ topo, res, spec, hot }) {
                 <React.Fragment key={fl.key + "_p" + pi}>
                   {pc.inside ? (
                     <path d={pc.d} className="flowglow hotseg"
-                      style={{ opacity: ((0.10 + 0.16 * mag) * fl.o).toFixed(3),
-                        strokeWidth: 5 + 7 * mag }} />
+                      style={{ opacity: ((0.10 + 0.16 * fl.mag) * fl.o).toFixed(3),
+                        strokeWidth: 5 + 7 * fl.mag }} />
                   ) : null}
                   <path d={pc.d} className={pc.inside ? "flowp hotseg" : "flowp"}
                     style={{
-                      opacity: (flowLive * fl.o * (pc.inside ? 0.6 + 0.4 * emcLive.heat : 0.4)).toFixed(3),
-                      strokeDashoffset: flowOff + pc.s0,
-                      strokeWidth: 1.7 + 2.2 * mag,
+                      opacity: (fl.live * fl.o * (pc.inside ? 0.6 + 0.4 * emcLive.heat : 0.4)).toFixed(3),
+                      /* s0 is the piece's arc length along its parent, which is
+                         what keeps one dash train continuous across the cut. */
+                      strokeDashoffset: fl.off + pc.s0,
+                      strokeWidth: 1.7 + 2.2 * fl.mag,
                     }} />
                 </React.Fragment>
               )))}
               {arrows.map((set, j) => (
                 <g key={"ar" + flows[j].key}
-                  style={{ opacity: ((0.55 + 0.45 * mag) * flowLive * flows[j].o).toFixed(3) }}>
+                  style={{ opacity: ((0.55 + 0.45 * flows[j].mag) * flows[j].live
+                    * flows[j].o).toFixed(3) }}>
                   {set.map((m, i) => Chevron(m, i, false,
                     pointInLoop(m.x, m.y, emcGeo.loop, 10) ? "hot" : ""))}
                 </g>
@@ -841,15 +891,16 @@ function FlowCard({ topo, res, spec, hot }) {
               {dims.map((m) => <path key={m.key} d={m.d} className="flowdim"
                 style={{ opacity: (0.4 * m.o).toFixed(3) }} />)}
               {flows.map((fl) => <path key={"g" + fl.key} d={fl.d} className="flowglow"
-                style={{ opacity: ((0.07 + 0.09 * mag) * fl.o).toFixed(3),
-                  strokeWidth: 5 + 6 * mag }} />)}
+                style={{ opacity: ((0.07 + 0.09 * fl.mag) * fl.o).toFixed(3),
+                  strokeWidth: 5 + 6 * fl.mag }} />)}
               {flows.map((fl) => <path key={fl.key} d={fl.d} className="flowp"
-                style={{ opacity: (flowLive * fl.o).toFixed(3),
-                  strokeDashoffset: flowOff, strokeWidth: 1.7 + 2.2 * mag }} />)}
+                style={{ opacity: (fl.live * fl.o).toFixed(3),
+                  strokeDashoffset: fl.off, strokeWidth: 1.7 + 2.2 * fl.mag }} />)}
               {/* which way the charge is going — travelling with it */}
               {arrows.map((set, j) => (
                 <g key={"ar" + flows[j].key}
-                  style={{ opacity: ((0.55 + 0.45 * mag) * flowLive * flows[j].o).toFixed(3) }}>
+                  style={{ opacity: ((0.55 + 0.45 * flows[j].mag) * flows[j].live
+                    * flows[j].o).toFixed(3) }}>
                   {set.map((m, i) => Chevron(m, i))}
                 </g>
               ))}

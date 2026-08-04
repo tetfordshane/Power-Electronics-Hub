@@ -67,6 +67,18 @@ for (const t of TOPOS) {
     if (q.on && F.sw && q.on.length !== F.sw.length) {
       fail(t.id, `phase ${k}: ${q.on.length} conduction flags for ${F.sw.length} devices`);
     }
+    /* `rides` names the probe each drawn path carries, so the two lists have
+       to line up. One short and the last path silently falls back to the
+       figure's summed current — which is the very thing naming them was for,
+       and it would look like it was working. */
+    if (q.rides) {
+      if (!Array.isArray(q.rides) || q.rides.length !== (q.d || []).length) {
+        fail(t.id, `phase ${k}: ${(q.rides || []).length} ride names for `
+          + `${(q.d || []).length} drawn paths`);
+      } else if (q.rides.some((r) => r !== null && typeof r !== "string")) {
+        fail(t.id, `phase ${k}: a ride name is neither a probe name nor null`);
+      }
+    }
   });
   /* A topology that changes conduction pattern with its operating point
      carries every pattern in `ph` and selects one by name. Three ways that
