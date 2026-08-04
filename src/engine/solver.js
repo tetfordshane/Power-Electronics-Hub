@@ -21,7 +21,7 @@
       a loss figure; bisecting to find it keeps the current continuous
       through the commutation, which is the thing the animation is judged on. */
 import { compile, readAt } from "./mna.js";
-import { discretize, matvec } from "./linalg.js";
+import { discretize, matvec, matmul } from "./linalg.js";
 import { expand, validate, structure } from "./netlist.js";
 
 const KEY = (cond, ids) => ids.map((id) => (cond[id] ? "1" : "0")).join("");
@@ -205,9 +205,30 @@ export function makeSolver(branches, { maxConfigs = 8192, period = 1, isolated }
   /* Advance by h under fixed gates, splitting the step at the first diode
      event if one occurs inside it. Returns the new state and the conduction
      state in force at the end. */
-  function advance(x, u, cond, h) {
+  /* `want` asks for the step's own transition as well as its result: the Φ
+     and Γu that carry x from the start of this step to the end of it, across
+     however many sub-intervals an event split it into.
+
+     They are already computed — every sub-interval is taken with a Φ and a Γ
+     from the cache — so composing them costs one matrix product each and
+     hands the caller the exact derivative of the step. Measuring the same
+     thing by finite differences means running the whole period again, once
+     per state, and paying the settle and the event search every time. */
+  function advance(x, u, cond, h, want) {
     let t = 0, xs = x, cs = settle(cond, xs, u);
     let guard = 0;
+    let P = null, g = null;
+    const compose = (Phi, Gam) => {
+      if (!want) return;
+      const gu = matvec(Gam, u);
+      if (!P) { P = Phi.map((r) => Float64Array.from(r)); g = gu; }
+      else {
+        P = matmul(Phi, P);
+        const ng = matvec(Phi, g);
+        for (let i = 0; i < nx; i++) ng[i] += gu[i];
+        g = ng;
+      }
+    };
     while (t < h - 1e-18 && guard++ < 16) {
       const c = configFor(cs, xs);
       const rest = h - t;
@@ -237,16 +258,17 @@ export function makeSolver(branches, { maxConfigs = 8192, period = 1, isolated }
         }
       }
 
-      if (!hit) { xs = xn; t = h; break; }
+      if (!hit) { xs = xn; t = h; compose(Phi, Gam); break; }
       const s = stepFor(c, hitAt);
       const xm = matvec(s.Phi, xs);
       const gm = matvec(s.Gam, u);
       for (let i = 0; i < nx; i++) xm[i] += gm[i];
       xs = xm;
       t += hitAt;
+      compose(s.Phi, s.Gam);
       cs = settle({ ...cs, [hit.id]: !cs[hit.id] }, xs, u);
     }
-    return { x: xs, cond: cs };
+    return { x: xs, cond: cs, P, g };
   }
 
   return {

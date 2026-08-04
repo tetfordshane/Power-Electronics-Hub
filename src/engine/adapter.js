@@ -214,8 +214,18 @@ export function simView(base, run) {
 const CACHE = new Map();
 const CACHE_MAX = 8;
 
-const cacheKey = (topo, spec, res) => engineKey(topo, spec)
-  + "|" + (res && res.sim ? `${res.sim.L}:${res.sim.C}:${res.sim.n || ""}` : "");
+/* Every component the design published, not three of them.
+
+   It used to hash L, C and n. A Ćuk, a SEPIC and a Zeta are each distinguished
+   by a second winding and a coupling capacitor that were not in the key, so
+   two operating points agreeing on L, C and n would have collided and served
+   a cached run built from different magnetics — a figure quietly describing a
+   converter other than the one on screen. Nothing had hit it; it was waiting
+   for the next topology whose interesting component is not called L. */
+const cacheKey = (topo, spec, res) => engineKey(topo, spec) + "|"
+  + (res && res.sim
+    ? Object.keys(res.sim).sort().map((k) => `${k}=${res.sim[k]}`).join(":")
+    : "");
 
 export function engineFor(topo, spec, res) {
   const F = FLOW[topo && topo.id];

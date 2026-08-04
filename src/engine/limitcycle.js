@@ -17,7 +17,7 @@
    the capacitor branches, the fields and EMC lenses — reads it unchanged. */
 import { makeSolver } from "./solver.js";
 import { lookups } from "../cycle.js";
-import { lu, luSolve } from "./linalg.js";
+import { lu, luSolve, matmul, matvec } from "./linalg.js";
 
 const SAMPLES = 240;
 
@@ -49,14 +49,20 @@ function grid(edges, events) {
    actually there instead of aliasing it. */
 const GRADE = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 0.1, 0.3];
 
-/* Integrate one period from x, calling back at each sub-step. */
-export function runPeriod(S, x, u, mod, cond, nSteps, onStep) {
+/* Integrate one period from x, calling back at each sub-step.
+
+   With `want`, it also returns the period map's own derivative: P such that
+   the period takes x to P·x + g, for the conduction sequence this run walked.
+   That is exactly the Jacobian shooting needs, and it comes out of the step
+   matrices the solver already had rather than out of nx more period runs. */
+export function runPeriod(S, x, u, mod, cond, nSteps, onStep, want) {
   const edges = [...mod.edges, 1].sort((a, b) => a - b);
   let xs = x, cs = cond, t = 0, ei = 0;
   const h0 = 1 / nSteps;
   let guard = 0;
   let grade = -1;                     /* index into GRADE, -1 = full steps */
   const maxSteps = nSteps * 4 + 64 + edges.length * (GRADE.length + 2);
+  let P = null, g = null;
   while (t < 1 - 1e-12 && guard++ < maxSteps) {
     while (ei < edges.length && edges[ei] <= t + 1e-12) { ei++; grade = 0; }
     const nextEdge = ei < edges.length ? edges[ei] : 1;
@@ -66,12 +72,21 @@ export function runPeriod(S, x, u, mod, cond, nSteps, onStep) {
     h = Math.min(h, nextEdge - t, 1 - t);
     if (h <= 1e-15) { t = nextEdge; continue; }
     const gates = mod.at(t + h * 0.5);
-    const r = S.advance(xs, u, { ...cs, ...gates }, h);
+    const r = S.advance(xs, u, { ...cs, ...gates }, h, want);
     xs = r.x; cs = r.cond;
+    if (want && r.P) {
+      if (!P) { P = r.P; g = r.g; }
+      else {
+        P = matmul(r.P, P);
+        const ng = matvec(r.P, g);
+        for (let i = 0; i < ng.length; i++) ng[i] += r.g[i];
+        g = ng;
+      }
+    }
     t += h;
     if (onStep) onStep(t, xs, cs);
   }
-  return { x: xs, cond: cs };
+  return { x: xs, cond: cs, P, g };
 }
 
 /* Converge to the limit cycle, from whatever state we are handed.
@@ -115,8 +130,8 @@ export function converge(S, x0, u, mod, {
 
   let x = x0, cond = S.settle(mod.at(0), x, u);
   let periods = 0, residual = Infinity;
-  const step = (from) => {
-    const r = runPeriod(S, from, u, mod, cond, nSteps);
+  const step = (from, want) => {
+    const r = runPeriod(S, from, u, mod, cond, nSteps, null, want);
     periods++;
     return r;
   };
@@ -142,10 +157,20 @@ export function converge(S, x0, u, mod, {
      converge, it is convergence to the resolution the model has, and
      grinding out four thousand periods to discover it wastes a second and a
      half. Stop when it stops improving, and report the best state found. */
-  let best = x, bestRes = Infinity, stale = 0;
+  let best = x, bestRes = Infinity, stale = 0, lastJ = null;
   for (let outer = 0; outer < maxPeriods; outer++) {
     const base = x;
-    const mapped = step(base);
+    /* Ask for the derivative only when we do not already have a usable one.
+
+       Near the fixed point the conduction sequence stops changing, so the
+       period map is very nearly the same linear map from one iteration to the
+       next and the previous Jacobian still points the right way. Reusing it
+       is the classic Shamanskii economy, and it is safe for the same reason
+       Newton is safe here: a step that fails to improve the residual is
+       thrown away — and that is also the signal to measure a fresh one, since
+       a rejected step is precisely what a stale Jacobian produces. */
+    const mapped = step(base, shoot && nx > 0 && !lastJ);
+    if (mapped.P) lastJ = mapped.P;
     noteScale(mapped.x);
     residual = resid(mapped.x, base);
     if (residual < bestRes * 0.9) { bestRes = residual; best = mapped.x; stale = 0; }
@@ -153,28 +178,28 @@ export function converge(S, x0, u, mod, {
     if (residual < tol) { x = mapped.x; cond = mapped.cond; break; }
 
     let advanced = false;
-    if (shoot && nx > 0 && nx <= 12 && shots < 24) {
-      /* J[i][j] = ∂P_i/∂x_j, by one extra period run per state. */
-      const J = [];
-      let ok = true;
-      for (let j = 0; j < nx && ok; j++) {
-        const d = Math.max(Math.abs(scale[j]) * 1e-6, 1e-9);
-        const xp = Float64Array.from(base);
-        xp[j] += d;
-        const rp = step(xp);
-        const col = new Float64Array(nx);
-        for (let i = 0; i < nx; i++) {
-          col[i] = (rp.x[i] - mapped.x[i]) / d;
-          if (!Number.isFinite(col[i])) ok = false;
-        }
-        J.push(col);
-      }
-      if (ok) {
-        /* Solve (I − J)Δ = P(x) − x, with J held column-wise above. */
+    if (shoot && nx > 0 && shots < 24) {
+      /* J[i][j] = ∂P_i/∂x_j, composed from the step matrices the run just
+         used. Two things it is worth being precise about.
+
+         It is the derivative holding the switching instants FIXED — an event
+         time moves with x, and the term that accounts for that (the saltation
+         matrix) is not here. So this is first-order correct near the fixed
+         point and approximate where a commutation is about to move, which is
+         exactly the case Newton is already defended against below: a step
+         that does not improve the residual is discarded and plain iteration
+         carries on.
+
+         And it costs one period run rather than nx of them. That is what
+         removes the old nx ≤ 12 ceiling: the price of shooting no longer
+         grows with the number of states, so an interleaved buck with
+         forty-nine of them is as reachable as a boost with two. */
+      const J = lastJ;
+      if (J) {
         const M = [];
         for (let i = 0; i < nx; i++) {
           const row = new Float64Array(nx);
-          for (let j = 0; j < nx; j++) row[j] = (i === j ? 1 : 0) - J[j][i];
+          for (let j = 0; j < nx; j++) row[j] = (i === j ? 1 : 0) - J[i][j];
           M.push(row);
         }
         const rhs = new Float64Array(nx);
@@ -199,8 +224,10 @@ export function converge(S, x0, u, mod, {
         }
       }
     }
-    /* Newton declined or made things worse — walk. */
-    if (!advanced) { x = mapped.x; cond = mapped.cond; }
+    /* Newton declined or made things worse — walk, and throw the Jacobian
+       away so the next iteration measures a fresh one. A rejected step means
+       the map is no longer the map this J describes. */
+    if (!advanced) { x = mapped.x; cond = mapped.cond; lastJ = null; }
     if (periods > maxPeriods) break;
   }
   return { x, cond, periods, residual, shots };
