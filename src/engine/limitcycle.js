@@ -112,8 +112,23 @@ export function runPeriod(S, x, u, mod, cond, nSteps, onStep, want) {
    in the conduction pattern; that step is discarded and plain iteration
    carries on, which always converges even when it converges slowly. */
 export function converge(S, x0, u, mod, {
-  nSteps = 512, maxPeriods = 4000, tol = 1e-7, shoot = true,
+  nSteps = 512, maxPeriods = 4000, tol = 1e-7, shoot = true, deadline = 0,
 } = {}) {
+  /* A wall clock, because a period budget is not one.
+
+     How long a circuit takes per period depends on its size, and this engine
+     now accepts circuits whose size is set by an input — a multiphase buck
+     runs from one leg to twenty-four. Four thousand periods is a fraction of
+     a second on a buck and most of a minute on a converter with fifty states,
+     and the reader turning the knob experiences the second one as a hang.
+
+     Missing the deadline is not an error. It returns the best state found so
+     far, with its real residual, and the adapter decides: below 1e-4 the
+     figure is simulated, above it the page says so and draws the closed form.
+     That is the same judgement it already makes about a circuit that did not
+     converge for any other reason. */
+  const until = deadline > 0 ? Date.now() + deadline : 0;
+  const outOfTime = () => until > 0 && Date.now() > until;
   const nx = S.nx;
   const scale = new Float64Array(nx).fill(1);
   const noteScale = (x) => {
@@ -157,7 +172,7 @@ export function converge(S, x0, u, mod, {
      converge, it is convergence to the resolution the model has, and
      grinding out four thousand periods to discover it wastes a second and a
      half. Stop when it stops improving, and report the best state found. */
-  let best = x, bestRes = Infinity, stale = 0, lastJ = null;
+  let best = x, bestRes = Infinity, stale = 0, lastJ = null, lam = 0;
   for (let outer = 0; outer < maxPeriods; outer++) {
     const base = x;
     /* Ask for the derivative only when we do not already have a usable one.
@@ -176,6 +191,11 @@ export function converge(S, x0, u, mod, {
     if (residual < bestRes * 0.9) { bestRes = residual; best = mapped.x; stale = 0; }
     else if (++stale > 40) { x = best; residual = bestRes; break; }
     if (residual < tol) { x = mapped.x; cond = mapped.cond; break; }
+    if (outOfTime()) {
+      if (bestRes < residual) { x = best; residual = bestRes; }
+      else { x = mapped.x; cond = mapped.cond; }
+      break;
+    }
 
     let advanced = false;
     if (shoot && nx > 0 && shots < 24) {
@@ -196,14 +216,46 @@ export function converge(S, x0, u, mod, {
          forty-nine of them is as reachable as a boost with two. */
       const J = lastJ;
       if (J) {
+        const rhs = new Float64Array(nx);
+        for (let i = 0; i < nx; i++) rhs[i] = mapped.x[i] - base[i];
+        let scaleJ = 0;
+        for (let i = 0; i < nx; i++) {
+          let s = 0;
+          for (let j = 0; j < nx; j++) s += Math.abs((i === j ? 1 : 0) - J[i][j]);
+          scaleJ = Math.max(scaleJ, s);
+        }
+
+        /* Solve (I − J)Δ = P(x) − x, damped by λ on the diagonal.
+
+           Some converters have a mode with almost nothing restoring it, and a
+           multiphase buck is the clearest: the SUM of its phase currents is
+           held by the output, but the DIFFERENCE between them is opposed only
+           by winding resistance. That is not a defect in the model, it is why
+           real interleaved converters need active current sharing — and it
+           makes (I − J) near-singular along that direction, so the undamped
+           step is enormous there and lands nowhere useful.
+
+           λ trades the exact step for a shorter one that is still right in
+           every well-conditioned direction. Zero first, because where the map
+           is affine and well conditioned — which is most of the catalogue —
+           it jumps straight to the fixed point and nothing here costs
+           anything. */
+        /* λ is carried between iterations rather than searched within one.
+           A ladder tried inside a single iteration costs a period run per
+           rung and, on a circuit where every rung is refused, burns the
+           period budget several times faster than plain iteration would have
+           — which is how a first attempt at this stopped a SEPIC converging
+           at light load. Damped Newton pays for at most one extra run per
+           iteration, exactly as the undamped version did: raise λ when a step
+           is refused, lower it when one lands. */
         const M = [];
         for (let i = 0; i < nx; i++) {
           const row = new Float64Array(nx);
-          for (let j = 0; j < nx; j++) row[j] = (i === j ? 1 : 0) - J[i][j];
+          for (let j = 0; j < nx; j++) {
+            row[j] = (i === j ? 1 : 0) - J[i][j] + (i === j ? lam * scaleJ : 0);
+          }
           M.push(row);
         }
-        const rhs = new Float64Array(nx);
-        for (let i = 0; i < nx; i++) rhs[i] = mapped.x[i] - base[i];
         const F = lu(M);
         if (F) {
           const dx = luSolve(F, rhs);
@@ -218,7 +270,10 @@ export function converge(S, x0, u, mod, {
             const rr = resid(after.x, cand);
             if (rr < residual) {
               x = cand; cond = after.cond; residual = rr; advanced = true; shots++;
+              lam = lam > 1e-9 ? lam / 8 : 0;
               if (residual < tol) break;
+            } else {
+              lam = lam > 0 ? Math.min(lam * 8, 1e-1) : 1e-7;
             }
           }
         }

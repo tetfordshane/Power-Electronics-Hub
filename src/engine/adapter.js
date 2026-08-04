@@ -147,7 +147,19 @@ export function simView(base, run) {
      the design's own rectifier currents, because the capacitor there is not
      fed by the plotted winding at all. */
   let cap = base.cap;
-  if (cap && cap.kind !== "boost" && run.plot === "iL") {
+  /* A circuit may say its output capacitor is not fed by the plotted winding.
+
+     An interleaved converter is the clear case: the figure plots one phase
+     and the capacitor is fed by all of them, so rebuilding the pane from that
+     one polyline describes a single-phase converter with none of the ripple
+     cancellation that is the entire point of the topology — and it shows up
+     immediately as a capacitor whose charge does not balance, which is what
+     check-ripple caught. The closed-form pane already models this correctly
+     from the declared phase count, so the honest thing is to leave it alone.
+     A boost is the same story for a different reason and has always been
+     excluded here; this makes the exclusion something a circuit can state. */
+  const fedByPlot = !(run.circuit && run.circuit.capFromPlot === false);
+  if (cap && cap.kind !== "boost" && run.plot === "iL" && fedByPlot) {
     /* The built capacitor carries the same field names its own spec used —
        C, Io, f_sw, ESR, phases, sub-intervals — and deliberately does not
        carry iavg/dI, which is what makes buildCap read the polyline it is

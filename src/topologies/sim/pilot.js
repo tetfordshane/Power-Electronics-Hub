@@ -416,4 +416,86 @@ export const zeta = (spec, res) => {
   };
 };
 
-export const SIM = { buck, syncbuck, boost, buckboost, flyback, cuk, sepic, zeta };
+/* ---------------------------------------------------- multiphase buck ---- */
+/* N synchronous buck cells across one output capacitor, each started a
+   further 1/N of a period along.
+
+   The interleaving is the entire converter. Three cells a third of a period
+   apart draw from the input in turn, so the ripple they hand the capacitors
+   partly cancels — at a duty of exactly m/N it cancels completely, which is
+   the null the design warns about. None of that is authored here: the cells
+   are identical and the offsets are the only thing that distinguishes them,
+   so whatever cancellation appears is what the circuit does.
+
+   This is also the first netlist whose size is set by an input. At the field's
+   maximum of 24 phases the state vector is 49 long, which the old
+   finite-difference Jacobian would have refused to shoot at. */
+export const multiphase = (spec, res) => {
+  const c = common(spec);
+  const N = Math.max(1, Math.round(res.sim.nph || 1));
+  const branches = [
+    { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+    { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+    { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+  ];
+  const parts = [], probes = {
+    vout: { kind: "node", id: "out" },
+    iin: { kind: "branch", id: "Vin" },
+    iC: { kind: "branch", id: "C1" },
+  };
+  /* The design sizes L for ONE phase's ripple, so every cell carries the same
+     inductance and the same share of the load. */
+  const ipk = peakOf(res);
+  for (let k = 1; k <= N; k++) {
+    const sw = `sw${k}`;
+    branches.push(
+      { id: `Q${k}H`, type: "SW", n: ["in", sw], ron: c.ron, roff: ROFF },
+      { id: `Q${k}L`, type: "SW", n: [sw, "0"], ron: c.ron, roff: ROFF },
+      { id: `Coss${k}`, type: "C", n: [sw, "0"], value: Math.max(c.coss, 1e-12) },
+      { id: `L${k}`, type: "L", n: [sw, "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, ipk) },
+    );
+    parts.push({ kind: "complementary", hi: `Q${k}H`, lo: `Q${k}L`, td: c.td,
+      phase: (k - 1) / N });
+    /* Phase 1 is the one the figure plots; the rest are named so the
+       cancellation can be measured rather than asserted. */
+    probes[k === 1 ? "iL" : `iL${k}`] = { kind: "branch", id: `L${k}` };
+  }
+  probes.vsw = { kind: "node", id: "sw1" };
+  probes.iQ = { kind: "branch", id: "Q1H" };
+
+  /* Seed each phase where it actually is, not where the average is.
+
+     Interleaved phases are at different points of their own ramp at t = 0,
+     so seeding them all at the mean current is not a neutral guess — it is a
+     deliberate excitation of the one mode this converter cannot damp. The sum
+     of the phase currents is held by the output, but the DIFFERENCE between
+     them is opposed by nothing except winding resistance, which is why real
+     interleaved converters need active current sharing and why the solver
+     was spending five hundred periods watching an imbalance decay that need
+     never have existed.
+
+     Placed on its own ramp instead, the whole thing converges in a dozen. */
+  const D = Math.min(Math.max((res.wave && res.wave.D) || 0.5, 1e-3), 0.999);
+  const iavg = (res.wave && res.wave.iavg) || spec.iout / N;
+  const dI = (res.wave && res.wave.dI) || 0;
+  const rampAt = (p) => (p < D
+    ? iavg - dI / 2 + (dI / D) * p
+    : iavg + dI / 2 - (dI / (1 - D)) * (p - D));
+  const seed = { C1: spec.vout };
+  for (let k = 1; k <= N; k++) {
+    /* shift(m, ph) makes a part see its own time as u − ph, so at u = 0
+       phase k sits at 1 − (k−1)/N of its own cycle. */
+    seed[`L${k}`] = rampAt((((1 - (k - 1) / N) % 1) + 1) % 1);
+  }
+  return {
+    branches, gates: { kind: "combine", parts }, seed, probes, plot: "iL",
+    /* The figure plots phase 1; the capacitor is fed by all N. */
+    capFromPlot: false,
+  };
+};
+
+export const SIM = {
+  buck, syncbuck, boost, buckboost, flyback, cuk, sepic, zeta,
+  multiphase,
+};

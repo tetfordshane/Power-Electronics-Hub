@@ -257,6 +257,11 @@ const TA = [
          ever wrong, the two disagree visibly instead of agreeing quietly. */
       wave: { rect: "sync", sat: s.lsag / 100, D: Dn, dI: dIn, iavg: Iph, vlabel: "v_SW", vhi: "V_in",
         cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs, n: N } },
+      /* Per-phase inductance and the phase count: the circuit builds N cells
+         from them. The count is here rather than read from the spec so the
+         simulation and the printed numbers cannot describe different
+         converters — the design rounds it, and this is what it rounded to. */
+      sim: { L, C: Co, nph: N },
       warn: warns(
         /* Dn ≥ 1 cannot reach here — infeasible() returned above. */
         /* This one invalidates a number printed above it, which is more than

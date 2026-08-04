@@ -36,7 +36,19 @@ export function shotOf(run) {
     probes: {},
   };
   for (const [name, v] of Object.entries(run.views)) {
-    o.probes[name] = { mean: sig(v.qTot), min: sig(v.iMin), max: sig(v.iMax) };
+    /* A mean that is a millionth of the probe's own swing is zero.
+
+       A capacitor carries no net charge over a period — that is not an
+       approximation, it is what "periodic" means — so `iC.mean` is a
+       measurement of how converged the run is and not of the circuit. Pinned
+       at four significant figures it recorded the dust: changing how Newton
+       damps its step moved it from −8.574e-8 to −8.529e-8 while every other
+       number, including the whole state vector, stayed identical. Four
+       significant figures of a quantity whose true value is zero is four
+       significant figures of nothing. */
+    const span = Math.abs(v.iMax - v.iMin);
+    const mean = Math.abs(v.qTot) < 1e-6 * span ? 0 : sig(v.qTot);
+    o.probes[name] = { mean, min: sig(v.iMin), max: sig(v.iMax) };
   }
   return o;
 }
@@ -52,7 +64,15 @@ for (const id of Object.keys(SIM)) {
     try { res = topo.design(spec); } catch { continue; }
     if (!res || res.infeasible || !res.sim || !res.wave) continue;
     let run;
-    try { run = runSteady(topo, spec, res); } catch { continue; }
+    /* No deadline here, and none in the test that replays this.
+
+       The app gives a knob turn about a second and takes the best state
+       reached inside it, which is the right trade for a reader and the wrong
+       one for a regression file: how many periods fit in a second depends on
+       the machine, so the recorded state would differ between two runs that
+       are both correct. Converged to tolerance, the fixed point is a property
+       of the circuit and nothing else. Timing is check-sim's business. */
+    try { run = runSteady(topo, spec, res, { deadline: 0 }); } catch { continue; }
     if (!(run.residual < 1e-4)) continue;
     out[id][name] = shotOf(run);
     n++;

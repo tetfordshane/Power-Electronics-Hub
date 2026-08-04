@@ -6,17 +6,27 @@
    loop — is machinery; what comes back is one period, sampled, in the same
    shape the closed-form model has always produced. */
 import { makeSolver, converge, sample, traceView } from "./limitcycle.js";
-import { pwm1, pwmComplementary, passive, combine } from "./modulator.js";
+import { pwm1, pwmComplementary, passive, combine, shift } from "./modulator.js";
 import { SIM } from "../topologies/sim/pilot.js";
 import { settle, isPerturbation, periodAt, displaySchedule } from "./transient.js";
 
-/* Build the gate schedule a circuit asked for, in period-normalised time. */
+/* Build the gate schedule a circuit asked for, in period-normalised time.
+
+   `d` on a part overrides the duty the design published. Most converters run
+   every commanded switch from one duty and inherit it; a four-switch
+   buck-boost does not — its buck leg and its boost leg carry different ones,
+   and passing the same D to both describes a converter that does not exist.
+
+   `phase` starts a part later in the period, which is what interleaving is. */
 function modulatorFor(g, D, period) {
   if (!g || g.kind === "passive") return passive;
-  if (g.kind === "pwm1") return pwm1(g.sw, D);
-  if (g.kind === "complementary") return pwmComplementary(g.hi, g.lo, D, (g.td || 0) / period);
-  if (g.kind === "combine") return combine(...g.parts.map((p) => modulatorFor(p, D, period)));
-  throw new Error("unknown gate schedule " + g.kind);
+  const d = g.d !== undefined ? g.d : D;
+  let m;
+  if (g.kind === "pwm1") m = pwm1(g.sw, d);
+  else if (g.kind === "complementary") m = pwmComplementary(g.hi, g.lo, d, (g.td || 0) / period);
+  else if (g.kind === "combine") m = combine(...g.parts.map((p) => modulatorFor(p, d, period)));
+  else throw new Error("unknown gate schedule " + g.kind);
+  return g.phase ? shift(m, g.phase) : m;
 }
 
 export function hasSim(topo) {
@@ -71,6 +81,10 @@ export function runSteady(topo, spec, res, opts = {}) {
     nSteps: opts.nSteps || 512,
     maxPeriods: opts.maxPeriods || 4000,
     tol: opts.tol || 1e-7,
+    /* What a knob turn can afford. A circuit too large to solve inside it
+       reports the best it reached and the page draws the closed form,
+       which is a slower answer refused rather than a wrong one given. */
+    deadline: opts.deadline !== undefined ? opts.deadline : 900,
   });
 
   const sam = sample(S, conv.x, u, mod, { nSteps: opts.nSteps || 512, probes: circuit.probes });

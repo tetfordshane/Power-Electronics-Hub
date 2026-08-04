@@ -11,6 +11,9 @@ import { SCH } from "../schematic/sch.jsx";
 import { COILS, CAPS, CORES, startCapture, endCapture, drawScope, nk } from "../schematic/parts.jsx";
 import { FLOW, FAMILY } from "../topologies/index.js";
 import { NOSIM_REASON, NOSIM_WHY } from "../content/nosim.js";
+import { SIM } from "../topologies/sim/pilot.js";
+
+const HAS_CIRCUIT = new Set(Object.keys(SIM));
 import { swPeriod } from "../fields.js";
 import { usePrefersReducedMotion } from "../hooks.js";
 import { WAVE_CYCLES, Wave } from "./Wave.jsx";
@@ -691,6 +694,16 @@ function FlowCard({ topo, res, spec, hot }) {
               + `${steady.sim.residual.toExponential(1)}. Conduction is worked out `
               + `from the circuit, not scripted.`
             }>simulated</span>
+          ) : engine && engine.kind === "closed" && HAS_CIRCUIT.has(topo.id) ? (
+            /* It has a netlist and this operating point defeated it — too
+               large to solve inside a knob turn, or no clean periodic
+               solution at all. The closed form answers instead, and saying
+               which is the same courtesy the pages without a circuit get. */
+            <span className="nosimmark" title={
+              "This converter has a circuit, but at these numbers it could not be solved inside "
+              + "the time a knob turn can afford, so the figure is drawn from the design "
+              + "equations. Fewer phases, or a lighter corner, and it solves."
+            }>closed form · too large here</span>
           ) : NOSIM_WHY[NOSIM_REASON[topo.id]] ? (
             /* The other twenty-four. An absent badge explains nothing — it
                reads like a feature that broke, or one nobody noticed was

@@ -32,8 +32,10 @@ export const NOSIM_REASON = {
   forward2: "windings", pushpull: "windings", halfbridge: "windings",
   psfb: "windings", ctrect: "windings", syncrect: "windings", doubler: "windings",
 
-  /* Legs that switch at an offset from one another rather than together. */
-  multiphase: "phase", dab: "phase",
+  /* Legs that switch at an offset from one another rather than together.
+     Multiphase left this list when the modulator learned to shift a schedule;
+     the dual active bridge still waits on an inter-bridge phase shift. */
+  dab: "phase",
 
   /* The switching frequency is an output of the design, not an input to it. */
   llc: "period", classe: "period", classepp: "period", classde: "period",

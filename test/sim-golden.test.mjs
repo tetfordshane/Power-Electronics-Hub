@@ -45,7 +45,9 @@ for (const id of Object.keys(golden)) {
       const spec = cases.get(name);
       assert.ok(spec, `${id}: the operating point "${name}" no longer exists`);
       const res = topo.design(spec);
-      const run = runSteady(topo, spec, res);
+      /* Deadline off, matching gen-sim-golden: a wall clock would make the
+         recorded state depend on how fast the machine ran. */
+      const run = runSteady(topo, spec, res, { deadline: 0 });
       same(shotOf(run), want, `${id} [${name}]`);
     }
   });

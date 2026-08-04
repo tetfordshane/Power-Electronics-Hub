@@ -46,10 +46,31 @@ export function pwmComplementary(hi, lo, D, td) {
   };
 }
 
-/* Several schedules at once — a bridge, or a converter with a synchronous
-   rectifier on the far side of a transformer. */
+/* The same schedule, started later in the period.
+
+   Interleaving is the reason: three buck cells a third of a period apart draw
+   from the input in turn, so the input capacitor sees a ripple at three times
+   the frequency and a fraction of the amplitude. That cancellation is the
+   whole point of a multiphase converter and it cannot be expressed at all by
+   a modulator whose schedules must all begin at u = 0.
+
+   Two details that the solver depends on. Every edge wraps back into [0,1),
+   because `runPeriod` walks them in ascending order and would simply run off
+   the end of a list containing 1.33. And 0 is always an edge: a schedule
+   shifted past the origin still changes state there — the phase that was on
+   at the end of the period is still on at the start of the next one — and a
+   step that does not land on the wrap point integrates across a commutation. */
+export function shift(m, ph) {
+  const p = ((ph % 1) + 1) % 1;
+  const edges = [...new Set([0, ...m.edges.map((e) => (((e + p) % 1) + 1) % 1)])]
+    .sort((a, b) => a - b);
+  return { edges, at: (u) => m.at((((u - p) % 1) + 1) % 1) };
+}
+
+/* Several schedules at once — a bridge, a converter with a synchronous
+   rectifier on the far side of a transformer, or interleaved legs. */
 export function combine(...mods) {
-  const edges = [...new Set(mods.flatMap((m) => m.edges))].sort((a, b) => a - b);
+  const edges = [...new Set([0, ...mods.flatMap((m) => m.edges)])].sort((a, b) => a - b);
   return {
     edges,
     at: (u) => Object.assign({}, ...mods.map((m) => m.at(u))),
