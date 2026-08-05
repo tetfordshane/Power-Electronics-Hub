@@ -11330,9 +11330,15 @@
      "Rectifiers",
      27,
      "V_F·I_out"
+    ],
+    [
+     "Inductor windings",
+     7.2,
+     "2·(I_out/2)²·DCR — both carry half the load all the time"
     ]
    ],
    "warn": [],
+   "pout": 294,
    "groups": [
     {
      "t": "Operating point",
@@ -11391,6 +11397,11 @@
        "Net output ripple",
        "5.54 A",
        "after cancellation"
+      ],
+      [
+       "Winding loss (both)",
+       "7.20 W",
+       "at 4 mΩ each — and it is what makes the two chokes share"
       ]
      ]
     },
@@ -11464,9 +11475,15 @@
      "Rectifiers",
      2.7,
      "V_F·I_out"
+    ],
+    [
+     "Inductor windings",
+     0.072,
+     "2·(I_out/2)²·DCR — both carry half the load all the time"
     ]
    ],
    "warn": [],
+   "pout": 29.4,
    "groups": [
     {
      "t": "Operating point",
@@ -11525,6 +11542,11 @@
        "Net output ripple",
        "554 mA",
        "after cancellation"
+      ],
+      [
+       "Winding loss (both)",
+       "72.0 mW",
+       "at 4 mΩ each — and it is what makes the two chokes share"
       ]
      ]
     },
@@ -11598,9 +11620,15 @@
      "Rectifiers",
      27,
      "V_F·I_out"
+    ],
+    [
+     "Inductor windings",
+     7.2,
+     "2·(I_out/2)²·DCR — both carry half the load all the time"
     ]
    ],
    "warn": [],
+   "pout": 294,
    "groups": [
     {
      "t": "Operating point",
@@ -11659,6 +11687,11 @@
        "Net output ripple",
        "5.54 A",
        "after cancellation"
+      ],
+      [
+       "Winding loss (both)",
+       "7.20 W",
+       "at 4 mΩ each — and it is what makes the two chokes share"
       ]
      ]
     },

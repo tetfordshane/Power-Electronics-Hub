@@ -376,7 +376,15 @@ export function simFacts(topo, spec, res) {
      measurement, and what would close it, is not. */
   const vv = M.sim && M.sim.views && M.sim.views.vout;
   const vsim = vv && Number.isFinite(vv.qTot) ? Math.abs(vv.qTot) : NaN;
-  const vwant = Number.isFinite(spec.vout) ? Math.abs(spec.vout) : NaN;
+  /* Usually a specification. On the rectifier pages the rail is a RESULT —
+     the reader typed a winding voltage and a duty — and those designs publish
+     `pout` for the efficiency map to divide by, so the target is pout/I_out.
+     Without this the pages whose output is computed were the only ones that
+     could not report how far the circuit landed from it. The same rule
+     check-sim compares against, so one definition governs both. */
+  const vwant = Number.isFinite(spec.vout) ? Math.abs(spec.vout)
+    : (Number.isFinite(res.pout) && res.pout > 0 && spec.iout
+      ? Math.abs(res.pout / spec.iout) : NaN);
   if (Number.isFinite(vsim) && vwant > 0) {
     out.vsim = vsim;
     out.vwant = vwant;

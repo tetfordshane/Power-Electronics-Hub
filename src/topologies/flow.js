@@ -125,7 +125,7 @@ const FLOW = {
     capFlow: [{ d: "M 470 100 V 220", src: "out" }],
     ph: [
     { on: [1,0], t: "Upper half conducts", f: (D) => [0, D], n: "The top half-winding drives D1 while the lower diode blocks. Current returns through the centre tap, so only one forward drop sits in the output path.",
-      d: ["M 214 60 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
+      d: ["M 214 60 H 340 V 100 H 560 V 220 H 240 V 100 H 214"], rides: ["iD1"] },
     /* The freewheel intervals. These used to be left uncovered, and the phase
        lookup filled the gap by holding whichever phase had started last — so
        one diode stayed lit through an interval in which both conduct. It was
@@ -135,11 +135,13 @@ const FLOW = {
        the two rectifiers, which is exactly why each one averages I_out/2
        regardless of duty. */
     { on: [1,1], t: "Freewheel", f: (D) => [D, 0.5], n: "The secondary is undriven and the choke sustains its own current, which splits between both rectifiers. This is the interval that makes each diode average I_out/2 whatever the duty, and it is when the output ripple falls.",
-      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], dim: ["M 214 60 H 340", "M 214 140 H 340"] },
+      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], rides: ["iL"],
+      dim: ["M 214 60 H 340", "M 214 140 H 340"] },
     { on: [0,1], t: "Lower half conducts", f: (D) => [0.5, 0.5 + D], n: "The transformer reverses and the bottom half-winding takes over through D2. Each half-winding works only half the time — which is why this secondary needs roughly twice the copper of a bridge.",
-      d: ["M 214 140 H 340 V 100 H 560 V 220 H 240 V 100 H 214"] },
+      d: ["M 214 140 H 340 V 100 H 560 V 220 H 240 V 100 H 214"], rides: ["iD2"] },
     { on: [1,1], t: "Freewheel", f: (D) => [0.5 + D, 1], n: "The second freewheel interval, identical to the first. Two power pulses and two freewheels per switching period is why the output ripple sits at 2·f_sw and the filter is smaller than the switch timing alone suggests.",
-      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], dim: ["M 214 60 H 340", "M 214 140 H 340"] },
+      d: ["M 340 100 H 560 V 220 H 240 V 100 H 340"], rides: ["iL"],
+      dim: ["M 214 60 H 340", "M 214 140 H 340"] },
   ]},
   doubler: { w: 700, h: 300, sw: [[250, 170, "D1"], [290, 230, "D2"]],
     flux: "static",
@@ -148,9 +150,14 @@ const FLOW = {
     capFlow: [{ d: "M 530 140 V 260", src: "out" }],
     ph: [
     { on: [0,1], t: "Winding positive", f: (D) => [0, D], n: "D2 clamps the lower terminal to the return, so L1 sees the winding voltage and charges while L2 freewheels. Both inductors feed the output continuously.",
-      d: ["M 214 80 H 470 V 140 H 595 V 260 H 290 V 200 H 214 V 160", "M 290 200 H 470 V 140"] },
+      /* One choke is charging and the other is freewheeling, at different
+         currents on different slopes — so each path rides its own winding
+         rather than a figure-wide average of the two. */
+      d: ["M 214 80 H 470 V 140 H 595 V 260 H 290 V 200 H 214 V 160", "M 290 200 H 470 V 140"],
+      rides: ["iL", "iL2"] },
     { on: [1,0], t: "Winding negative", f: (D) => [0.5, 0.5 + D], n: "The roles swap: D1 clamps and L2 charges. Each inductor carries only half the load current, and their ripples partly cancel at the output node.",
-      d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214", "M 250 80 H 470 V 140"] },
+      d: ["M 214 160 V 200 H 470 V 140 H 595 V 260 H 250 V 80 H 214", "M 250 80 H 470 V 140"],
+      rides: ["iL2", "iL"] },
   ]},
   classe: { w: 660, h: 250, iShape: (u) => Math.abs(1 + CE_IM * Math.sin(2 * Math.PI * u + CE_PH)) / 2.862,
     ilabel: "i_sw",

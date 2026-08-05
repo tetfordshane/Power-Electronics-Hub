@@ -46,6 +46,11 @@ const PILOTS = {
      where the duty is shortest, and at nominal the drawn ripple is nearer two
      thirds of the printed figure. */
   pushpull: "corner", halfbridge: "corner", psfb: "corner",
+  /* The two rectifier pages size their choke at the duty they are drawn at,
+     so the printed ΔI is the trace's own. A current doubler's is per winding:
+     each choke carries half the load and ripples by r×that, and the pane
+     plots one of them. */
+  ctrect: "own", doubler: "own",
 };
 const PILOT_IDS = Object.keys(PILOTS);
 
@@ -114,8 +119,15 @@ for (const id of PILOT_IDS) {
 
     /* The output it actually regulates to, against the one it was asked for.
        An inverting converter is checked against its own sign — the spec asks
-       for a magnitude and the rail it builds is negative. */
-    const target = INVERTING.has(id) ? -spec.vout : spec.vout;
+       for a magnitude and the rail it builds is negative.
+
+       On the rectifier pages the rail is not asked for at all: the reader
+       typed a winding voltage and a duty, and the output is what those make.
+       Those designs publish `pout` so the efficiency map has a denominator,
+       and it is the same denominator here — the same rule check-sim and the
+       results panel use, so one definition of "the target" governs all three. */
+    const asked = Number.isFinite(spec.vout) ? spec.vout : res.pout / spec.iout;
+    const target = INVERTING.has(id) ? -asked : asked;
     assert.ok(pctErr(r.views.vout.qTot, target) < 0.02,
       `${id} settled at ${r.views.vout.qTot.toFixed(3)} V, asked for ${target} V`);
   });

@@ -188,6 +188,9 @@ const TD = [
     const Pd = s.vf * Io;
     const Pesr = dI * dI / 12 * s.esr * 1e-3;
     return {
+      /* The components the circuit is built from, in SI. There is no primary
+         on this page, so the netlist synthesises one at V_sec — see pilot.js. */
+      sim: { L, C: Co },
       hi: [["output voltage", eng(Vo, "V")], ["filter choke", eng(L, "H")], ["rectifier loss", eng(Pd, "W")]],
       /* Two pulses per period and a diode drop, so V_out is 2·D·(V_sec − V_F)
          and not the D·V_sec the generic estimate assumes from a duty and a
@@ -310,7 +313,7 @@ const TD = [
   pros: ["Single secondary winding — best transformer utilisation", "Two smaller inductors instead of one large one", "Output ripple partly cancels and sits at 2·f_sw"],
   cons: ["Two inductors to wind and place", "Current sharing depends on matched inductors", "Marginal benefit below about 10 A"],
   use: ["High-current low-voltage secondaries", "Phase-shifted full-bridge outputs", "Server VRM front ends"],
-  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "dvout", "lsag"],
+  fields: ["vsec", "dnom", "iout", "fsw", "r", "vf", "dcr", "dvout", "lsag"],
   defs: { vsec: 14, dnom: 0.35, iout: 60, fsw: 200, r: 0.4, vf: 0.45, dvout: 30 },
   design(s) {
     const fs = s.fsw * 1e3, D = s.dnom, Io = s.iout;
@@ -327,9 +330,26 @@ const TD = [
     const Co = dIo / (8 * 2 * fs * s.dvout * 1e-3);
     const Ipk = IL + dI / 2;
     const Pd = s.vf * Io;
+    /* Two windings each carrying half the load, all of the time — this is a
+       60 A output, so it is not a footnote. It is also what stops the two
+       chokes from sharing badly: the current in one against the other is
+       opposed by nothing else at all, which is precisely the caution in the
+       cons list, and with no resistance at all the split is not merely
+       delicate but undetermined. */
+    const Pcu = 2 * IL * IL * s.dcr * 1e-3;
     return {
+      /* The components the circuit is built from, in SI. There is no primary
+         on this page, so the netlist synthesises one at V_sec — see pilot.js. */
+      sim: { L, C: Co },
+      /* V_out here is D·V_sec, a RESULT — the reader typed a winding voltage
+         and a duty. The efficiency map divides by output power, and left to
+         guess from the input fields it had no output voltage to guess with, so
+         the whole surface was computed against the wrong denominator. The
+         centre-tapped rectifier next door publishes this for the same reason. */
+      pout: Vo * Io,
       hi: [["output voltage", eng(Vo, "V")], ["each inductor", eng(L, "H")], ["current per inductor", eng(IL, "A")]],
-      loss: [["Rectifiers", Pd, "V_F·I_out", ["D1", "D2"]]],
+      loss: [["Rectifiers", Pd, "V_F·I_out", ["D1", "D2"]],
+        ["Inductor windings", Pcu, "2·(I_out/2)²·DCR — both carry half the load all the time"]],
       /* One inductor is plotted; the capacitor sees both, half a period apart.
          Handing the model the phase count rather than the cancelled ripple
          means the pane derives K from the two waveforms — so the drawn ripple
@@ -355,6 +375,7 @@ const TD = [
           R("Peak current each", eng(Ipk, "A")),
           R("Cancellation factor K(D)", f2(K), "|1−2D|/(1−D); 1.0 = no benefit"),
           R("Net output ripple", eng(dIo, "A"), "after cancellation"),
+          R("Winding loss (both)", eng(Pcu, "W"), "at " + s.dcr + " mΩ each — and it is what makes the two chokes share"),
         ]),
         G("Rectifiers and cap", [
           R("PIV", eng(s.vsec, "V"), "half the centre-tapped requirement"),

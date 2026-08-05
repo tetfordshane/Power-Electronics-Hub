@@ -49,6 +49,31 @@ const idealise = (topo, spec) => {
 /* The mean of a probe view over the period. `qTot` is exactly that. */
 const meanOf = (v) => (v && Number.isFinite(v.qTot) ? v.qTot : NaN);
 
+/* The output rail this design is aiming at.
+
+   Usually it is a specification and the reader typed it. On the rectifier
+   pages it is a RESULT — a centre-tapped secondary's output is 2·D·(V_sec −
+   V_F), and what the reader typed was the winding voltage and the duty. Those
+   designs publish `pout` for exactly this reason (the efficiency map divides
+   by it), so the rail is pout/I_out. Without this the two questions that
+   matter most — does it convert, and does it convert to what the design said
+   — were skipped in silence on every page whose output is computed. */
+const targetVout = (spec, res) => (
+  Number.isFinite(spec.vout) ? spec.vout
+    : (Number.isFinite(res.pout) && res.pout > 0 && spec.iout ? res.pout / spec.iout : NaN)
+);
+
+/* What the source is actually set to, taken from the circuit rather than from
+   the spec. The rectifier pages have no V_in field at all — their source is
+   a winding — so reading `vinNom` there finds nothing and the power balance
+   quietly does not happen. The netlist always knows. */
+function sourceVolts(circuit, spec) {
+  const iin = circuit.probes && circuit.probes.iin;
+  const b = iin && (circuit.branches || []).find((q) => q.id === iin.id);
+  if (b && b.type === "V" && Number.isFinite(b.value)) return b.value;
+  return spec.vinNom !== undefined ? spec.vinNom : spec.vinMin;
+}
+
 /* Generous on purpose. A wall clock in a gate is machine-dependent, so this
    is set to catch a catastrophic regression rather than to police the
    milliseconds: the slowest thing here today is a SEPIC at low line, measured
@@ -125,8 +150,8 @@ for (const id of Object.keys(SIM)) {
        nothing satisfies every balance in the suite, because zero is balanced. */
     const vout = meanOf(run.views.vout);
     if (!Number.isFinite(vout)) { fail(id, `${where} has no mean output voltage`); continue; }
-    const target = Number.isFinite(raw.vout) ? raw.vout : null;
-    if (target !== null && Math.abs(vout) < 0.1 * Math.abs(target)) {
+    const target = targetVout(raw, res);
+    if (Number.isFinite(target) && Math.abs(vout) < 0.1 * Math.abs(target)) {
       fail(id, `${where} delivers ${vout.toFixed(3)} V against a design output of ${target} V — `
         + "the circuit converged, but it is not converting");
     }
@@ -147,8 +172,8 @@ for (const id of Object.keys(SIM)) {
     try { runI = runSteady(topo, rawI, resI); } catch (e) { fail(id, `[ideal] ${e.message}`); }
     if (runI && runI.residual < 1e-4) {
       const vout = meanOf(runI.views.vout);
-      const target = Number.isFinite(rawI.vout) ? rawI.vout : null;
-      if (target !== null && Math.abs(Math.abs(vout) - Math.abs(target)) > 0.05 * Math.abs(target)) {
+      const target = targetVout(rawI, resI);
+      if (Number.isFinite(target) && Math.abs(Math.abs(vout) - Math.abs(target)) > 0.05 * Math.abs(target)) {
         fail(id, `[ideal] delivers ${vout.toFixed(3)} V where the design says ${target} V — `
           + "with the parasitics off these must agree, so the circuit is not the one "
           + "the equations describe");
@@ -159,11 +184,12 @@ for (const id of Object.keys(SIM)) {
          faults a voltage check can miss: a source feeding a path that should
          not exist, or an output held up by something other than the
          converter. */
+      const circuitI = SIM[id](rawI, resI);
       const iin = meanOf(runI.views.iin);
-      const vin = rawI.vinNom !== undefined ? rawI.vinNom : rawI.vinMin;
+      const vin = sourceVolts(circuitI, rawI);
       if (Number.isFinite(iin) && Number.isFinite(vin) && Number.isFinite(vout)) {
         const pin = Math.abs(vin * iin);
-        const pout = Math.abs(vout) * Math.abs(vout) / loadOhms(topo, rawI, resI);
+        const pout = Math.abs(vout) * Math.abs(vout) / loadOhms(rawI, resI);
         if (pin > 1e-6 && Math.abs(pin - pout) > 0.08 * pin) {
           fail(id, `[ideal] ${pin.toFixed(2)} W in against ${pout.toFixed(2)} W out — `
             + "idealised, these must match; energy is arriving or leaving somewhere unmodelled");
@@ -230,10 +256,14 @@ for (const id of Object.keys(SIM)) {
   }
 }
 
-/* The load the design is actually driving, in ohms. */
-function loadOhms(topo, spec, res) {
-  if (Number.isFinite(res.pout) && res.pout > 0 && spec.vout) return (spec.vout * spec.vout) / res.pout;
-  if (spec.vout && spec.iout) return Math.abs(spec.vout) / spec.iout;
+/* The load the design is actually driving, in ohms — the same rule `loadR` in
+   pilot.js builds the resistor from, so the two cannot describe different
+   loads. */
+function loadOhms(spec, res) {
+  const v = targetVout(spec, res);
+  if (!Number.isFinite(v)) return NaN;
+  if (Number.isFinite(res.pout) && res.pout > 0) return (v * v) / res.pout;
+  if (spec.iout) return Math.abs(v) / spec.iout;
   return NaN;
 }
 

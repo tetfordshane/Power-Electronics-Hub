@@ -18,6 +18,17 @@
 const ROFF = 1e7;
 const RON_D = 2e-3;
 
+/* A conducting diode is a forward drop AND a small slope resistance, and both
+   of them are parasitics. So both come off together when a comparison asks for
+   the ideal device: `vf: 0` is the only way anything says "no rectifier loss",
+   and leaving 2 mΩ behind it means the ideal corner is not ideal.
+
+   It went unnoticed while every converted rail was tens of volts, where 2 mΩ
+   at a few amps is under half a per cent. A current doubler is 60 A into
+   4.9 V, and there the same constant is 2.4 % — reported as a converter
+   missing the equations that designed it. */
+const ronD = (spec) => (spec.vf === 0 ? 1e-6 : RON_D);
+
 /* Load resistance from the operating point the design was sized at. */
 const loadR = (spec, res) => {
   const vo = res && res.pout && spec.iout ? res.pout / spec.iout : spec.vout;
@@ -69,7 +80,7 @@ export const buck = (spec, res) => {
     branches: [
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
-      { id: "D1", type: "D", n: ["0", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["0", "sw"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       /* The switch node's own capacitance.
 
          Without it the node is an open circuit during dead time, and an
@@ -126,8 +137,8 @@ export const syncbuck = (spec, res) => {
          width of the dead time — a converter that appears to fall into
          discontinuous conduction when what it is really doing is returning
          energy to the source. */
-      { id: "Dbody", type: "D", n: ["0", "sw"], ron: RON_D, roff: ROFF, vf: Math.min(c.vf, 0.8) },
-      { id: "Dbody1", type: "D", n: ["sw", "in"], ron: RON_D, roff: ROFF, vf: Math.min(c.vf, 0.8) },
+      { id: "Dbody", type: "D", n: ["0", "sw"], ron: ronD(spec), roff: ROFF, vf: Math.min(c.vf, 0.8) },
+      { id: "Dbody1", type: "D", n: ["sw", "in"], ron: ronD(spec), roff: ROFF, vf: Math.min(c.vf, 0.8) },
       /* The switch node's own capacitance.
 
          Without it the node is an open circuit during dead time, and an
@@ -172,7 +183,7 @@ export const boost = (spec, res) => {
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
-      { id: "D1", type: "D", n: ["sw", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["sw", "out"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -205,7 +216,7 @@ export const buckboost = (spec, res) => {
       { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       /* output is negative, so the rectifier points from the output node
          back into the switch node */
-      { id: "D1", type: "D", n: ["out", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["out", "sw"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -258,7 +269,7 @@ export const flyback = (spec, res) => {
          wrong circuit. */
       { id: "XF1", type: "XF", n: ["in", "sw", "0", "sec"], ratio: n, phase: "opposing" },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
-      { id: "D1", type: "D", n: ["sec", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["sec", "out"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -313,8 +324,8 @@ export const forward2 = (spec, res) => {
          input rail through D_b, and comes back to the near end from ground
          through D_a. The winding then sees −V_in, which is why the reset takes
          as long as the on-time and why the duty has to stay below a half. */
-      { id: "Da", type: "D", n: ["0", "pa"], ron: RON_D, roff: ROFF, vf: c.vf },
-      { id: "Db", type: "D", n: ["pb", "in"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "Da", type: "D", n: ["0", "pa"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "Db", type: "D", n: ["pb", "in"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       /* No switch-node capacitance, and this is the one topology so far where
          leaving it out is right rather than lazy.
 
@@ -337,8 +348,8 @@ export const forward2 = (spec, res) => {
       /* In phase — the whole difference from a flyback. The primary is driven
          and the secondary delivers at the same instant, through the ratio. */
       { id: "XF1", type: "XF", n: ["pa", "pb", "sec", "sgnd"], ratio: 1 / n, phase: "aiding" },
-      { id: "D3", type: "D", n: ["sec", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
-      { id: "D4", type: "D", n: ["sgnd", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D3", type: "D", n: ["sec", "sw"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D4", type: "D", n: ["sgnd", "sw"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "L1", type: "L", n: ["sw", "out"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "sgnd"], value: res.sim.C, esr: c.esr },
@@ -418,8 +429,8 @@ export const pushpull = (spec, res) => {
       /* The two secondary halves, each n times the half-primary. */
       { ...XF, id: "XFa", n: ["in", "pa", "sa", "sct"], ratio: 1 / n },
       { ...XF, id: "XFb", n: ["in", "pa", "sct", "sb"], ratio: 1 / n },
-      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
-      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
@@ -504,8 +515,8 @@ export const halfbridge = (spec, res) => {
       { id: "Lm", type: "L", n: ["sw", "pb"], value: res.sim.Lm },
       { ...XF, id: "XFa", n: ["sw", "pb", "sa", "sct"], ratio: 1 / n },
       { ...XF, id: "XFb", n: ["sw", "pb", "sct", "sb"], ratio: 1 / n },
-      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
-      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
@@ -574,10 +585,10 @@ export const psfb = (spec, res) => {
       { id: "Q2", type: "SW", n: ["a", "0"], ron: c.ron, roff: ROFF },
       { id: "Q3", type: "SW", n: ["in", "b"], ron: c.ron, roff: ROFF },
       { id: "Q4", type: "SW", n: ["b", "0"], ron: c.ron, roff: ROFF },
-      { id: "Db1", type: "D", n: ["a", "in"], ron: RON_D, roff: ROFF, vf },
-      { id: "Db2", type: "D", n: ["0", "a"], ron: RON_D, roff: ROFF, vf },
-      { id: "Db3", type: "D", n: ["b", "in"], ron: RON_D, roff: ROFF, vf },
-      { id: "Db4", type: "D", n: ["0", "b"], ron: RON_D, roff: ROFF, vf },
+      { id: "Db1", type: "D", n: ["a", "in"], ron: ronD(spec), roff: ROFF, vf },
+      { id: "Db2", type: "D", n: ["0", "a"], ron: ronD(spec), roff: ROFF, vf },
+      { id: "Db3", type: "D", n: ["b", "in"], ron: ronD(spec), roff: ROFF, vf },
+      { id: "Db4", type: "D", n: ["0", "b"], ron: ronD(spec), roff: ROFF, vf },
       { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12) },
       { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12) },
       /* Leg A reaches the winding directly; leg B reaches it through L_r,
@@ -586,8 +597,8 @@ export const psfb = (spec, res) => {
       { id: "Lm", type: "L", n: ["a", "pa"], value: res.sim.Lm },
       { ...XF, id: "XFa", n: ["a", "pa", "sa", "sct"], ratio: 1 / n },
       { ...XF, id: "XFb", n: ["a", "pa", "sct", "sb"], ratio: 1 / n },
-      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
-      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
@@ -630,6 +641,171 @@ export const psfb = (spec, res) => {
   };
 };
 
+/* ------------------------------------------- a primary, where there is none */
+/* Three of these pages are about a secondary and nothing else. Their inputs
+   are a winding voltage and a duty; their schematics show two ports where a
+   primary would be, with an isolation bar and the note "n : 1 : 1". The design
+   equations need no more than that — but a circuit does, because a winding
+   with nothing driving it is not a circuit.
+
+   So one is synthesised: a DC source at the winding voltage and four switches
+   making a square wave across a 1:1 primary, which is the least the ports can
+   stand for. Its freewheel state SHORTS the primary rather than opening it,
+   which is what makes the secondary genuinely undriven between pulses — both
+   rectifiers then share the choke current, which is the interval these pages
+   exist to explain. It also means the magnetising current always has a path,
+   so no switch-node capacitance is needed and no transition is an impulse.
+
+   The drive is not what any of these pages is about, so its switches are as
+   close to ideal as the model allows and nothing on the figure draws them.
+
+     [0, D)        +V_sec across the winding
+     [D, ½)        shorted
+     [½, ½+D)      −V_sec
+     [½+D, 1)      shorted                                                  */
+const RON_DRV = 1e-4;
+
+const driven = (volts, D) => ({
+  branches: [
+    { id: "Vsrc", type: "V", n: ["src", "pgnd"], value: volts },
+    { id: "QaH", type: "SW", n: ["src", "pa"], ron: RON_DRV, roff: ROFF },
+    { id: "QaL", type: "SW", n: ["pa", "pgnd"], ron: RON_DRV, roff: ROFF },
+    { id: "QbH", type: "SW", n: ["src", "pb"], ron: RON_DRV, roff: ROFF },
+    { id: "QbL", type: "SW", n: ["pb", "pgnd"], ron: RON_DRV, roff: ROFF },
+  ],
+  /* Each low-side switch is on for everything except its own leg's pulse, so
+     the pair is closed together across both freewheels and the winding is
+     shorted through them. */
+  gates: { kind: "combine", parts: [
+    { kind: "pwm1", sw: "QaH", d: D },
+    { kind: "pwm1", sw: "QaL", d: 1 - D, phase: D },
+    { kind: "pwm1", sw: "QbH", d: D, phase: 0.5 },
+    { kind: "pwm1", sw: "QbL", d: 1 - D, phase: 0.5 + D },
+  ] },
+  /* The primary floats against the secondary's ground, which is the barrier
+     the schematic draws. */
+  isolated: ["pgnd"],
+  probes: { iin: { kind: "branch", id: "Vsrc" }, vsw: { kind: "node", id: "pa" } },
+});
+
+/* --------------------------------------------- centre-tapped rectifier --- */
+/* The secondary that puts one forward drop in the output path instead of two,
+   which at 3.3 or 5 V out is the difference between a good supply and a warm
+   one. Each half-winding feeds its own rectifier for its own half-cycle, and
+   between them the choke freewheels through BOTH — which is why each diode
+   averages half the load whatever the duty, a claim the figure makes and the
+   circuit now has to honour. */
+export const ctrect = (spec, res) => {
+  const c = common(spec);
+  const D = res.wave.D;
+  const drv = driven(spec.vsec, D);
+  const XF = { type: "XF", n: ["pa", "pb"], phase: "aiding", ratio: 1 };
+  return {
+    branches: [
+      ...drv.branches,
+      /* 1 : 1 : 1 — the primary stands in for whatever drives the ports, so
+         each half-winding is at the V_sec the page specifies. */
+      { ...XF, id: "XFa", n: ["pa", "pb", "sa", "0"] },
+      { ...XF, id: "XFb", n: ["pa", "pb", "0", "sb"] },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    isolated: drv.isolated,
+    gates: drv.gates,
+    seed: { L1: spec.iout, C1: res.pout / spec.iout },
+    probes: {
+      ...drv.probes,
+      iL: { kind: "branch", id: "L1" },
+      /* The node the figure's EMC loop is drawn around: behind the rectifiers,
+         where both half-cycles arrive positive. */
+      vsw: { kind: "node", id: "rect" },
+      vout: { kind: "node", id: "out" },
+      iD1: { kind: "branch", id: "D1" },
+      iD2: { kind: "branch", id: "D2" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    flow: ["iD1", "iD2"],
+    rectifier: "iD1",
+    plot: "iL",
+  };
+};
+
+/* ------------------------------------------- current doubler rectifier --- */
+/* One secondary winding, two chokes, and each one is a buck stage in its own
+   right: whichever rectifier is clamping the far end of the winding to the
+   return, one choke is charging from the winding and the other is freewheeling
+   through that same rectifier. Each carries half the load, they run half a
+   period apart, and their ripples partly cancel where they meet.
+
+   That cancellation is why the output capacitor is NOT rebuilt from the
+   plotted winding: the figure plots L1 and the capacitor is fed by both. */
+export const doubler = (spec, res) => {
+  const c = common(spec);
+  const D = res.wave.D;
+  const drv = driven(spec.vsec, D);
+  const ipk = peakOf(res);
+  return {
+    branches: [
+      ...drv.branches,
+      { id: "XF1", type: "XF", n: ["pa", "pb", "sa", "sb"], ratio: 1, phase: "aiding" },
+      /* Anodes on the return: each rectifier clamps its own end of the winding
+         down, and carries the other choke's freewheel current while it does. */
+      { id: "D1", type: "D", n: ["0", "sa"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["0", "sb"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["sa", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, ipk) },
+      { id: "L2", type: "L", n: ["sb", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, ipk) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    isolated: drv.isolated,
+    gates: drv.gates,
+    /* Each choke where it actually is, not where the average is.
+
+       This converter is two interleaved buck stages, and interleaved stages
+       are at different points of their own ramp at u = 0: L1 is at the bottom
+       of its charging ramp, L2 is most of the way down a freewheel that began
+       half a period ago. Seeding both at the mean is not a neutral guess, it
+       is an excitation of the one mode nothing here damps — the SUM of the two
+       currents is held by the output, but the DIFFERENCE is opposed by winding
+       resistance alone. The multiphase buck learned this the same way. */
+    seed: (() => {
+      const iavg = res.wave.iavg, dI = res.wave.dI;
+      return {
+        L1: iavg - dI / 2,
+        L2: iavg + dI / 2 - dI * (0.5 - D) / Math.max(1 - D, 1e-3),
+        C1: res.pout / spec.iout,
+      };
+    })(),
+    probes: {
+      ...drv.probes,
+      iL: { kind: "branch", id: "L1" },
+      iL2: { kind: "branch", id: "L2" },
+      /* L1's own end of the winding, which is the node the figure rings. */
+      vsw: { kind: "node", id: "sa" },
+      vout: { kind: "node", id: "out" },
+      iD1: { kind: "branch", id: "D1" },
+      iD2: { kind: "branch", id: "D2" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    /* Each rectifier carries one choke's charging current and the other's
+       freewheel, and only one conducts at a time, so the two are alternatives
+       and their sum is the current going round. */
+    flow: ["iD1", "iD2"],
+    rectifier: "iD1",
+    /* The pane plots L1; the capacitor sees L1 and L2 half a period apart, and
+       rebuilding it from one of them would draw away the cancellation that is
+       the entire point of the topology. */
+    capFromPlot: false,
+    plot: "iL",
+  };
+};
+
 /* ------------------------------------------- the coupled-capacitor family */
 /* SEPIC, Ćuk and Zeta are the same five parts in three arrangements, and the
    arrangement is the whole lesson: where the series capacitor sits decides
@@ -661,7 +837,7 @@ export const cuk = (spec, res) => {
          through the diode, to ground. Pointed the other way the converter
          still runs and settles on a positive rail, which a Ćuk does not
          have. */
-      { id: "D1", type: "D", n: ["mid", "0"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["mid", "0"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "L2", type: "L", n: ["mid", "out"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
@@ -702,7 +878,7 @@ export const sepic = (spec, res) => {
          that single difference is what turns a Ćuk's inverted rail the right
          way up. */
       { id: "L2", type: "L", n: ["mid", "0"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
-      { id: "D1", type: "D", n: ["mid", "out"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["mid", "out"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
@@ -737,7 +913,7 @@ export const zeta = (spec, res) => {
       { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
       { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
       { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
-      { id: "D1", type: "D", n: ["0", "mid"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D1", type: "D", n: ["0", "mid"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
       { id: "L2", type: "L", n: ["mid", "out"], value: res.sim.L2, esr: c.dcr, ...satOf(spec, ipk) },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
@@ -905,6 +1081,7 @@ export const fsbb = (spec, res) => {
 
 export const SIM = {
   buck, syncbuck, boost, buckboost, flyback, forward2, pushpull, halfbridge, psfb,
+  ctrect, doubler,
   cuk, sepic, zeta,
   multiphase, fsbb,
 };
