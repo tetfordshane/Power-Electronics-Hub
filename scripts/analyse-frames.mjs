@@ -65,22 +65,24 @@ console.log("arrow field, worst displacement per frame:", JSON.stringify(stats(s
    in it, and only that surplus is judged. That is exactly the rule the
    figure is meant to obey: anything entering has to dissolve in.
 
-   One thing the surplus rule over-reports, and it is worth being precise
-   about rather than loosening the threshold to cover. Where two phases route
-   over the SAME copper by different paths — a phase-shifted bridge's
-   circulating loop and its ZVS transition share most of the primary — the
-   cross-fade renders both, and the incoming route's chevrons land on top of
-   the outgoing route's. The count grows, so the surplus rule flags them; but
-   they are at 0.7 px, which is not a mark appearing, it is one mark drawn
-   twice while the ink hands over. Nothing enters the reader's field of view.
+   What the surplus rule counts is ELEMENTS, and the rule is about INK. Those
+   part company where two phases route over the same copper by different paths
+   — a phase-shifted bridge's circulating loop and its ZVS transition share
+   most of the primary. The cross-fade renders both, so the incoming route's
+   chevrons land on the outgoing route's, one fading up as the other fades
+   down. A new element exists; nothing appears, because the ink at that spot
+   was already there and stays roughly constant. Counted naively that reads as
+   a mark arriving at 0.89.
 
-   So a surplus mark within a few pixels of one already present is excluded,
-   and the number excluded is printed rather than swallowed. HALF_STEP is far
-   below the worst honest per-frame travel (21 px measured, and the arrows are
-   120 px apart), so this cannot hide a mark that moved fast — which is the
-   failure the counting rule was introduced to avoid in the first place. */
-const CO_LOCATED = 6;
-let orphanA = 0, orphanN = 0, grew = 0, twinned = 0;
+   So a surplus mark is judged on what it ADDED: its own opacity less whatever
+   was already within a chevron's reach of it. A hand-over scores zero however
+   bright both halves are, and a mark arriving in empty copper scores its full
+   opacity, which is exactly the rule the figure is held to. The radius is
+   generous rather than tight — it only has to cover a chevron, and the
+   counting rule above is what stops a fast mark being mistaken for a new one,
+   so nothing here has to be conservative about distance. */
+const REACH = 10;
+let orphanA = 0, orphanN = 0, grew = 0, handed = 0;
 for (let i = 1; i < f.length; i++) {
   const A = f[i - 1].arrows, B = f[i].arrows;
   if (!A || !A.length || !B) continue;
@@ -90,18 +92,23 @@ for (let i = 1; i < f.length; i++) {
   /* The newcomers are the surplus marks furthest from anything that was
      already there. */
   const scored = B.map((b) => {
-    let best = Infinity;
-    for (const a of A) best = Math.min(best, Math.hypot(b[0] - a[0], b[1] - a[1]));
-    return { b, best };
+    let best = Infinity, had = 0;
+    for (const a of A) {
+      const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      best = Math.min(best, d);
+      if (d <= REACH) had = Math.max(had, a[2] === undefined ? 1 : a[2]);
+    }
+    return { b, best, had };
   }).sort((x, y) => y.best - x.best).slice(0, surplus);
-  for (const { b, best } of scored) {
-    if (best <= CO_LOCATED) { twinned++; continue; }
+  for (const { b, had } of scored) {
+    const added = Math.max((b[2] === undefined ? 1 : b[2]) - had, 0);
+    if (added <= 0) { handed++; continue; }
     orphanN++;
-    orphanA = Math.max(orphanA, b[2] === undefined ? 1 : b[2]);
+    orphanA = Math.max(orphanA, added);
   }
 }
 console.log(`  (${grew} frames added a mark; only what they added is judged`
-  + `${twinned ? `, ${twinned} of them landing on a mark already there` : ""})`);
+  + `${handed ? `, ${handed} of them handing over on ink already there` : ""})`);
 console.log(`arrows appearing with no near predecessor: ${orphanN}, brightest: ${orphanA.toFixed(3)}`,
   orphanA > 0.12 ? "*** A VISIBLE POP ***" : "(all faint — they dissolve in)");
 

@@ -503,7 +503,37 @@ const TB = [
   defs: { vinMin: 350, vinNom: 400, vinMax: 420, vout: 48, iout: 40, fsw: 100, dvout: 150, dmax: 0.45, lr: 12, coss: 400 },
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, Lr = s.lr * 1e-6, Co_ss = s.coss * 1e-12;
-    const n = (Vo + s.vf) / (2 * s.vinMin * s.dmax);
+    /* The turns ratio, chosen so that D_max means what the field says.
+
+       Every other bridge picks n straight from the ratio it has to reach at
+       low line: n = (V_out + V_F)/(2·V_in(min)·D_max). Here that is not the
+       shift the controller has to command, because part of every interval is
+       spent reversing the primary through L_r before the secondary conducts
+       at all — so the old ratio quietly asked for D_max PLUS the duty loss at
+       the one corner where there is least room for it, and at the defaults it
+       was commanding 0.492 of a period against a ceiling of 0.5.
+
+       Written out, the requirement at low line is
+
+           (V_out + V_F)/(2·n·V_in(min))  +  2·L_r·n·I_out·f_sw/V_in(min)  =  D_max
+                    ratio needs this            reversing costs this
+
+       which is a quadratic in n: b·n² − D_max·n + a = 0. It has two roots —
+       raising n lowers the duty needed and raises the duty lost — and the
+       smaller one is the ratio-limited branch a designer means. When the
+       discriminant goes negative there is no turns ratio at all that reaches
+       the output here, which is a real answer and not a small one: at four
+       times the switching frequency this converter cannot make 48 V at low
+       line with 12 µH in series, whatever it is wound to. */
+    const a = (Vo + s.vf) / (2 * s.vinMin);
+    const b = 2 * Lr * Io * fs / s.vinMin;
+    const disc = s.dmax * s.dmax - 4 * a * b;
+    if (b > 1e-12 && disc < 0) {
+      return infeasible("Reversing the primary through L_r costs more of the period than the "
+        + "duty left over at V_in min, so no turns ratio reaches " + eng(Vo, "V") + " there. "
+        + "Lower L_r, lower f_sw, raise V_in min, or accept a lower output.");
+    }
+    const n = b > 1e-12 ? (s.dmax - Math.sqrt(disc)) / (2 * b) : a / s.dmax;
     const Ipri = n * Io;
     const dI = s.r * Io;
     /* Two different duties, and keeping them apart is the whole of this
@@ -567,6 +597,10 @@ const TB = [
         pulses: 2, vbi: true,
         cap: { kind: "buck", C: Cout, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: warns(
+        /* Each diagonal can occupy at most half the period, the same ceiling
+           the push-pull and half-bridge carry. */
+        W("stop", s.dmax >= 0.5 && "D_max is the shift commanded at V_in min, and a diagonal "
+          + "can occupy at most half the period — keep it below 0.5."),
         W("check", dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio."),
         /* The shift needed has run into the half-period ceiling, so the
            converter cannot reach its output here at all — the page below is

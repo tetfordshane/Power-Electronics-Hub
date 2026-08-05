@@ -792,11 +792,18 @@ function FlowCard({ topo, res, spec, hot }) {
                large to solve inside a knob turn, or no clean periodic
                solution at all. The closed form answers instead, and saying
                which is the same courtesy the pages without a circuit get. */
+            /* The badge does not claim WHY, because it cannot know. A circuit
+               can defeat the solver by being too large for a knob turn, or by
+               having no clean periodic solution at these numbers — a core
+               driven past most of its roll-off, or a mode with nothing
+               restoring it. Naming the first of those when it was the second
+               sends the reader to change the wrong input. */
             <span className="nosimmark" title={
-              "This converter has a circuit, but at these numbers it could not be solved inside "
-              + "the time a knob turn can afford, so the figure is drawn from the design "
-              + "equations. Fewer phases, or a lighter corner, and it solves."
-            }>closed form · too large here</span>
+              "This converter has a circuit, but at these numbers it did not settle on a "
+              + "repeating cycle inside the time a knob turn can afford, so the figure is "
+              + "drawn from the design equations instead. A lighter corner, fewer phases, or "
+              + "less core roll-off, and it solves."
+            }>closed form · unsolved here</span>
           ) : NOSIM_WHY[NOSIM_REASON[topo.id]] ? (
             /* The other twenty-four. An absent badge explains nothing — it
                reads like a feature that broke, or one nobody noticed was

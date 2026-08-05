@@ -190,7 +190,18 @@ for (const id of Object.keys(SIM)) {
       if (Number.isFinite(iin) && Number.isFinite(vin) && Number.isFinite(vout)) {
         const pin = Math.abs(vin * iin);
         const pout = Math.abs(vout) * Math.abs(vout) / loadOhms(rawI, resI);
-        if (pin > 1e-6 && Math.abs(pin - pout) > 0.08 * pin) {
+        /* Two per cent, not eight.
+
+           Eight was not a judgement about how well an idealised converter
+           should balance — it was the size of a measurement artefact. Every
+           pilot whose source charged a switch node directly reported 4-6 % of
+           its input power arriving from nowhere, because the displacement
+           current into an ideal capacitor through an ideal switch is an
+           impulse shorter than any step the solver takes, and the trapezoidal
+           rule spreads it. Giving C_oss the series resistance a real one has
+           put the whole catalogue inside a quarter of a per cent, so the gate
+           can now be what it was always supposed to mean. */
+        if (pin > 1e-6 && Math.abs(pin - pout) > 0.02 * pin) {
           fail(id, `[ideal] ${pin.toFixed(2)} W in against ${pout.toFixed(2)} W out — `
             + "idealised, these must match; energy is arriving or leaving somewhere unmodelled");
         }

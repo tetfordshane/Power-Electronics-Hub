@@ -29,6 +29,37 @@ const RON_D = 2e-3;
    missing the equations that designed it. */
 const ronD = (spec) => (spec.vf === 0 ? 1e-6 : RON_D);
 
+/* A switch node's capacitance is not an ideal capacitor across an ideal
+   switch, and modelling it as one costs real accuracy.
+
+   Physically, C_oss is spread across the die behind the channel and the drift
+   region, so there is always resistance in series with it — a fraction of an
+   ohm to a few ohms at the frequencies this charge moves at. Numerically,
+   that resistance is what bounds the current when the switch closes onto it:
+   without it the peak is V/R_DS(on), which at the idealised corner is 390 V
+   through a microohm, and the discharge is over in R_DS·C_oss = 10⁻¹⁸ s.
+   That is five orders of magnitude below the finest step the solver takes
+   after an edge, so the trapezoidal rule spreads femtocoulombs of charge
+   across a nanosecond and reports amps that never flowed.
+
+   It was not a rounding error. Every pilot whose source charges a switch node
+   directly read 4-6 % of its input power arriving from nowhere, and the
+   power-balance gate had been set at 8 % to clear it. With the series
+   resistance here the same converters balance to a fifth of a per cent and
+   the gate is 2 %.
+
+   The ENERGY is unchanged either way: ½C·V² is dissipated in whatever total
+   resistance the loop has, however it is divided. What changes is only
+   whether the model's fastest time constant is one the sampler can see.
+
+   An ohm is chosen for the margin rather than from a datasheet: the tightest
+   case in the catalogue is a 1 pF idealised C_oss on a 150 kHz page, where
+   R·C has to stay clear of the 2e-8 of a period the first graded step covers,
+   and an ohm leaves about eight times that. Nothing is sensitive to the exact
+   figure — every value from a quarter of an ohm to four settles the whole
+   catalogue to the same place, to four significant figures. */
+const ESR_COSS = 1;
+
 /* Load resistance from the operating point the design was sized at. */
 const loadR = (spec, res) => {
   const vo = res && res.pout && spec.iout ? res.pout / spec.iout : spec.vout;
@@ -91,7 +122,7 @@ export const buck = (spec, res) => {
          is: the node resonating from one rail toward the other. That is the
          mechanism behind zero-voltage switching, so the model needs it to be
          able to show ZVS at all. */
-      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: "L1", type: "L", n: ["sw", "out"], value: L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "0"], value: C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
@@ -149,7 +180,7 @@ export const syncbuck = (spec, res) => {
          is: the node resonating from one rail toward the other. That is the
          mechanism behind zero-voltage switching, so the model needs it to be
          able to show ZVS at all. */
-      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(2 * c.coss, 1e-12) },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(2 * c.coss, 1e-12), esr: ESR_COSS },
       { id: "L1", type: "L", n: ["sw", "out"], value: res.sim.L, esr: c.dcr, ...satOf(spec, peakOf(res)) },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
@@ -589,8 +620,8 @@ export const psfb = (spec, res) => {
       { id: "Db2", type: "D", n: ["0", "a"], ron: ronD(spec), roff: ROFF, vf },
       { id: "Db3", type: "D", n: ["b", "in"], ron: ronD(spec), roff: ROFF, vf },
       { id: "Db4", type: "D", n: ["0", "b"], ron: ronD(spec), roff: ROFF, vf },
-      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12) },
-      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
+      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       /* Leg A reaches the winding directly; leg B reaches it through L_r,
          which is the leakage plus whatever was added to it on purpose. */
       { id: "Lr", type: "L", n: ["b", "pa"], value: res.sim.Lr },
@@ -899,7 +930,7 @@ export const cuk = (spec, res) => {
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
-      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       /* The coupling capacitor is the whole converter: energy crosses it in
          an electric field rather than in a core, which is what makes this
          the dual of the buck-boost rather than a variation on it. */
@@ -945,7 +976,7 @@ export const sepic = (spec, res) => {
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "L1", type: "L", n: ["in", "sw"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
       { id: "Q1", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
-      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
       /* The second winding returns to ground rather than to the output, and
          that single difference is what turns a Ćuk's inverted rail the right
@@ -956,7 +987,22 @@ export const sepic = (spec, res) => {
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],
     gates: { kind: "pwm1", sw: "Q1" },
-    seed: { L1: spec.iout, L2: spec.iout, Cc: spec.vinNom, C1: spec.vout },
+    /* L2 is written ["mid","0"], so the current it carries — up out of the
+       return and into the coupling capacitor's far side — is NEGATIVE in its
+       own branch direction. Seeded positive it starts a full 2·I_out from
+       where it belongs, and this is the stiffest circuit in the set: it spent
+       two hundred periods finding its way back, stalling short of tolerance
+       often enough that the wall-clock budget for the whole suite was set by
+       it. The Ćuk beside it has had the sign right all along.
+
+       L1 is the input winding, so its own average is I_out·D/(1−D) rather
+       than the load — `wave.iavg` is that number, published. */
+    seed: {
+      L1: (res.wave && res.wave.iavg) || spec.iout,
+      L2: -spec.iout,
+      Cc: spec.vinNom,
+      C1: spec.vout,
+    },
     probes: {
       iL: { kind: "branch", id: "L1" },
       iL2: { kind: "branch", id: "L2" },
@@ -984,7 +1030,7 @@ export const zeta = (spec, res) => {
     branches: [
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
-      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "Coss", type: "C", n: ["sw", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: "L1", type: "L", n: ["sw", "0"], value: res.sim.L, esr: c.dcr, ...satOf(spec, ipk) },
       { id: "D1", type: "D", n: ["0", "mid"], ron: ronD(spec), roff: ROFF, vf: c.vf },
       { id: "Cc", type: "C", n: ["sw", "mid"], value: res.sim.Cc, esr: c.esr },
@@ -1047,7 +1093,7 @@ export const multiphase = (spec, res) => {
     branches.push(
       { id: `Q${k}H`, type: "SW", n: ["in", sw], ron: c.ron, roff: ROFF },
       { id: `Q${k}L`, type: "SW", n: [sw, "0"], ron: c.ron, roff: ROFF },
-      { id: `Coss${k}`, type: "C", n: [sw, "0"], value: Math.max(c.coss, 1e-12) },
+      { id: `Coss${k}`, type: "C", n: [sw, "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: `L${k}`, type: "L", n: [sw, "out"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, ipk) },
     );
@@ -1114,12 +1160,12 @@ export const fsbb = (spec, res) => {
       { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
       { id: "Q1", type: "SW", n: ["in", "a"], ron: c.ron, roff: ROFF },
       { id: "Q2", type: "SW", n: ["a", "0"], ron: c.ron, roff: ROFF },
-      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: "L1", type: "L", n: ["a", "b"], value: res.sim.L, esr: c.dcr,
         ...satOf(spec, peakOf(res)) },
       { id: "Q3", type: "SW", n: ["b", "0"], ron: c.ron, roff: ROFF },
       { id: "Q4", type: "SW", n: ["b", "out"], ron: c.ron, roff: ROFF },
-      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12), esr: ESR_COSS },
       { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
       { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
     ],

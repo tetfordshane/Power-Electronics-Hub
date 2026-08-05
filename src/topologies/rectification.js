@@ -337,9 +337,9 @@ const TD = [
   chips: ["high current", "ripple cancellation", "single winding"],
   what: "Two inductors feed the output in antiphase from a single secondary winding. Each carries only half the load current, their ripples partly cancel at the output, and the winding sees the full duty rather than half — so the transformer is used better than a centre-tapped design. It is the standard secondary for high-current, low-voltage converters.",
   eqs: [
-    { e: "V_out = D·V_sec", n: "each inductor is effectively a buck stage" },
+    { e: "V_out = D·(V_sec − V_F)", n: "each inductor is effectively a buck stage, behind one rectifier drop" },
     { e: "I_L1 = I_L2 = I_out/2", n: "the defining property of the topology" },
-    { e: "L = (V_sec − V_out)·D/(f_sw·ΔI_L)", n: "sized per inductor, for half the current" },
+    { e: "L = (V_sec − V_F − V_out)·D/(f_sw·ΔI_L)", n: "sized per inductor, for half the current" },
     { e: "K(D) = |1 − 2D|/(1 − D)", n: "ripple cancellation factor at the output node" },
     { e: "I_D(avg) = I_out/2", n: "each rectifier, same as centre-tapped" },
   ],
@@ -350,10 +350,16 @@ const TD = [
   defs: { vsec: 14, dnom: 0.35, iout: 60, fsw: 200, r: 0.4, vf: 0.45, dvout: 30 },
   design(s) {
     const fs = s.fsw * 1e3, D = s.dnom, Io = s.iout;
-    const Vo = D * s.vsec;
+    /* One rectifier drop sits in the output path at every instant — the one
+       clamping the far end of the winding — exactly as it does on the
+       centre-tapped page, which writes V_out = 2·D·(V_sec − V_F). This page
+       said V_out = D·V_sec and then charged V_F·I_out to the loss budget
+       beside it, which is the same drop counted once and ignored once. At a
+       5 V rail it is nine per cent of the output. */
+    const Vo = D * (s.vsec - s.vf);
     const IL = Io / 2;
     const dI = s.r * IL;
-    const L = (s.vsec - Vo) * D / (fs * dI);
+    const L = (s.vsec - s.vf - Vo) * D / (fs * dI);
     /* K(D) = |1−2D|/(1−D) is the published cancellation factor, and it is
        genuinely 0 at D = 0.5 — but only D < 0.5 is physical here, since
        each polarity can occupy at most half the period.                  */
@@ -393,11 +399,17 @@ const TD = [
       warn: warns(
         W("stop", D > 0.5 && "D = " + f2(D) + " is above 0.5, which is not physical for a current doubler — each polarity can occupy at most half the period."),
         W("note", Math.abs(D - 0.5) < 0.06 && "Duty is close to 0.5, where the two ripples cancel almost perfectly. Excellent for the output cap, but leaves no headroom for line regulation."),
+        /* Winding resistance is the ONLY thing opposing an imbalance between
+           the two chokes — the output holds their sum, nothing holds their
+           difference. At zero it is not merely delicate, it is undetermined,
+           and the figure draws one of infinitely many splits without any way
+           to say so. */
+        W("check", s.dcr < 0.05 && "With DCR at " + s.dcr + " mΩ nothing opposes an imbalance between the two chokes: the output fixes their sum and nothing fixes their difference. Give the windings their real resistance — the sharing the figure draws is arbitrary otherwise."),
       ),
       groups: [
         G("Operating point", [
           R("Output voltage", eng(Vo, "V")),
-          R("Required V_sec", eng(Vo / D, "V"), "for the target output"),
+          R("Required V_sec", eng(Vo / D + s.vf, "V"), "for the target output, drop included"),
           R("Duty D", f2(D)),
           R("Output ripple frequency", eng(2 * fs, "Hz")),
         ]),

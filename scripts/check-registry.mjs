@@ -268,6 +268,24 @@ for (const key of Object.keys(NOSIM_WHY)) {
   }
 }
 
+/* `iShape` OVERRIDES a design's own current, so the two must not coexist.
+   buildCycle takes the supplied shape in preference to the wave's ramp, which
+   is right while the shape is all a bare-mode topology has — and silently
+   wrong the moment that topology grows a `wave`. The design then computes a
+   duty, a ripple and a capacitor, the panel prints them, and the figure draws
+   a hand-authored curve that answers to none of them. It was live on the
+   synchronous rectifier for exactly as long as it took to notice. */
+for (const t of TOPOS) {
+  const F = FLOW[t.id];
+  if (!F || !F.iShape) continue;
+  let res;
+  try { res = t.design(defaultSpec(t)); } catch { continue; }
+  if (res && !res.infeasible && res.wave) {
+    fail(t.id, "has both an iShape and a design wave — the supplied shape wins, "
+      + "so the figure would ignore every number the panel prints. Drop the iShape.");
+  }
+}
+
 /* A `rides` name has to be a probe the circuit actually publishes.
    Misspell one and `viewOf` returns nothing, the path quietly falls back to
    the figure's summed current, and the dashes move at a rate that belongs to

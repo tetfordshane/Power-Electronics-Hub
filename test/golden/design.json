@@ -8583,21 +8583,21 @@
    "hi": [
     [
      "turns ratio",
-     "0.154"
+     "0.172"
     ],
     [
      "duty loss",
-     "3.7 %"
+     "4.1 %"
     ],
     [
      "ZVS above",
-     "24.5 A"
+     "22.0 A"
     ]
    ],
    "loss": [
     [
      "Primary conduction",
-     0.605628662132,
+     0.755587533011,
      "2·I_pri²·R_DS(on), circulating all period"
     ],
     [
@@ -8609,7 +8609,7 @@
    "warn": [
     [
      "check",
-     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+     "The lagging leg only achieves ZVS above 22.0 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
     ]
    ],
    "groups": [
@@ -8618,32 +8618,32 @@
      "rows": [
       [
        "Turns ratio N_s/N_p",
-       "0.154",
+       "0.172",
        ""
       ],
       [
        "Phase shift commanded at V_in nom",
-       "0.431",
+       "0.394",
        "of the whole period, duty loss included"
       ],
       [
        "Duty reaching the choke",
-       "0.394",
+       "0.353",
        "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.037",
-       "3.7 % of the period spent reversing the primary"
+       "0.041",
+       "4.1 % of the period spent reversing the primary"
       ],
       [
        "Duty reaching the choke at V_in max",
-       "0.375",
+       "0.336",
        "the corner the choke is sized at"
       ],
       [
        "Primary current",
-       "6.15 A",
+       "6.87 A",
        ""
       ]
      ]
@@ -8663,12 +8663,12 @@
       ],
       [
        "Equivalent output current",
-       "24.5 A",
+       "22.0 A",
        "below this the lagging leg hard-switches"
       ],
       [
        "Dead time (lagging leg)",
-       "52.0 ns",
+       "46.6 ns",
        ""
       ],
       [
@@ -8683,7 +8683,7 @@
      "rows": [
       [
        "L_o",
-       "5.00 µH",
+       "6.57 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -8698,14 +8698,14 @@
       ],
       [
        "Rectifier V_R",
-       "129 V",
+       "144 V",
        "add a clamp for the ringing"
       ]
      ]
     }
    ],
    "wave": {
-    "D": 0.430664285714,
+    "D": 0.39375,
     "dI": 12,
     "iavg": 40,
     "vhi": "V_in",
@@ -8726,7 +8726,7 @@
    "hi": [
     [
      "turns ratio",
-     "0.154"
+     "0.155"
     ],
     [
      "duty loss",
@@ -8734,13 +8734,13 @@
     ],
     [
      "ZVS above",
-     "24.5 A"
+     "24.3 A"
     ]
    ],
    "loss": [
     [
      "Primary conduction",
-     0.00605628662132,
+     0.00617257605749,
      "2·I_pri²·R_DS(on), circulating all period"
     ],
     [
@@ -8752,7 +8752,7 @@
    "warn": [
     [
      "check",
-     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+     "The lagging leg only achieves ZVS above 24.3 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
     ]
    ],
    "groups": [
@@ -8761,17 +8761,17 @@
      "rows": [
       [
        "Turns ratio N_s/N_p",
-       "0.154",
+       "0.155",
        ""
       ],
       [
        "Phase shift commanded at V_in nom",
-       "0.397",
+       "0.394",
        "of the whole period, duty loss included"
       ],
       [
        "Duty reaching the choke",
-       "0.394",
+       "0.390",
        "what V_out = 2·n·V_in·D is solved for"
       ],
       [
@@ -8781,12 +8781,12 @@
       ],
       [
        "Duty reaching the choke at V_in max",
-       "0.375",
+       "0.371",
        "the corner the choke is sized at"
       ],
       [
        "Primary current",
-       "615 mA",
+       "621 mA",
        ""
       ]
      ]
@@ -8806,12 +8806,12 @@
       ],
       [
        "Equivalent output current",
-       "24.5 A",
+       "24.3 A",
        "below this the lagging leg hard-switches"
       ],
       [
        "Dead time (lagging leg)",
-       "520 ns",
+       "515 ns",
        ""
       ],
       [
@@ -8826,7 +8826,7 @@
      "rows": [
       [
        "L_o",
-       "50.0 µH",
+       "51.4 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -8841,14 +8841,14 @@
       ],
       [
        "Rectifier V_R",
-       "129 V",
+       "130 V",
        "add a clamp for the ringing"
       ]
      ]
     }
    ],
    "wave": {
-    "D": 0.397441428571,
+    "D": 0.39375,
     "dI": 1.2,
     "iavg": 4,
     "vhi": "V_in",
@@ -8866,171 +8866,33 @@
    }
   },
   "high f_sw (×4)": {
-   "hi": [
-    [
-     "turns ratio",
-     "0.154"
-    ],
-    [
-     "duty loss",
-     "14.8 %"
-    ],
-    [
-     "ZVS above",
-     "24.5 A"
-    ]
-   ],
-   "loss": [
-    [
-     "Primary conduction",
-     0.605628662132,
-     "2·I_pri²·R_DS(on), circulating all period"
-    ],
-    [
-     "Output rectifiers",
-     18,
-     "V_F·I_out"
-    ]
-   ],
+   "infeasible": true,
    "warn": [
     [
      "stop",
-     "The shift needed at V_in nom is 0.541 of the period once the 14.8 % duty loss is paid, and the ceiling is 0.5. Lower L_r, lower the turns ratio, or narrow the input range."
-    ],
-    [
-     "check",
-     "The lagging leg only achieves ZVS above 24.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
+     "Reversing the primary through L_r costs more of the period than the duty left over at V_in min, so no turns ratio reaches 48.0 V there. Lower L_r, lower f_sw, raise V_in min, or accept a lower output."
     ]
-   ],
-   "groups": [
-    {
-     "t": "Transformer and duty",
-     "rows": [
-      [
-       "Turns ratio N_s/N_p",
-       "0.154",
-       ""
-      ],
-      [
-       "Phase shift commanded at V_in nom",
-       "0.490",
-       "of the whole period, duty loss included"
-      ],
-      [
-       "Duty reaching the choke",
-       "0.394",
-       "what V_out = 2·n·V_in·D is solved for"
-      ],
-      [
-       "Duty loss ΔD",
-       "0.148",
-       "14.8 % of the period spent reversing the primary"
-      ],
-      [
-       "Duty reaching the choke at V_in max",
-       "0.375",
-       "the corner the choke is sized at"
-      ],
-      [
-       "Primary current",
-       "6.15 A",
-       ""
-      ]
-     ]
-    },
-    {
-     "t": "Soft switching",
-     "rows": [
-      [
-       "Resonant inductance L_r",
-       "12.0 µH",
-       "leakage plus any added series L"
-      ],
-      [
-       "Primary current for ZVS",
-       "3.77 A",
-       ""
-      ],
-      [
-       "Equivalent output current",
-       "24.5 A",
-       "below this the lagging leg hard-switches"
-      ],
-      [
-       "Dead time (lagging leg)",
-       "52.0 ns",
-       ""
-      ],
-      [
-       "L_r–C_oss resonance",
-       "1.62 MHz",
-       ""
-      ]
-     ]
-    },
-    {
-     "t": "Output filter",
-     "rows": [
-      [
-       "L_o",
-       "1.25 µH",
-       "sized at V_in max including duty loss, where the ripple is worst"
-      ],
-      [
-       "C_out (charge)",
-       "12.5 µF",
-       ""
-      ],
-      [
-       "Ripple frequency",
-       "800 kHz",
-       ""
-      ],
-      [
-       "Rectifier V_R",
-       "129 V",
-       "add a clamp for the ringing"
-      ]
-     ]
-    }
-   ],
-   "wave": {
-    "D": 0.49,
-    "dI": 12,
-    "iavg": 40,
-    "vhi": "V_in",
-    "vlabel": "v_pri",
-    "pulses": 2,
-    "vbi": true,
-    "cap": {
-     "kind": "buck",
-     "C": 0.0000125,
-     "esr": 0,
-     "Vdc": 48,
-     "Io": 40,
-     "fsw": 400000
-    }
-   }
+   ]
   },
   "low line (V_in nom = V_in min)": {
    "hi": [
     [
      "turns ratio",
-     "0.154"
+     "0.172"
     ],
     [
      "duty loss",
-     "4.2 %"
+     "4.7 %"
     ],
     [
      "ZVS above",
-     "21.5 A"
+     "19.2 A"
     ]
    ],
    "loss": [
     [
      "Primary conduction",
-     0.605628662132,
+     0.755587533011,
      "2·I_pri²·R_DS(on), circulating all period"
     ],
     [
@@ -9039,48 +8901,39 @@
      "V_F·I_out"
     ]
    ],
-   "warn": [
-    [
-     "stop",
-     "The shift needed at V_in nom is 0.492 of the period once the 4.2 % duty loss is paid, and the ceiling is 0.5. Lower L_r, lower the turns ratio, or narrow the input range."
-    ],
-    [
-     "check",
-     "The lagging leg only achieves ZVS above 21.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
-    ]
-   ],
+   "warn": [],
    "groups": [
     {
      "t": "Transformer and duty",
      "rows": [
       [
        "Turns ratio N_s/N_p",
-       "0.154",
+       "0.172",
        ""
       ],
       [
        "Phase shift commanded at V_in nom",
-       "0.490",
+       "0.450",
        "of the whole period, duty loss included"
       ],
       [
        "Duty reaching the choke",
-       "0.450",
+       "0.403",
        "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.042",
-       "4.2 % of the period spent reversing the primary"
+       "0.047",
+       "4.7 % of the period spent reversing the primary"
       ],
       [
        "Duty reaching the choke at V_in max",
-       "0.375",
+       "0.336",
        "the corner the choke is sized at"
       ],
       [
        "Primary current",
-       "6.15 A",
+       "6.87 A",
        ""
       ]
      ]
@@ -9100,12 +8953,12 @@
       ],
       [
        "Equivalent output current",
-       "21.5 A",
+       "19.2 A",
        "below this the lagging leg hard-switches"
       ],
       [
        "Dead time (lagging leg)",
-       "45.5 ns",
+       "40.7 ns",
        ""
       ],
       [
@@ -9120,7 +8973,7 @@
      "rows": [
       [
        "L_o",
-       "5.00 µH",
+       "6.57 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -9135,14 +8988,14 @@
       ],
       [
        "Rectifier V_R",
-       "129 V",
+       "144 V",
        "add a clamp for the ringing"
       ]
      ]
     }
    ],
    "wave": {
-    "D": 0.49,
+    "D": 0.45,
     "dI": 12,
     "iavg": 40,
     "vhi": "V_in",
@@ -11455,11 +11308,11 @@
    "hi": [
     [
      "output voltage",
-     "4.90 V"
+     "4.74 V"
     ],
     [
      "each inductor",
-     "1.33 µH"
+     "1.28 µH"
     ],
     [
      "current per inductor",
@@ -11479,20 +11332,20 @@
     ]
    ],
    "warn": [],
-   "pout": 294,
+   "pout": 284.55,
    "groups": [
     {
      "t": "Operating point",
      "rows": [
       [
        "Output voltage",
-       "4.90 V",
+       "4.74 V",
        ""
       ],
       [
        "Required V_sec",
        "14.0 V",
-       "for the target output"
+       "for the target output, drop included"
       ],
       [
        "Duty D",
@@ -11511,7 +11364,7 @@
      "rows": [
       [
        "L each",
-       "1.33 µH",
+       "1.28 µH",
        ""
       ],
       [
@@ -11589,7 +11442,7 @@
      "kind": "buck",
      "C": 0.0000576923076923,
      "esr": 0,
-     "Vdc": 4.9,
+     "Vdc": 4.7425,
      "Io": 60,
      "fsw": 200000,
      "n": 2
@@ -11600,11 +11453,11 @@
    "hi": [
     [
      "output voltage",
-     "4.90 V"
+     "4.74 V"
     ],
     [
      "each inductor",
-     "13.3 µH"
+     "12.8 µH"
     ],
     [
      "current per inductor",
@@ -11624,20 +11477,20 @@
     ]
    ],
    "warn": [],
-   "pout": 29.4,
+   "pout": 28.455,
    "groups": [
     {
      "t": "Operating point",
      "rows": [
       [
        "Output voltage",
-       "4.90 V",
+       "4.74 V",
        ""
       ],
       [
        "Required V_sec",
        "14.0 V",
-       "for the target output"
+       "for the target output, drop included"
       ],
       [
        "Duty D",
@@ -11656,7 +11509,7 @@
      "rows": [
       [
        "L each",
-       "13.3 µH",
+       "12.8 µH",
        ""
       ],
       [
@@ -11734,7 +11587,7 @@
      "kind": "buck",
      "C": 0.00000576923076923,
      "esr": 0,
-     "Vdc": 4.9,
+     "Vdc": 4.7425,
      "Io": 6,
      "fsw": 200000,
      "n": 2
@@ -11745,11 +11598,11 @@
    "hi": [
     [
      "output voltage",
-     "4.90 V"
+     "4.74 V"
     ],
     [
      "each inductor",
-     "332 nH"
+     "321 nH"
     ],
     [
      "current per inductor",
@@ -11769,20 +11622,20 @@
     ]
    ],
    "warn": [],
-   "pout": 294,
+   "pout": 284.55,
    "groups": [
     {
      "t": "Operating point",
      "rows": [
       [
        "Output voltage",
-       "4.90 V",
+       "4.74 V",
        ""
       ],
       [
        "Required V_sec",
        "14.0 V",
-       "for the target output"
+       "for the target output, drop included"
       ],
       [
        "Duty D",
@@ -11801,7 +11654,7 @@
      "rows": [
       [
        "L each",
-       "332 nH",
+       "321 nH",
        ""
       ],
       [
@@ -11879,7 +11732,7 @@
      "kind": "buck",
      "C": 0.0000144230769231,
      "esr": 0,
-     "Vdc": 4.9,
+     "Vdc": 4.7425,
      "Io": 60,
      "fsw": 800000,
      "n": 2

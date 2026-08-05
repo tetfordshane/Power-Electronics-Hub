@@ -158,13 +158,35 @@ choke current, which is the interval those pages exist to explain. It also
 means the magnetising current always has a path, so no switch-node capacitance
 is needed and no transition is an impulse.
 
-**C_oss belongs where there is dead time, and nowhere else.** It is not free:
-a capacitor charged through an ideal channel has a time constant of
-`R_DS·C_oss`, which at the idealised corner is 10⁻¹⁸ s — five orders below
-the finest step the solver takes after an edge. The trapezoidal rule then
-spreads femtocoulombs into amps and reports hundreds of watts arriving from
-nowhere. A converter whose switches open together, with a clamp or a rectifier
-already holding the winding's current, has no interval that needs one.
+**C_oss belongs where there is dead time, and it carries series resistance.**
+A real switch node's capacitance sits behind the channel and the drift region,
+so there is always resistance in series with it — and that resistance is what
+bounds the current when the switch closes onto it. Without it the peak is
+`V/R_DS(on)` and the discharge is over in `R_DS·C_oss`, which at the idealised
+corner is 10⁻¹⁸ s: five orders below the finest step the solver takes after an
+edge. The trapezoidal rule then spreads femtocoulombs into amps. It was not
+small — every pilot whose source charged a switch node directly reported 4–6 %
+of its input power arriving from nowhere, and check-sim's power-balance gate
+had been set at 8 % to clear it. With `ESR_COSS` the catalogue balances inside
+a quarter of a per cent and the gate is 2 %.
+
+The energy is unchanged either way: ½CV² lands in whatever total resistance
+the loop has, however it is divided. Nothing is sensitive to the value —
+anything from a quarter of an ohm to four settles every circuit to the same
+four figures — so it is chosen for margin against that step size, not from a
+datasheet. Where a converter has no dead time at all, because its switches
+open together onto a clamp or a rectifier that already holds the winding's
+current, it needs no C_oss and should not have one.
+
+**Seed a winding with the sign its own branch has.** A seed is a starting
+guess and a wrong one is usually just slower — except where the map is stiff,
+and then it is the difference between converging and stalling. The SEPIC's
+`L2` is written `["mid","0"]`, so the current it carries is negative in its
+own direction; seeded positive it began a full 2·I_out away, took two hundred
+periods to work back, and stopped short of tolerance often enough that the
+suite's wall-clock budget was set by it. Corrected, it is seven. The fixed
+point is the same one either way — `sim.json` did not move — which is what
+says it was the seed and not the circuit.
 
 `test/golden/sim.json` pins where each circuit's limit cycle sits, to four
 figures, independently of `design.json`. It is there for the changes that are
