@@ -8134,9 +8134,14 @@
        "each cap carries half the primary rms"
       ],
       [
-       "Blocking cap",
-       "film, ≥ 0.1 µF",
-       "sized so V_C ripple ≪ V_in/2"
+       "Blocking cap C_blk",
+       "1.53 µF",
+       "film — ripple 5 % of V_in/2 at I_pri·D/(f_sw·C)"
+      ],
+      [
+       "Divider caps",
+       "15.3 µF",
+       "each, for a tenth of that ripple on the bus"
       ]
      ]
     },
@@ -8258,9 +8263,14 @@
        "each cap carries half the primary rms"
       ],
       [
-       "Blocking cap",
-       "film, ≥ 0.1 µF",
-       "sized so V_C ripple ≪ V_in/2"
+       "Blocking cap C_blk",
+       "153 nF",
+       "film — ripple 5 % of V_in/2 at I_pri·D/(f_sw·C)"
+      ],
+      [
+       "Divider caps",
+       "1.53 µF",
+       "each, for a tenth of that ripple on the bus"
       ]
      ]
     },
@@ -8382,9 +8392,14 @@
        "each cap carries half the primary rms"
       ],
       [
-       "Blocking cap",
-       "film, ≥ 0.1 µF",
-       "sized so V_C ripple ≪ V_in/2"
+       "Blocking cap C_blk",
+       "382 nF",
+       "film — ripple 5 % of V_in/2 at I_pri·D/(f_sw·C)"
+      ],
+      [
+       "Divider caps",
+       "3.82 µF",
+       "each, for a tenth of that ripple on the bus"
       ]
      ]
     },
@@ -8506,9 +8521,14 @@
        "each cap carries half the primary rms"
       ],
       [
-       "Blocking cap",
-       "film, ≥ 0.1 µF",
-       "sized so V_C ripple ≪ V_in/2"
+       "Blocking cap C_blk",
+       "2.14 µF",
+       "film — ripple 5 % of V_in/2 at I_pri·D/(f_sw·C)"
+      ],
+      [
+       "Divider caps",
+       "21.4 µF",
+       "each, for a tenth of that ripple on the bus"
       ]
      ]
     },
@@ -8567,7 +8587,7 @@
     ],
     [
      "duty loss",
-     "7.4 %"
+     "3.7 %"
     ],
     [
      "ZVS above",
@@ -8602,19 +8622,24 @@
        ""
       ],
       [
-       "Effective duty at V_in nom",
+       "Phase shift commanded at V_in nom",
+       "0.431",
+       "of the whole period, duty loss included"
+      ],
+      [
+       "Duty reaching the choke",
        "0.394",
-       ""
+       "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.074",
-       "7.4 % of the half period"
+       "0.037",
+       "3.7 % of the period spent reversing the primary"
       ],
       [
-       "Effective duty at V_in max",
-       "0.305",
-       "after duty loss — the corner the choke is sized at"
+       "Duty reaching the choke at V_in max",
+       "0.375",
+       "the corner the choke is sized at"
       ],
       [
        "Primary current",
@@ -8658,7 +8683,7 @@
      "rows": [
       [
        "L_o",
-       "7.81 µH",
+       "5.00 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -8680,7 +8705,7 @@
     }
    ],
    "wave": {
-    "D": 0.39375,
+    "D": 0.430664285714,
     "dI": 12,
     "iavg": 40,
     "vhi": "V_in",
@@ -8705,7 +8730,7 @@
     ],
     [
      "duty loss",
-     "0.7 %"
+     "0.4 %"
     ],
     [
      "ZVS above",
@@ -8740,19 +8765,24 @@
        ""
       ],
       [
-       "Effective duty at V_in nom",
+       "Phase shift commanded at V_in nom",
+       "0.397",
+       "of the whole period, duty loss included"
+      ],
+      [
+       "Duty reaching the choke",
        "0.394",
-       ""
+       "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.007",
-       "0.7 % of the half period"
+       "0.004",
+       "0.4 % of the period spent reversing the primary"
       ],
       [
-       "Effective duty at V_in max",
-       "0.368",
-       "after duty loss — the corner the choke is sized at"
+       "Duty reaching the choke at V_in max",
+       "0.375",
+       "the corner the choke is sized at"
       ],
       [
        "Primary current",
@@ -8796,7 +8826,7 @@
      "rows": [
       [
        "L_o",
-       "52.8 µH",
+       "50.0 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -8818,7 +8848,7 @@
     }
    ],
    "wave": {
-    "D": 0.39375,
+    "D": 0.397441428571,
     "dI": 1.2,
     "iavg": 4,
     "vhi": "V_in",
@@ -8843,7 +8873,7 @@
     ],
     [
      "duty loss",
-     "29.5 %"
+     "14.8 %"
     ],
     [
      "ZVS above",
@@ -8864,8 +8894,8 @@
    ],
    "warn": [
     [
-     "check",
-     "Duty loss is 29.5 % — that is a lot of transformer you are not using. Reduce L_r or the turns ratio."
+     "stop",
+     "The shift needed at V_in nom is 0.541 of the period once the 14.8 % duty loss is paid, and the ceiling is 0.5. Lower L_r, lower the turns ratio, or narrow the input range."
     ],
     [
      "check",
@@ -8882,19 +8912,24 @@
        ""
       ],
       [
-       "Effective duty at V_in nom",
+       "Phase shift commanded at V_in nom",
+       "0.490",
+       "of the whole period, duty loss included"
+      ],
+      [
+       "Duty reaching the choke",
        "0.394",
-       ""
+       "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.295",
-       "29.5 % of the half period"
+       "0.148",
+       "14.8 % of the period spent reversing the primary"
       ],
       [
-       "Effective duty at V_in max",
-       "0.094",
-       "after duty loss — the corner the choke is sized at"
+       "Duty reaching the choke at V_in max",
+       "0.375",
+       "the corner the choke is sized at"
       ],
       [
        "Primary current",
@@ -8938,7 +8973,7 @@
      "rows": [
       [
        "L_o",
-       "4.06 µH",
+       "1.25 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -8960,7 +8995,7 @@
     }
    ],
    "wave": {
-    "D": 0.39375,
+    "D": 0.49,
     "dI": 12,
     "iavg": 40,
     "vhi": "V_in",
@@ -8985,7 +9020,7 @@
     ],
     [
      "duty loss",
-     "8.4 %"
+     "4.2 %"
     ],
     [
      "ZVS above",
@@ -9006,6 +9041,10 @@
    ],
    "warn": [
     [
+     "stop",
+     "The shift needed at V_in nom is 0.492 of the period once the 4.2 % duty loss is paid, and the ceiling is 0.5. Lower L_r, lower the turns ratio, or narrow the input range."
+    ],
+    [
      "check",
      "The lagging leg only achieves ZVS above 21.5 A of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."
     ]
@@ -9020,19 +9059,24 @@
        ""
       ],
       [
-       "Effective duty at V_in nom",
+       "Phase shift commanded at V_in nom",
+       "0.490",
+       "of the whole period, duty loss included"
+      ],
+      [
+       "Duty reaching the choke",
        "0.450",
-       ""
+       "what V_out = 2·n·V_in·D is solved for"
       ],
       [
        "Duty loss ΔD",
-       "0.084",
-       "8.4 % of the half period"
+       "0.042",
+       "4.2 % of the period spent reversing the primary"
       ],
       [
-       "Effective duty at V_in max",
-       "0.305",
-       "after duty loss — the corner the choke is sized at"
+       "Duty reaching the choke at V_in max",
+       "0.375",
+       "the corner the choke is sized at"
       ],
       [
        "Primary current",
@@ -9076,7 +9120,7 @@
      "rows": [
       [
        "L_o",
-       "7.81 µH",
+       "5.00 µH",
        "sized at V_in max including duty loss, where the ripple is worst"
       ],
       [
@@ -9098,7 +9142,7 @@
     }
    ],
    "wave": {
-    "D": 0.45,
+    "D": 0.49,
     "dI": 12,
     "iavg": 40,
     "vhi": "V_in",

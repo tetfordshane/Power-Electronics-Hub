@@ -42,6 +42,10 @@ const PILOTS = {
      is legitimately about four per cent narrower than the printed ΔI and it
      is the output voltage that is worth asserting. */
   forward2: "corner",
+  /* Same story, and far more of it: a push-pull's choke is sized at V_in max
+     where the duty is shortest, and at nominal the drawn ripple is nearer two
+     thirds of the printed figure. */
+  pushpull: "corner", halfbridge: "corner", psfb: "corner",
 };
 const PILOT_IDS = Object.keys(PILOTS);
 

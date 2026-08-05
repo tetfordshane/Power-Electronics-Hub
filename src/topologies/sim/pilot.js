@@ -382,6 +382,254 @@ export const forward2 = (spec, res) => {
   };
 };
 
+/* ------------------------------------------------------------ push-pull -- */
+/* Four windings on one core, and the element here couples two — so the core is
+   composed rather than stamped.
+
+   One winding is the reference: the upper half of the primary. Every other
+   winding is the secondary of its own XF whose primary is that same pair, so
+   each transformer relates one winding to the reference and the ampere-turns
+   add up by themselves — each secondary carries −r times its own primary
+   current, and those primary currents all flow in the reference winding. What
+   composition can get wrong is agreement, and netlist.validate() holds the
+   three branches to describing one core rather than three.
+
+   Which way each half is wound is the part worth reading slowly. The primary
+   is ONE winding from pa through the centre tap to pb, so a volt per turn is a
+   volt per turn all the way along: v(ct) − v(pa) = v(pb) − v(ct). That is why
+   grounding pa puts 2·V_in on the other switch, which is the whole character
+   of this topology, and it is why the lower half is written ["pb", "in"] — the
+   continuation of the upper half, not a mirror of it. The secondary reads the
+   same way round, so Q1 lights D1, which is what the figure above says. */
+export const pushpull = (spec, res) => {
+  const c = common(spec);
+  const n = Math.max(res.sim.n, 1e-4);
+  const XF = { type: "XF", n: ["in", "pa"], phase: "aiding" };
+  return {
+    branches: [
+      /* The source feeds the centre tap, so `in` is both the supply node and
+         the junction of the two half-primaries. */
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "Q1", type: "SW", n: ["pa", "0"], ron: c.ron, roff: ROFF },
+      { id: "Q2", type: "SW", n: ["pb", "0"], ron: c.ron, roff: ROFF },
+      { id: "Lm", type: "L", n: ["in", "pa"], value: res.sim.Lm },
+      /* The other half of the primary, at the same turns. */
+      { ...XF, id: "XFp", n: ["in", "pa", "pb", "in"], ratio: 1 },
+      /* The two secondary halves, each n times the half-primary. */
+      { ...XF, id: "XFa", n: ["in", "pa", "sa", "sct"], ratio: 1 / n },
+      { ...XF, id: "XFb", n: ["in", "pa", "sct", "sb"], ratio: 1 / n },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "sct"], value: loadR(spec, res) },
+    ],
+    isolated: ["sct"],
+    /* Both gates ground-referenced and half a period apart — the reason to
+       choose this topology at a low input voltage. Neither is complementary:
+       between them the primary is undriven and the choke freewheels through
+       both rectifiers at once, which is the interval that makes each diode
+       average half the load whatever the duty. */
+    gates: { kind: "combine", parts: [
+      { kind: "pwm1", sw: "Q1" },
+      { kind: "pwm1", sw: "Q2", phase: 0.5 },
+    ] },
+    seed: { L1: spec.iout, C1: spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      vsw: { kind: "node", id: "pa" },
+      vout: { kind: "node", id: "out" },
+      /* Not drawn — check-sim's power balance reads it, and it is named
+         outside the /^i[QD]/ family so it never joins a conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
+      iQ: { kind: "branch", id: "Q1" },
+      iQ2: { kind: "branch", id: "Q2" },
+      iD1: { kind: "branch", id: "D1" },
+      iD2: { kind: "branch", id: "D2" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    /* The two rectifiers are the choke current's alternatives and add to it
+       exactly, including across the freewheel where it splits between them.
+       The primary is not in the sum: it conducts at the same instant and
+       carries a different current. */
+    flow: ["iD1", "iD2"],
+    /* Named so the phase claim is examined rather than skipped. What it finds
+       here is that a push-pull has no idle half for a miswound secondary to
+       rectify in — both half-cycles are driven, and reversing the whole
+       secondary maps the circuit onto itself. check-sim says so out loud and
+       hands the claim to the composition check, which is where the error a
+       centre tap can actually make lives. */
+    rectifier: "iD1",
+    plot: "iL",
+  };
+};
+
+/* ----------------------------------------------------------- half-bridge */
+/* The same centre-tapped secondary as the push-pull, driven from the other
+   side of the argument: instead of doubling the voltage each switch blocks in
+   order to keep both gates on the ground rail, halve the voltage the winding
+   sees in order to keep each switch at the rail. That is what the capacitor
+   divider is for, and it is why almost every off-line supply above 200 W
+   starts here.
+
+   Two things about the divider are worth knowing before editing it. Two ideal
+   capacitors in series across an ideal source is a loop of voltage sources —
+   a capacitor is stamped as a voltage source of its own state — so the matrix
+   is singular and `compile` returns null. What breaks the loop is the thing
+   that breaks it in reality: a film capacitor has series resistance, and once
+   it is here the divider's SUM is held at the rail by a fast loop while its
+   SPLIT is held by nothing at all, which is exactly true of the real circuit
+   and exactly why real dividers carry balancing resistors. The split is seeded
+   at half the rail and stays there, because nothing moves it. */
+const ESR_FILM = 5e-3;
+
+export const halfbridge = (spec, res) => {
+  const c = common(spec);
+  const n = Math.max(res.sim.n, 1e-4);
+  const XF = { type: "XF", n: ["sw", "pb"], phase: "aiding" };
+  const vin = vinOf(spec);
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vin },
+      { id: "Ca", type: "C", n: ["in", "mid"], value: res.sim.Cdiv, esr: ESR_FILM },
+      { id: "Cb", type: "C", n: ["mid", "0"], value: res.sim.Cdiv, esr: ESR_FILM },
+      { id: "Q1", type: "SW", n: ["in", "sw"], ron: c.ron, roff: ROFF },
+      { id: "Q2", type: "SW", n: ["sw", "0"], ron: c.ron, roff: ROFF },
+      /* In series with the primary, and the reason a half-bridge does not walk
+         its flux: any asymmetry between the two half-cycles charges this, and
+         the charge opposes the asymmetry. It settles at zero volts, because
+         the divider has already done the level shift. */
+      { id: "Cblk", type: "C", n: ["mid", "pb"], value: res.sim.Cblk, esr: ESR_FILM },
+      { id: "Lm", type: "L", n: ["sw", "pb"], value: res.sim.Lm },
+      { ...XF, id: "XFa", n: ["sw", "pb", "sa", "sct"], ratio: 1 / n },
+      { ...XF, id: "XFb", n: ["sw", "pb", "sct", "sb"], ratio: 1 / n },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "sct"], value: loadR(spec, res) },
+    ],
+    isolated: ["sct"],
+    gates: { kind: "combine", parts: [
+      { kind: "pwm1", sw: "Q1" },
+      { kind: "pwm1", sw: "Q2", phase: 0.5 },
+    ] },
+    /* Half the rail on each divider capacitor: the one state the circuit will
+       not find for itself, because nothing in it pushes the split either way. */
+    seed: { L1: spec.iout, C1: spec.vout, Ca: vin / 2, Cb: vin / 2 },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      vsw: { kind: "node", id: "sw" },
+      vout: { kind: "node", id: "out" },
+      iin: { kind: "branch", id: "Vin" },
+      iQ: { kind: "branch", id: "Q1" },
+      iQ2: { kind: "branch", id: "Q2" },
+      iD1: { kind: "branch", id: "D1" },
+      iD2: { kind: "branch", id: "D2" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    flow: ["iD1", "iD2"],
+    rectifier: "iD1",
+    plot: "iL",
+  };
+};
+
+/* --------------------------------------------- phase-shifted full bridge */
+/* Both legs run flat out at fifty-fifty and nothing is throttled by duty at
+   all — what is varied is how far one leg is slid against the other, and the
+   overlap between the diagonals is the power interval. So the schedule is two
+   complementary legs and one `phase`, and the design's own D is the shift.
+
+   The interesting interval is the one between them, and it is the reason this
+   netlist carries parts the other bridges do not. When a diagonal opens, the
+   current in L_r keeps flowing and has nowhere to go but the switch-node
+   capacitances — it discharges the one that is about to close and charges the
+   one that just opened, and the body diode catches the node when it arrives at
+   the far rail. The switch then closes across nothing. All four body diodes and
+   both node capacitances are here because that sequence is what the figure
+   claims happens, and none of it can happen without them: no capacitance and
+   the node is an open circuit driven by an inductor, no body diode and it sails
+   past the rail to whatever the off-state resistance implies.
+
+   Whether it arrives in time is not authored either. The lagging leg has only
+   L_r's own energy to swing with, so at light load it does not make it and
+   turns on hard — which is the caution the panel prints, arrived at rather
+   than asserted. */
+export const psfb = (spec, res) => {
+  const c = common(spec);
+  const n = Math.max(res.sim.n, 1e-4);
+  const vf = Math.min(c.vf, 0.8);
+  const D = res.wave && res.wave.D !== undefined ? res.wave.D : 0.5;
+  /* Leg A's midpoint IS the winding's far terminal — no series element between
+     them — so it is written as one node. The primary is written that terminal
+     first, so the power interval (Q1 high, Q4 low: the diagonal the figure
+     opens on) drives it positive. */
+  const XF = { type: "XF", n: ["a", "pa"], phase: "aiding" };
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      { id: "Q1", type: "SW", n: ["in", "a"], ron: c.ron, roff: ROFF },
+      { id: "Q2", type: "SW", n: ["a", "0"], ron: c.ron, roff: ROFF },
+      { id: "Q3", type: "SW", n: ["in", "b"], ron: c.ron, roff: ROFF },
+      { id: "Q4", type: "SW", n: ["b", "0"], ron: c.ron, roff: ROFF },
+      { id: "Db1", type: "D", n: ["a", "in"], ron: RON_D, roff: ROFF, vf },
+      { id: "Db2", type: "D", n: ["0", "a"], ron: RON_D, roff: ROFF, vf },
+      { id: "Db3", type: "D", n: ["b", "in"], ron: RON_D, roff: ROFF, vf },
+      { id: "Db4", type: "D", n: ["0", "b"], ron: RON_D, roff: ROFF, vf },
+      { id: "CossA", type: "C", n: ["a", "0"], value: Math.max(c.coss, 1e-12) },
+      { id: "CossB", type: "C", n: ["b", "0"], value: Math.max(c.coss, 1e-12) },
+      /* Leg A reaches the winding directly; leg B reaches it through L_r,
+         which is the leakage plus whatever was added to it on purpose. */
+      { id: "Lr", type: "L", n: ["b", "pa"], value: res.sim.Lr },
+      { id: "Lm", type: "L", n: ["a", "pa"], value: res.sim.Lm },
+      { ...XF, id: "XFa", n: ["a", "pa", "sa", "sct"], ratio: 1 / n },
+      { ...XF, id: "XFb", n: ["a", "pa", "sct", "sb"], ratio: 1 / n },
+      { id: "D1", type: "D", n: ["sa", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D2", type: "D", n: ["sb", "rect"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["rect", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "sct"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "sct"], value: loadR(spec, res) },
+    ],
+    isolated: ["sct"],
+    /* Two legs at a flat fifty per cent, one slid along by the design's own
+       effective duty. Slide them together and the diagonals never overlap and
+       the transformer sees nothing; slide them apart and the overlap is the
+       power interval. That is the control, and it is one number here. */
+    gates: { kind: "combine", parts: [
+      { kind: "complementary", hi: "Q1", lo: "Q2", d: 0.5, td: res.sim.td },
+      { kind: "complementary", hi: "Q3", lo: "Q4", d: 0.5, td: res.sim.td, phase: D },
+    ] },
+    seed: {
+      L1: spec.iout, C1: spec.vout, Lr: n * spec.iout,
+      CossA: vinOf(spec), CossB: 0,
+    },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      /* The lagging leg's node — the one whose transition is in question. */
+      vsw: { kind: "node", id: "b" },
+      vout: { kind: "node", id: "out" },
+      iin: { kind: "branch", id: "Vin" },
+      iQ: { kind: "branch", id: "Q1" },
+      iQ4: { kind: "branch", id: "Q4" },
+      iD1: { kind: "branch", id: "D1" },
+      iD2: { kind: "branch", id: "D2" },
+      iC: { kind: "branch", id: "C1" },
+      /* The primary current, which in this converter never stops: it keeps
+         circulating through the freewheel intervals, and that is both what
+         buys the soft switching and what costs the light-load efficiency.
+         Outside the /^i[QD]/ family because it is not an alternative to
+         anything — it flows at the same time as the rectifiers. */
+      ipri: { kind: "branch", id: "Lr" },
+    },
+    flow: ["iD1", "iD2"],
+    rectifier: "iD1",
+    plot: "iL",
+  };
+};
+
 /* ------------------------------------------- the coupled-capacitor family */
 /* SEPIC, Ćuk and Zeta are the same five parts in three arrangements, and the
    arrangement is the whole lesson: where the series capacitor sits decides
@@ -656,6 +904,7 @@ export const fsbb = (spec, res) => {
 };
 
 export const SIM = {
-  buck, syncbuck, boost, buckboost, flyback, forward2, cuk, sepic, zeta,
+  buck, syncbuck, boost, buckboost, flyback, forward2, pushpull, halfbridge, psfb,
+  cuk, sepic, zeta,
   multiphase, fsbb,
 };

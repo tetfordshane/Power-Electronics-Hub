@@ -343,7 +343,15 @@ const TB = [
     const Pq = 2 * Iqrms * Iqrms * s.rds * 1e-3;
     const Pdo = s.vf * Io;
     const Psw = 2 * 0.5 * (2 * s.vinNom) * Ipri * s.tsw * 1e-9 * fs;
+    /* Magnetising inductance of one half-primary, for the circuit only.
+       The design does not pin it and does not need to — see the note on the
+       two-switch forward, which chooses it the same way and for the same
+       reason. Here the winding is driven both ways, so the current swings
+       symmetrically about zero and the peak is half the ramp. */
+    const Lm = s.vinNom * Dn / (2 * fs * 0.1 * Ipri);
     return {
+      /* The components the circuit is built from, in SI. */
+      sim: { L, C: Co, n, Lm },
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(2 * s.vinMax, "V")]],
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)", ["Q1", "Q2"]],
         ["Primary switching", Psw, "hard switched against 2·V_in", ["Q1", "Q2"]],
@@ -425,7 +433,23 @@ const TB = [
     const Pq = 2 * Iqrms * Iqrms * s.rds * 1e-3;
     const Pdo = s.vf * Io;
     const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
+    /* The blocking capacitor, as a number rather than as advice.
+       It carries the primary current for one switch's on-time each half cycle,
+       so its ripple is I_pri·D/(f_sw·C) — and it has to stay small against the
+       V_in/2 the winding is driven with, or the blocking capacitor is itself
+       throwing away duty. Five per cent is the usual budget. The row below
+       used to read "film, ≥ 0.1 µF", which at this power is fifteen times too
+       small; a number that the simulation also runs cannot be that. */
+    const Cblk = Ipri * Dn / (fs * 0.05 * s.vinNom / 2);
+    /* The divider caps are the bus, so they ripple a tenth as much. */
+    const Cdiv = 10 * Cblk;
+    /* Magnetising inductance of the primary, for the circuit only — same
+       basis as the push-pull and the forward, and here the winding is driven
+       with half the rail. */
+    const Lm = s.vinNom * Dn / (4 * fs * 0.1 * Ipri);
     return {
+      /* The components the circuit is built from, in SI. */
+      sim: { L, C: Co, n, Lm, Cblk, Cdiv },
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["V_DS stress", eng(s.vinMax, "V")]],
       loss: [["Primary conduction", Pq, "2·I_Q(rms)²·R_DS(on)", ["Q1", "Q2"]],
         ["Primary switching", Psw, "hard switched against V_in", ["Q1", "Q2"]],
@@ -449,7 +473,8 @@ const TB = [
         ]),
         G("Bridge capacitors", [
           R("Divider cap rms current", eng(Icdiv, "A"), "each cap carries half the primary rms"),
-          R("Blocking cap", "film, ≥ 0.1 µF", "sized so V_C ripple ≪ V_in/2"),
+          R("Blocking cap C_blk", eng(Cblk, "F"), "film — ripple 5 % of V_in/2 at I_pri·D/(f_sw·C)"),
+          R("Divider caps", eng(Cdiv, "F"), "each, for a tenth of that ripple on the bus"),
         ]),
         G("Output filter", [
           R("L", eng(L, "H")), R("C_out (charge)", eng(Co, "F")),
@@ -467,7 +492,7 @@ const TB = [
   what: "A full bridge where nothing is throttled by duty at all — both halves run flat out at an even fifty-fifty. What is varied is the timing of one half against the other. When the two are aligned they fight each other and the transformer sees nothing; slide them apart and the transformer is driven for the overlap. That is the control. The bonus is what happens in the gaps: the leakage inductance of the transformer, normally a nuisance, keeps pushing current and uses it to discharge the switch that is about to turn on, so it closes with no voltage across it and costs nothing to close. The catch is that this depends on there being enough current to do the discharging, so at light load one leg loses the effect and starts switching hard.",
   eqs: [
     { e: "V_out = 2·n·V_in·D_eff", n: "D_eff = phase shift / 180°" },
-    { e: "ΔD = 4·L_r·n·I_out·f_sw / V_in", n: "duty lost while the primary current reverses" },
+    { e: "ΔD = 2·L_r·n·I_out·f_sw / V_in", n: "duty lost while the primary current reverses — headroom, not output: the loop commands the shift back" },
     { e: "½·L_r·I_pri² ≥ (4/3)·C_oss·V_in²", n: "lagging-leg ZVS; the 4/3 lumps device C_oss with transformer winding capacitance" },
     { e: "t_dead ≈ 2·C_oss·V_in / I_pri", n: "or a quarter of the L_r–C_oss resonant period" },
   ],
@@ -479,21 +504,38 @@ const TB = [
   design(s) {
     const fs = s.fsw * 1e3, Vo = s.vout, Io = s.iout, Lr = s.lr * 1e-6, Co_ss = s.coss * 1e-12;
     const n = (Vo + s.vf) / (2 * s.vinMin * s.dmax);
-    const Dn = (Vo + s.vf) / (2 * n * s.vinNom);
-    const dD = 4 * Lr * n * Io * fs / s.vinNom;
     const Ipri = n * Io;
     const dI = s.r * Io;
+    /* Two different duties, and keeping them apart is the whole of this
+       page's arithmetic.
+
+       What reaches the choke is fixed by the OUTPUT: V_out = 2·n·V_in·D_eff,
+       so at any input the effective duty is just the ratio. What has to be
+       COMMANDED is larger, because part of every phase-shift interval is
+       spent reversing the primary current through L_r before the secondary
+       can conduct at all — the loop simply asks for more shift until the
+       output is right. So duty loss is headroom spent, not output lost, and
+       it belongs on the commanded figure rather than on the effective one.
+
+       ΔD is written here in the units D is in: a fraction of the WHOLE
+       period, because that is what D means on this page (V_out = 2·n·V_in·D,
+       two pulses per period). The primary swings from −I_pri to +I_pri with
+       the full rail across L_r, so Δt = 2·L_r·I_pri/V_in and ΔD = Δt·f_sw.
+       It used to carry the factor for a fraction of the HALF period, which
+       is twice as much, and it was subtracted from a duty already measured
+       against the whole one — so the choke was sized at a duty this converter
+       never runs at, and the simulator settled 9 % below the rail the page
+       above it promised. */
+    const Deff = (v) => (Vo + s.vf) / (2 * n * v);
+    const dLoss = (v) => 2 * Lr * Ipri * fs / v;
+    const Deffn = Deff(s.vinNom), dD = dLoss(s.vinNom);
+    const Dn = Math.min(Deffn + dD, 0.49);
     /* Size the choke where its ripple is worst, which is V_in max — the same
-       corner the buck, the forward, the push-pull and the half-bridge all use.
-       Two things push that way at once here: the duty needed falls as the
-       input rises, and the duty LOST while the primary current reverses has
-       to come off as well, because the choke only sees what actually reaches
-       it. Sizing at nominal duty and ignoring the loss it had already
-       computed left L undersized on both counts. */
-    const Dm = (Vo + s.vf) / (2 * n * s.vinMax);
-    const dDm = 4 * Lr * n * Io * fs / s.vinMax;
-    const Deff = Math.max(Dm - dDm, 0.01);
-    const L = Vo * (1 - 2 * Deff) / (2 * fs * dI);
+       corner the buck, the forward, the push-pull and the half-bridge all
+       use, and for the same reason: that is where the shortest duty leaves
+       the longest freewheel. */
+    const Dm = Deff(s.vinMax);
+    const L = Vo * (1 - 2 * Dm) / (2 * fs * dI);
     const Cout = dI / (8 * 2 * fs * s.dvout * 1e-3);
     const Izvs = s.vinNom * Math.sqrt((8 / 3) * Co_ss / Lr);
     const td = 2 * Co_ss * s.vinNom / Math.max(Ipri, 1e-6);
@@ -503,7 +545,17 @@ const TB = [
        circulating conduction is the topology's characteristic loss. */
     const Pq = 2 * Ipri * Ipri * s.rds * 1e-3;
     const Pdo = s.vf * Io;
+    /* Magnetising inductance, for the circuit only — same basis as the other
+       transformer pages. In a phase-shifted bridge it is not a nuisance: the
+       magnetising current is still flowing when the diagonal opens, so it
+       helps swing the node that is about to turn on. */
+    const Lm = s.vinNom * Dn / (2 * fs * 0.1 * Ipri);
     return {
+      /* The components the circuit is built from, in SI. `td` is the dead time
+         computed above rather than an input, because this converter's dead
+         time is a consequence of C_oss and the current available to swing it —
+         which is exactly what the ZVS interval below the figure is about. */
+      sim: { L, C: Cout, n, Lm, Lr, td },
       hi: [["turns ratio", f3(n)], ["duty loss", pct(dD)], ["ZVS above", eng(zvsLoad, "A")]],
       loss: [["Primary conduction", Pq, "2·I_pri²·R_DS(on), circulating all period",
           ["Q1", "Q2", "Q3", "Q4"]],
@@ -516,14 +568,21 @@ const TB = [
         cap: { kind: "buck", C: Cout, esr: esrOhm(s), Vdc: Vo, Io, fsw: fs } },
       warn: warns(
         W("check", dD > 0.15 && "Duty loss is " + pct(dD) + " — that is a lot of transformer you are not using. Reduce L_r or the turns ratio."),
+        /* The shift needed has run into the half-period ceiling, so the
+           converter cannot reach its output here at all — the page below is
+           describing a rail it does not make. */
+        W("stop", Deffn + dD > 0.49 && "The shift needed at V_in nom is " + f3(Deffn + dD)
+          + " of the period once the " + pct(dD) + " duty loss is paid, and the ceiling is 0.5. "
+          + "Lower L_r, lower the turns ratio, or narrow the input range."),
         W("check", zvsLoad > Io * 0.5 && "The lagging leg only achieves ZVS above " + eng(zvsLoad, "A") + " of output. Add magnetising current, a saturable inductor, or accept hard switching at light load."),
       ),
       groups: [
         G("Transformer and duty", [
           R("Turns ratio N_s/N_p", f3(n)),
-          R("Effective duty at V_in nom", f3(Dn)),
-          R("Duty loss ΔD", f3(dD), pct(dD) + " of the half period"),
-          R("Effective duty at V_in max", f3(Deff), "after duty loss — the corner the choke is sized at"),
+          R("Phase shift commanded at V_in nom", f3(Dn), "of the whole period, duty loss included"),
+          R("Duty reaching the choke", f3(Deffn), "what V_out = 2·n·V_in·D is solved for"),
+          R("Duty loss ΔD", f3(dD), pct(dD) + " of the period spent reversing the primary"),
+          R("Duty reaching the choke at V_in max", f3(Dm), "the corner the choke is sized at"),
           R("Primary current", eng(Ipri, "A")),
         ]),
         G("Soft switching", [

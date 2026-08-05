@@ -29,8 +29,7 @@ export const NOSIM_REASON = {
 
   /* Centre-tapped or multi-winding magnetics: more than the two coupled
      windings the transformer element models today. */
-  pushpull: "windings", halfbridge: "windings",
-  psfb: "windings", ctrect: "windings", syncrect: "windings", doubler: "windings",
+  ctrect: "windings", syncrect: "windings", doubler: "windings",
 
   /* Legs that switch at an offset from one another rather than together.
      Multiphase left this list when the modulator learned to shift a schedule;

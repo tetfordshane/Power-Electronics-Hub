@@ -196,12 +196,21 @@ for (const id of Object.keys(SIM)) {
       const xf = (circuit.branches || []).filter((b) => b.type === "XF");
       const rect = circuit.rectifier || "iD";
       const drive = (circuit.branches || []).filter((b) => b.type === "SW").map((b) => b.id);
-      if (xf.length && drive.length && runI.views[rect] && runI.condAt) {
+      if (xf.length && !runI.views[rect]) {
+        /* A transformer whose phase claim rests on nothing. Before this was a
+           failure the check simply did not run, which is the same silence a
+           correct circuit produces — so the one topology it was written for
+           was also the only one it covered. */
+        fail(id, `has a transformer but no "${rect}" probe, so nothing stands behind its `
+          + 'declared phase — name the forward rectifier with `rectifier:`');
+      } else if (xf.length && drive.length && runI.condAt) {
         const win = driveWindow(runI, drive);
         if (!win.single) {
-          notes.push(`${id} drives its primary in ${win.runs} separate intervals, so the `
-            + "period has no idle half to rectify in — its phase is held by the composition "
-            + "check rather than by conduction timing");
+          notes.push(`${id} ${win.runs > 1
+            ? `drives its primary in ${win.runs} intervals half a period apart`
+            : `has a switch closed for ${(win.width * 100).toFixed(0)} % of the period`}`
+            + ", so there is no idle half for a miswound secondary to rectify in — its phase "
+            + "is held by the composition check rather than by conduction timing");
         } else {
           const share = onShare(runI, drive, rect);
           if (Number.isFinite(share)) {
