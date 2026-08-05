@@ -49,7 +49,7 @@ import { readFileSync } from "fs";
    real `wave` spec, it must gain a `cap` spec with it and come off this list. */
 const NO_PANE = [
   "chargepump", "llc", "dab", "pfcboost", "ilpfc", "totempole", "hbridge", "vsi3", "npc3",
-  "halfwave", "bridgerect", "syncrect", "classe", "classepp", "classde",
+  "halfwave", "bridgerect", "classe", "classepp", "classde",
 ];
 
 import { ids as topoIds } from "./lib/topos.mjs";

@@ -50,7 +50,7 @@ const PILOTS = {
      so the printed ΔI is the trace's own. A current doubler's is per winding:
      each choke carries half the load and ripples by r×that, and the pane
      plots one of them. */
-  ctrect: "own", doubler: "own",
+  ctrect: "own", doubler: "own", syncrect: "own",
 };
 const PILOT_IDS = Object.keys(PILOTS);
 

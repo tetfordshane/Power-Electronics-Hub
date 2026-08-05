@@ -250,8 +250,8 @@ const TD = [
   pros: ["Cuts rectification loss several-fold at low output voltage", "Loss falls with current, so light-load efficiency improves", "Enables reverse power flow if you want it"],
   cons: ["Gate drive and timing must be right or you get shoot-through", "Reverse conduction in DCM dumps energy back", "Gate charge sets a frequency ceiling"],
   use: ["Every 12 V and below output above a few amps", "Server and telecom rectifiers", "Anywhere the secondary loss dominates"],
-  fields: ["vout", "iout", "fsw", "dnom", "vf", "rds", "qg", "vg", "td"],
-  defs: { vout: 5, iout: 30, fsw: 150, dnom: 0.4, vf: 0.45, rds: 3, qg: 30, vg: 10, td: 60 },
+  fields: ["vout", "iout", "fsw", "dnom", "r", "dvout", "vf", "rds", "qg", "vg", "td"],
+  defs: { vout: 5, iout: 30, fsw: 150, dnom: 0.4, r: 0.3, dvout: 20, vf: 0.45, rds: 3, qg: 30, vg: 10, td: 60 },
   design(s) {
     const fs = s.fsw * 1e3, Io = s.iout, D = s.dnom, Rd = s.rds * 1e-3;
     const Irms = Io * Math.sqrt(D + (1 - 2 * D) / 4);
@@ -262,7 +262,26 @@ const TD = [
     const Psync = Pcond + Pbody + Pgate;
     const Ibe = s.vf / Rd;
     const Po = s.vout * Io;
+    /* The output filter this page used to leave implicit.
+
+       It is the same centre-tapped secondary the rectifier page next door
+       describes, so the same volt-second balance applies: two pulses of width
+       D against the whole period, V_out = 2·D·(V_sec − drop). The only
+       difference is what the drop IS — a channel resistance rather than a
+       fixed forward voltage, which is the entire subject of the page. Turning
+       that round gives the winding voltage the design implies, and from it a
+       choke and a capacitor.
+
+       Without these the page had loss numbers and no converter: no ΔI, no
+       ripple, and nothing for the figure below to be a figure OF. */
+    const Vsec = s.vout / (2 * D) + Io * Rd;
+    const dI = s.r * Io;
+    const Lf = (Vsec - Io * Rd - s.vout) * D / (fs * dI);
+    const Co = dI / (8 * 2 * fs * s.dvout * 1e-3);
     return {
+      /* The components the circuit is built from, in SI. There is no primary
+         on this page either, so the netlist synthesises one at V_sec. */
+      sim: { L: Lf, C: Co, Vsec },
       hi: [["diode loss", eng(Pdio, "W")], ["synchronous loss", eng(Psync, "W")], ["efficiency gained", pct((Pdio - Psync) / Po)]],
       loss: [["Channel conduction", Pcond, "2·I_rms²·R_DS(on)", ["SR1", "SR2"]],
         /* The body diode is inside the same two parts, which is the point:
@@ -288,6 +307,13 @@ const TD = [
           R("Gate drive", eng(Pgate, "W")),
           R("Equivalent drop per rectifier", eng(Irms * Rd, "V"), "against " + s.vf + " V for the diode"),
         ]),
+        G("The secondary it rectifies", [
+          R("Winding voltage V_sec needed", eng(Vsec, "V"), "for " + eng(s.vout, "V") + " at D = " + f2(D)),
+          R("Filter choke L_f", eng(Lf, "H"), "for ΔI = " + pct(s.r)),
+          R("ΔI_L", eng(dI, "A")),
+          R("C_out (charge term)", eng(Co, "F"), "for ΔV = " + s.dvout + " mV"),
+          R("Ripple frequency", eng(2 * fs, "Hz"), "two power pulses per switching period"),
+        ]),
         G("Getting the drive right", [
           R("Self-driven", "free, poor timing", "windings drive the gates; fails at high duty"),
           R("Control-driven", "best timing", "needs a level shift and accurate dead time"),
@@ -295,6 +321,13 @@ const TD = [
           R("DCM hazard", "reverse conduction", "turn off on zero crossing, not on the clock"),
         ]),
       ],
+      /* Two power pulses per period, and the node behind the rectifiers is
+         positive in both — the same choke-input filter the centre-tapped
+         rectifier page draws, because it is the same secondary. What differs
+         is only what stands in the return leg. */
+      wave: { D, dI, iavg: Io, vlabel: "v_tap", vhi: "V_sec", ilabel: "i_Lf",
+        pulses: 2,
+        cap: { kind: "buck", C: Co, esr: esrOhm(s), Vdc: s.vout, Io, fsw: fs } },
     };
   },
 },

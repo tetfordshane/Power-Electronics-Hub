@@ -68,10 +68,11 @@ being forced into an open circuit; and a flyback secondary is **anti-phase**,
 which is the whole difference between a flyback and a forward converter —
 wired in phase it still converges, still regulates, and reads about 20 % high.
 
-Converted so far: buck, sync buck, boost, buck-boost, flyback, Ćuk, SEPIC,
-Zeta. Adding another means a netlist, a `sim: { … }` on the design result so
-the simulation and the printed numbers cannot describe different converters,
-and an entry in `test/sim-steady.test.mjs`.
+Seventeen of the thirty-two are converted; `check-registry` prints the count
+and what the rest are waiting on, so the backlog is a number that falls rather
+than a list to keep. Adding another means a netlist, a `sim: { … }` on the
+design result so the simulation and the printed numbers cannot describe
+different converters, and an entry in `test/sim-steady.test.mjs`.
 
 That entry records what the design's ΔI actually refers to, because it is not
 the same quantity everywhere: `"own"` where the design sizes L for the plotted
@@ -116,6 +117,54 @@ Four things a netlist must now say, each of which used to be a silent fault:
 - **`compile()` returning null is an error that says which configuration.**
   It used to surface as a TypeError reading `.A` of null, in a caller that
   knew nothing about circuits.
+
+**A transformer with more than two windings is composed, not stamped.** The
+`XF` element couples exactly two, and a centre tap has three or four on one
+core. The way to say so is several `XF` branches that all name the SAME
+winding as their primary: each relates one other winding to that reference,
+and the ampere-turns come out right by themselves, because every secondary
+carries −r of its own primary current and those primary currents all flow in
+the reference winding. That leaves `mna.js`'s least-exercised stamp alone,
+which is worth more than the convenience of extending it.
+
+What composition can get wrong is agreement, so `validate()` holds a group of
+transformers to describing ONE core: the same reference winding, written the
+same way round, the same `phase`. A centre-tapped primary is one continuous
+winding through the tap, so a volt per turn is a volt per turn all the way
+along — which is why the lower half is written as the CONTINUATION of the
+upper (`["in","pa","pb","in"]`), not as its mirror, and why grounding one end
+puts 2·V_in on the other switch.
+
+The numeric dot-convention check does not apply to these. It needs a period
+with an idle half for a miswound secondary to rectify in; a push-pull's two
+half-cycles are mirror images and a phase-shifted bridge never opens both legs
+at all, so reversing a whole secondary maps the circuit onto itself and there
+is nothing left to detect. check-sim says so out loud rather than skipping,
+and a circuit names the probe its phase claim rests on with `rectifier:`.
+
+**A page whose output voltage is a RESULT must publish `pout`.** The rectifier
+pages take a winding voltage and a duty; the rail is what those make. Three
+things read that: the efficiency map's denominator, check-sim's "does it
+convert, and to what the design said", and the results panel's measured note.
+All three take it from `pout/I_out` when there is no `vout` field, so one
+definition of the target governs the check, the test and the page.
+
+**Where there is no primary, the netlist synthesises one.** A source at the
+winding voltage and four switches making a square wave across a 1:1 primary —
+`driven()` in `pilot.js`. Its freewheel state SHORTS that primary rather than
+opening it, and that is load-bearing: a shorted primary is what makes the
+secondary genuinely undriven between pulses, so both rectifiers share the
+choke current, which is the interval those pages exist to explain. It also
+means the magnetising current always has a path, so no switch-node capacitance
+is needed and no transition is an impulse.
+
+**C_oss belongs where there is dead time, and nowhere else.** It is not free:
+a capacitor charged through an ideal channel has a time constant of
+`R_DS·C_oss`, which at the idealised corner is 10⁻¹⁸ s — five orders below
+the finest step the solver takes after an edge. The trapezoidal rule then
+spreads femtocoulombs into amps and reports hundreds of watts arriving from
+nowhere. A converter whose switches open together, with a clamp or a rectifier
+already holding the winding's current, has no interval that needs one.
 
 `test/golden/sim.json` pins where each circuit's limit cycle sits, to four
 figures, independently of `design.json`. It is there for the changes that are
@@ -537,6 +586,28 @@ slope of the shared cycle model, so it cannot disagree with the trace. Because
 it depends on d*i*/d*t* and not on *i*, it stays correct where a synchronous
 rectifier's current runs backwards at light load.
 
+**A drawn path names the current it carries.** `rides: ["iQ", "iD3"]` sits
+parallel to a phase's `d:` array, one probe per path. One magnitude for the
+whole figure is right only while one path conducts at a time; a transformer
+delivering through its turns ratio has both sides conducting at the same
+instant carrying different currents, and a single number would move the
+primary's dashes at the secondary's rate. `check-registry` holds the two lists
+to the same length AND checks that each name is a probe the circuit publishes
+— misspelt, the path silently falls back to the summed flow, which looks
+exactly like a path nobody ever named.
+
+The dash belt is normalised by the branch's own net charge, so one period of
+its charge integral is one period of travel. A branch that carries the same
+charge each way — a transformer primary, a resonant tank — has a net of ZERO,
+and dividing by it sends the offset to millions of pixels, which is every
+arrow on that winding teleporting. Those normalise by the charge the branch
+moves in TOTAL instead: the belt runs out while the current is positive, back
+while it is negative, and returns to where it started at the end of the
+period, which is what the copper does and loops seamlessly for the same reason
+the physics does. The test for which is relative — an absolute floor is no
+guard, because a mean of a millionth of the peak divides the travel by a
+millionth and the belt is just as gone.
+
 **Capacitor flow.** A `FLOW` entry animates a capacitor branch with
 `capFlow: [{ d, src }]`, where `d` is drawn in the direction positive current
 travels *into* the capacitor and `src` is `"out"` (the design's own `cap`
@@ -755,12 +826,18 @@ Chromium, which does composite:
   gets measured and not only a steady loop. Run it after touching anything
   the transient draws — its first run found arrows appearing at 0.92.
 
-  Two details of the metric are load-bearing. It judges only frames whose
+  Three details of the metric are load-bearing. It judges only frames whose
   mark COUNT grew, because a nearest-neighbour radius cannot tell a mark that
   appeared from one that merely moved fast, and a capacitor chevron sprinting
   through its zero crossing covers three times the ground a flow arrow does.
-  And it reads opacity from the inline style as well as the attribute: for a
-  while it was blind to the very fade it exists to police.
+  It then excludes marks in that surplus landing within a few pixels of one
+  already present: where two phases route over the SAME copper by different
+  paths — a phase-shifted bridge's circulating loop and its ZVS transition
+  share most of the primary — the cross-fade renders both and the incoming
+  chevrons sit on the outgoing ones, which grows the count without anything
+  entering the reader's view. And it reads opacity from the inline style as
+  well as the attribute: for a while it was blind to the very fade it exists
+  to police.
 
 **A dissolve is a duration.** Written as a fraction of a cycle, or as a
 distance along a path, it keeps its size and loses its time the moment the

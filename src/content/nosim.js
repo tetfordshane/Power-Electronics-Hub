@@ -1,16 +1,18 @@
 /* Why this figure is drawn from equations rather than solved as a circuit.
 
-   Twenty-four of the thirty-two are. The reader has no way to know that from
-   the page unless the page says so: the "simulated" badge is present on eight
-   and absent on the rest, and an absence explains nothing — it reads exactly
-   like a feature that is broken, or one nobody noticed was missing.
+   Fifteen of the thirty-two are, and the number falls. The reader has no way
+   to know which from the page unless the page says so: the "simulated" badge
+   is present on some and absent on the rest, and an absence explains nothing
+   — it reads exactly like a feature that is broken, or one nobody noticed was
+   missing.
 
-   So each of them names its reason, and the reasons are a closed set of seven
-   because they are the capabilities the engine does not have yet. That makes
-   this file the conversion backlog as well as the copy: when the line-scale
-   envelope lands, eight entries leave at once and check-registry prints a
-   smaller number. A reason that no topology claims any more is a capability
-   that is finished.
+   So each of them names its reason, and the reasons are a closed set because
+   they are the capabilities the engine does not have yet. That makes this file
+   the conversion backlog as well as the copy: when the line-scale envelope
+   lands, eight entries leave at once and check-registry prints a smaller
+   number. A reason that no topology claims any more is a capability that is
+   finished, and it goes — "windings" left when the last centre tap was
+   composed out of two coupled windings rather than waiting for a third.
 
    What each entry must NOT do is apologise. A closed-form figure is not a
    degraded one — it is what the whole app was before there was a solver at
@@ -26,10 +28,6 @@ export const NOSIM_REASON = {
      period describes a single instant of it. */
   halfwave: "line", bridgerect: "line", pfcboost: "line", ilpfc: "line",
   totempole: "line", hbridge: "line", vsi3: "line", npc3: "line",
-
-  /* Centre-tapped or multi-winding magnetics: more than the two coupled
-     windings the transformer element models today. */
-  syncrect: "windings",
 
   /* Legs that switch at an offset from one another rather than together.
      Multiphase left this list when the modulator learned to shift a schedule;
@@ -57,12 +55,6 @@ export const NOSIM_WHY = {
       + "switching period is one instant of it rather than the answer. The figure draws that "
       + "instant — the crest, where the stresses are worst — and the equations beside it "
       + "integrate the full cycle, which is where the numbers come from.",
-  },
-  windings: {
-    t: "closed form · magnetics",
-    n: "The transformer here has a centre tap or more windings than the circuit model "
-      + "couples. The design equations handle it exactly; what the drawing cannot yet do is "
-      + "work out the conduction pattern for itself, so the phases below are authored.",
   },
   phase: {
     t: "closed form · interleaved",

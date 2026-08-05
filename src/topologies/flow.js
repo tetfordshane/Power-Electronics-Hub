@@ -5,6 +5,19 @@ import { CE_IM, CE_PH } from "./resonant.js";
 
    Paths are rectilinear M/H/V/L polylines traced onto the schematic's own
    coordinates; scripts/check-flow.mjs checks that they land on it. */
+/* Where a phase-shifted bridge's ZVS transition ends and its freewheel
+   begins, as a fraction of the gap the duty leaves between the power pulse
+   and the half-period — not as a fixed slice of the period.
+
+   A flat 0.04 was survivable while the commanded shift was 0.394. Counting
+   duty loss properly moved it to 0.431, the gap fell to 0.069, and the
+   freewheel beside the transition was squeezed under three hundredths of a
+   period: one or two frames, narrower than the commutation dissolve can fit
+   inside. A route that mounts within a single frame arrives fully lit, which
+   is the pop the frame metric exists to catch. Written as a share of the gap,
+   neither window can collapse whatever the duty does. */
+const ZVS_END = (D) => D + 0.42 * Math.max(0.5 - D, 0.02);
+
 /* ===================== current-flow animation data =====================
    Each phase traces the conducting loop over the schematic, drawn in the
    direction the current actually flows. `f(D)` is the slice of the cycle
@@ -180,16 +193,24 @@ const FLOW = {
      is the circuit shown above it rather than a generic family stand-in --- */
   syncrect: { w: 680, h: 280, sw: [[330, 60, "SR1", -90], [330, 140, "SR2", -90]],
     flux: "vs",
-    /* Two conduction intervals per period, one per rectifier, with the
-       choke ramp on top — the shape a synchronous rectifier actually sees. */
-    iShape: (u) => { const t = u < 0.5 ? u : u - 0.5; return t < 0.34 ? 0.66 + t : 0.55; },
-    ilabel: "i_SR",
     emc: { loop: "M 214 60 H 350 V 140 H 214 Z", node: [350, 100] },
+    /* Four intervals, not two. This page used to draw one rectifier conducting
+       for each whole half-period, which is the arrangement its own I_rms
+       formula does not describe: I_out·√(D + (1−2D)/4) only comes out if both
+       devices are closed together between the pulses, sharing the choke
+       current. The freewheels are where a synchronous rectifier spends most of
+       its time at a low duty, and they were the intervals not drawn. */
     ph: [
-    { on: [1,0], t: "SR1 conducting", f: () => [0, 0.5], n: "The upper half of the winding drives the load through SR1's channel. A FET conducting in the third quadrant drops I·R_DS(on) instead of a fixed V_F, which below about 12 V out is worth more than anything on the primary side.",
-      d: ["M 214 100 H 575 V 230 H 350 V 60 H 214"] },
-    { on: [0,1], t: "SR2 conducting", f: () => [0.5, 1], n: "The winding reverses and SR2 takes over. Both devices must be off before the other turns on: overlap shorts the winding, and gate timing that is late instead lets the body diode conduct and throws the advantage away.",
-      d: ["M 214 100 H 575 V 230 H 350 V 140 H 214"] },
+    { on: [1,0], t: "SR1 conducting", f: (D) => [0, D], n: "The upper half of the winding drives the load through SR1's channel. A FET conducting in the third quadrant drops I·R_DS(on) instead of a fixed V_F, which below about 12 V out is worth more than anything on the primary side.",
+      d: ["M 214 100 H 575 V 230 H 350 V 60 H 214"], rides: ["iQ"] },
+    { on: [1,1], t: "Freewheel — both on", f: (D) => [D, 0.5], n: "The winding is undriven and the choke sustains its own current, which splits between the two channels. Holding both on through this interval is what makes each device carry I_out·√(D + (1−2D)/4) rather than the whole of it, and at a low duty it is where most of the period goes.",
+      d: ["M 214 100 H 575 V 230 H 350 V 140", "M 350 140 V 60 H 214", "M 350 140 H 214"],
+      rides: ["iL", "iQ", "iQ2"] },
+    { on: [0,1], t: "SR2 conducting", f: (D) => [0.5, 0.5 + D], n: "The winding reverses and SR2 takes over alone. Both devices must be off before this one turns on: overlap here shorts the whole winding, and gate timing that is late instead lets the body diode conduct and throws the advantage away.",
+      d: ["M 214 100 H 575 V 230 H 350 V 140 H 214"], rides: ["iQ2"] },
+    { on: [1,1], t: "Freewheel — both on", f: (D) => [0.5 + D, 1], n: "The second freewheel, identical to the first. Two power pulses and two freewheels per switching period is why the output ripple sits at twice the switching frequency.",
+      d: ["M 214 100 H 575 V 230 H 350 V 140", "M 350 140 V 60 H 214", "M 350 140 H 214"],
+      rides: ["iL", "iQ", "iQ2"] },
   ]},
   totempole: { w: 720, h: 280,
     iShape: (u, D) => 0.62 + 0.38 * (u < D ? u / Math.max(D, 0.02) : (1 - u) / Math.max(1 - D, 0.02)),
@@ -418,12 +439,12 @@ const FLOW = {
           "M 430 120 H 398 V 150 H 300 V 255 H 40",
           "M 454 120 V 95 H 585 V 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "ipri", "iD1"] },
-    { on: [0,0,0,1,1,0], t: "ZVS transition", f: (D) => [D, Math.min(D + 0.04, 0.49)], n: "Q1 opens and, for a few tens of nanoseconds, nothing is driving the primary — but the current in L_r keeps flowing and has to go somewhere, so it drains the charge off the switch that is about to turn on. By the time that switch is told to close, the voltage across it has already fallen to zero, so it closes for free. This tiny interval is the entire reason to build a phase-shifted bridge instead of an ordinary one.",
+    { on: [0,0,0,1,1,0], t: "ZVS transition", f: (D) => [D, ZVS_END(D)], n: "Q1 opens and, for a few tens of nanoseconds, nothing is driving the primary — but the current in L_r keeps flowing and has to go somewhere, so it drains the charge off the switch that is about to turn on. By the time that switch is told to close, the voltage across it has already fallen to zero, so it closes for free. This tiny interval is the entire reason to build a phase-shifted bridge instead of an ordinary one.",
       d: ["M 430 120 H 398 V 150 H 300 V 255 H 40",
           "M 585 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "iL"],
       dim: ["M 40 45 H 170 V 150"] },
-    { on: [0,1,0,1,1,1], t: "Freewheel", f: (D) => [Math.min(D + 0.04, 0.49), 0.5], n: "Both conducting switches are now on the same side of the bridge, which short-circuits the primary. Current keeps circulating around that loop — costing conduction loss while delivering nothing — and the output choke freewheels through both rectifiers. Circulating current during this interval is the price the topology pays for its soft switching.",
+    { on: [0,1,0,1,1,1], t: "Freewheel", f: (D) => [ZVS_END(D), 0.5], n: "Both conducting switches are now on the same side of the bridge, which short-circuits the primary. Current keeps circulating around that loop — costing conduction loss while delivering nothing — and the output choke freewheels through both rectifiers. Circulating current during this interval is the price the topology pays for its soft switching.",
       d: ["M 430 184 H 410 V 200 H 180 V 150 H 170 V 45 H 300 V 150 H 398 V 120 H 430",
           "M 585 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "iL"] },
@@ -432,13 +453,13 @@ const FLOW = {
           "M 430 184 H 410 V 200 H 180 V 150 H 170 V 255 H 40",
           "M 454 186 V 215 H 585 V 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "ipri", "iD2"] },
-    { on: [0,1,0,0,0,1], t: "ZVS transition", f: (D) => [0.5 + D, Math.min(0.5 + D + 0.04, 0.99)], n: "The mirror image of the first transition. This is the leg that loses zero-voltage switching first as the load falls, because it relies on energy stored in L_r alone — with less current there is less energy, and below some load it simply cannot swing the node in time.",
+    { on: [0,1,0,0,0,1], t: "ZVS transition", f: (D) => [0.5 + D, 0.5 + ZVS_END(D)], n: "The mirror image of the first transition. This is the leg that loses zero-voltage switching first as the load falls, because it relies on energy stored in L_r alone — with less current there is less energy, and below some load it simply cannot swing the node in time.",
       d: ["M 430 184 H 410 V 200 H 180 V 150 H 170 V 255 H 40",
           "M 300 150 H 398 V 120 H 430",
           "M 585 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "ipri", "iL"],
       dim: ["M 40 45 H 300 V 150"] },
-    { on: [1,0,1,0,1,1], t: "Freewheel", f: (D) => [Math.min(0.5 + D + 0.04, 0.99), 1], n: "The second circulating interval, this time around the upper rail. Notice the primary current does not stop between pulses the way a forward converter's does — it keeps going round, which is what keeps the switches soft but also what makes light load inefficient.",
+    { on: [1,0,1,0,1,1], t: "Freewheel", f: (D) => [0.5 + ZVS_END(D), 1], n: "The second circulating interval, this time around the upper rail. Notice the primary current does not stop between pulses the way a forward converter's does — it keeps going round, which is what keeps the switches soft but also what makes light load inefficient.",
       d: ["M 430 184 H 410 V 200 H 180 V 150 H 170 V 45 H 300 V 150 H 398 V 120 H 430",
           "M 585 150 H 770 V 265 H 490 V 153"],
       rides: ["ipri", "iL"] },

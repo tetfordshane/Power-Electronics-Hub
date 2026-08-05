@@ -806,6 +806,79 @@ export const doubler = (spec, res) => {
   };
 };
 
+/* ------------------------------------------- synchronous rectifier ------ */
+/* The same centre-tapped secondary again, with the rectifiers moved into the
+   return legs so both gates sit on the output ground — which is the practical
+   reason to build it this way at all. The choke is fed from the tap and each
+   winding end is switched down to the return.
+
+   Two things here are not authored, and both are the point of the page. Each
+   FET is commanded on for its own power interval AND for both freewheels, so
+   that between pulses the choke current splits across the pair rather than
+   crowding one of them — that is where I_rms = I_out·√(D + (1−2D)/4) comes
+   from, and it only holds if both are closed together. And the dead time is
+   real: the pair is opened before the other's pulse begins, and across those
+   gaps the body diodes carry the current at a forward drop, which is the loss
+   term the panel prints and could not otherwise stand behind. */
+export const syncrect = (spec, res) => {
+  const c = common(spec);
+  const D = res.wave.D;
+  const drv = driven(res.sim.Vsec, D);
+  /* Dead time as a fraction of the period, taken off the END of each device's
+     window — the instant that matters is the one before the other device's
+     pulse, where an overlap would short the whole winding. */
+  const tdf = Math.min(c.td * spec.fsw * 1e3, Math.max(1 - D, 0) / 4);
+  const win = Math.max(1 - D - tdf, 1e-3);
+  const XF = { type: "XF", n: ["pa", "pb"], phase: "aiding", ratio: 1 };
+  return {
+    branches: [
+      ...drv.branches,
+      { ...XF, id: "XFa", n: ["pa", "pb", "tap", "sa"] },
+      { ...XF, id: "XFb", n: ["pa", "pb", "sb", "tap"] },
+      { id: "SR1", type: "SW", n: ["sa", "0"], ron: c.ron, roff: ROFF },
+      { id: "SR2", type: "SW", n: ["sb", "0"], ron: c.ron, roff: ROFF },
+      /* Inside the same two parts, and pointing the way the channel carries
+         current — a rectifier FET conducts in its third quadrant, so its body
+         diode is already forward for the current it is replacing. That is why
+         a late gate costs a forward drop rather than an open circuit. */
+      { id: "Dsr1", type: "D", n: ["0", "sa"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "Dsr2", type: "D", n: ["0", "sb"], ron: ronD(spec), roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["tap", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "0"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "0"], value: loadR(spec, res) },
+    ],
+    isolated: drv.isolated,
+    gates: { kind: "combine", parts: [
+      ...drv.gates.parts,
+      /* Each device closed for its own pulse and both freewheels, opened a
+         dead time before the other's pulse. */
+      { kind: "pwm1", sw: "SR1", d: win, phase: 0.5 + D },
+      { kind: "pwm1", sw: "SR2", d: win, phase: D },
+    ] },
+    seed: { L1: spec.iout, C1: spec.vout },
+    probes: {
+      ...drv.probes,
+      iL: { kind: "branch", id: "L1" },
+      /* The tap, which is the node the choke actually sees. */
+      vsw: { kind: "node", id: "tap" },
+      vout: { kind: "node", id: "out" },
+      iQ: { kind: "branch", id: "SR1" },
+      iQ2: { kind: "branch", id: "SR2" },
+      iD1: { kind: "branch", id: "Dsr1" },
+      iD2: { kind: "branch", id: "Dsr2" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    /* The four branches the choke current can take, and no two of them carry
+       it at the same instant: a body diode only conducts once its own channel
+       is open, and the two devices only overlap across the freewheels, where
+       their currents genuinely do add to the choke's. */
+    flow: ["iQ", "iQ2", "iD1", "iD2"],
+    rectifier: "iQ",
+    plot: "iL",
+  };
+};
+
 /* ------------------------------------------- the coupled-capacitor family */
 /* SEPIC, Ćuk and Zeta are the same five parts in three arrangements, and the
    arrangement is the whole lesson: where the series capacitor sits decides
@@ -1081,7 +1154,7 @@ export const fsbb = (spec, res) => {
 
 export const SIM = {
   buck, syncbuck, boost, buckboost, flyback, forward2, pushpull, halfbridge, psfb,
-  ctrect, doubler,
+  ctrect, doubler, syncrect,
   cuk, sepic, zeta,
   multiphase, fsbb,
 };

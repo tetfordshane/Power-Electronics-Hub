@@ -530,12 +530,44 @@ function FlowCard({ topo, res, spec, hot }) {
      unchanged. */
   const rideOf = (k, j) => (PH[k] && PH[k].rides && PH[k].rides[j]) || null;
   const viewOf = (name) => (name && M.sim && M.sim.views ? M.sim.views[name] : null);
+  /* How much charge a branch moves in TOTAL over the period, sign ignored.
+     For a branch that carries current one way this is just its net charge;
+     for one that carries the same charge each way it is the only number left. */
+  const absQ = (v) => {
+    let q = 0;
+    for (let i = 1; i < v.pts.length; i++) {
+      const du = v.pts[i].u - v.pts[i - 1].u;
+      q += 0.5 * (Math.abs(v.pts[i].i) + Math.abs(v.pts[i - 1].i)) * du;
+    }
+    return q;
+  };
   const offOf = (v) => {
-    /* A branch whose charge nets to nothing over a period — a bipolar
-       winding — has no meaningful travel to normalise against, so it keeps
-       the figure's own. */
-    if (!v || !Number.isFinite(v.qTot) || Math.abs(v.qTot) < 1e-12) return flowOff;
-    return -((tr ? ti : 0) + v.qAt(tPer) / v.qTot) * 240;
+    if (!v || !Number.isFinite(v.qTot) || !v.pts || v.pts.length < 2) return flowOff;
+    /* What to divide the charge integral by, so that one period of it is one
+       period of dash travel.
+
+       For a branch carrying current one way, that is its net charge and the
+       belt advances 240 px per period. A transformer primary carries the same
+       charge each way, so its net is not small but ZERO — and dividing by it
+       sends the offset to millions of pixels, which is every arrow on the
+       winding teleporting somewhere else on the next frame. It was caught by
+       the pop test on the phase-shifted bridge, which is the first topology
+       whose drawn primary rides a genuinely bipolar current.
+
+       There is still a travel to draw, and it is the honest one: normalise by
+       the charge the branch moves in total, and the belt runs out while the
+       current is positive, back while it is negative, and returns to where it
+       started at the end of the period — which is what the copper does, and
+       which loops seamlessly for the same reason the physics does.
+
+       The threshold is relative, not absolute. An absolute 1e-12 is no guard
+       at all: a mean of a millionth of the peak still divides the travel by a
+       millionth, and the belt is just as gone. */
+    const tot = absQ(v);
+    const net = Math.abs(v.qTot);
+    const Q = net > 1e-3 * tot ? v.qTot : tot;
+    if (!(Math.abs(Q) > 1e-12)) return flowOff;
+    return -((tr ? ti : 0) + v.qAt(tPer) / Q) * 240;
   };
   const magOf = (v, name) => {
     if (!v) return mag;

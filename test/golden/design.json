@@ -11040,6 +11040,36 @@
      ]
     },
     {
+     "t": "The secondary it rectifies",
+     "rows": [
+      [
+       "Winding voltage V_sec needed",
+       "6.34 V",
+       "for 5.00 V at D = 0.40"
+      ],
+      [
+       "Filter choke L_f",
+       "370 nH",
+       "for ΔI = 30.0 %"
+      ],
+      [
+       "ΔI_L",
+       "9.00 A",
+       ""
+      ],
+      [
+       "C_out (charge term)",
+       "188 µF",
+       "for ΔV = 20 mV"
+      ],
+      [
+       "Ripple frequency",
+       "300 kHz",
+       "two power pulses per switching period"
+      ]
+     ]
+    },
+    {
      "t": "Getting the drive right",
      "rows": [
       [
@@ -11064,7 +11094,24 @@
       ]
      ]
     }
-   ]
+   ],
+   "wave": {
+    "D": 0.4,
+    "dI": 9,
+    "iavg": 30,
+    "vhi": "V_sec",
+    "vlabel": "v_tap",
+    "pulses": 2,
+    "ilabel": "i_Lf",
+    "cap": {
+     "kind": "buck",
+     "C": 0.0001875,
+     "esr": 0,
+     "Vdc": 5,
+     "Io": 30,
+     "fsw": 150000
+    }
+   }
   },
   "light load (iout = 10 %)": {
    "hi": [
@@ -11161,6 +11208,36 @@
      ]
     },
     {
+     "t": "The secondary it rectifies",
+     "rows": [
+      [
+       "Winding voltage V_sec needed",
+       "6.26 V",
+       "for 5.00 V at D = 0.40"
+      ],
+      [
+       "Filter choke L_f",
+       "3.70 µH",
+       "for ΔI = 30.0 %"
+      ],
+      [
+       "ΔI_L",
+       "900 mA",
+       ""
+      ],
+      [
+       "C_out (charge term)",
+       "18.8 µF",
+       "for ΔV = 20 mV"
+      ],
+      [
+       "Ripple frequency",
+       "300 kHz",
+       "two power pulses per switching period"
+      ]
+     ]
+    },
+    {
      "t": "Getting the drive right",
      "rows": [
       [
@@ -11185,7 +11262,24 @@
       ]
      ]
     }
-   ]
+   ],
+   "wave": {
+    "D": 0.4,
+    "dI": 0.9,
+    "iavg": 3,
+    "vhi": "V_sec",
+    "vlabel": "v_tap",
+    "pulses": 2,
+    "ilabel": "i_Lf",
+    "cap": {
+     "kind": "buck",
+     "C": 0.00001875,
+     "esr": 0,
+     "Vdc": 5,
+     "Io": 3,
+     "fsw": 150000
+    }
+   }
   },
   "high f_sw (×4)": {
    "hi": [
@@ -11282,6 +11376,36 @@
      ]
     },
     {
+     "t": "The secondary it rectifies",
+     "rows": [
+      [
+       "Winding voltage V_sec needed",
+       "6.34 V",
+       "for 5.00 V at D = 0.40"
+      ],
+      [
+       "Filter choke L_f",
+       "92.6 nH",
+       "for ΔI = 30.0 %"
+      ],
+      [
+       "ΔI_L",
+       "9.00 A",
+       ""
+      ],
+      [
+       "C_out (charge term)",
+       "46.9 µF",
+       "for ΔV = 20 mV"
+      ],
+      [
+       "Ripple frequency",
+       "1.20 MHz",
+       "two power pulses per switching period"
+      ]
+     ]
+    },
+    {
      "t": "Getting the drive right",
      "rows": [
       [
@@ -11306,7 +11430,24 @@
       ]
      ]
     }
-   ]
+   ],
+   "wave": {
+    "D": 0.4,
+    "dI": 9,
+    "iavg": 30,
+    "vhi": "V_sec",
+    "vlabel": "v_tap",
+    "pulses": 2,
+    "ilabel": "i_Lf",
+    "cap": {
+     "kind": "buck",
+     "C": 0.000046875,
+     "esr": 0,
+     "Vdc": 5,
+     "Io": 30,
+     "fsw": 600000
+    }
+   }
   }
  },
  "doubler": {
