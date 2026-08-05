@@ -268,6 +268,27 @@ for (const key of Object.keys(NOSIM_WHY)) {
   }
 }
 
+/* A `rides` name has to be a probe the circuit actually publishes.
+   Misspell one and `viewOf` returns nothing, the path quietly falls back to
+   the figure's summed current, and the dashes move at a rate that belongs to
+   another branch — which looks exactly like a path that was never given a
+   probe at all. The count check above cannot see this; only the netlist can. */
+for (const t of TOPOS) {
+  const F = FLOW[t.id], make = SIM[t.id];
+  if (!F || !make || !Array.isArray(F.ph)) continue;
+  let probes;
+  try {
+    const res = t.design(defaultSpec(t));
+    if (!res || res.infeasible || !res.sim) continue;
+    probes = make(defaultSpec(t), res).probes || {};
+  } catch { continue; }
+  F.ph.forEach((q, k) => {
+    for (const r of q.rides || []) {
+      if (r && !probes[r]) fail(t.id, `phase ${k} rides "${r}", which the circuit does not probe`);
+    }
+  });
+}
+
 console.log(`check-registry: ${TOPOS.length} topologies, ${SCH_IDS.size} schematics, ` +
   `${Object.keys(FLOW).length} flow entries, ${Object.keys(FAMILY).length} family lines, ` +
   `${exCount} worked examples`);

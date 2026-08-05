@@ -37,6 +37,11 @@ import { runSteady, hasSim, rippleOf } from "../src/engine/run.js";
 const PILOTS = {
   buck: "own", syncbuck: "own", boost: "own", buckboost: "own", flyback: "own",
   cuk: "corner", sepic: "sum", zeta: "own",
+  /* The transformer-isolated buck. Its choke is sized where the ripple is
+     worst — V_in max, the shortest duty — and drawn at nominal, so the trace
+     is legitimately about four per cent narrower than the printed ΔI and it
+     is the output voltage that is worth asserting. */
+  forward2: "corner",
 };
 const PILOT_IDS = Object.keys(PILOTS);
 

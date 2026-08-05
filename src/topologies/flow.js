@@ -347,13 +347,20 @@ const FLOW = {
     pol: [431, 98, 491, 98],                /* L, the output choke */
     capFlow: [{ d: "M 550 80 V 250", src: "out" }],
     ph: [
+    /* Primary and secondary conduct at the same instant here and carry
+       different currents — the reflected load plus the magnetising ramp on one
+       side, the choke's own current on the other. `rides` is what stops one
+       number moving both sets of dashes. */
     { on: [1,1,0,0,1,0], t: "Both switches on", f: (D) => [0, D], n: "Both switches close together, so the primary sees the full input and the transformer passes power across straight away — nothing is stored on purpose, which is the difference between this and a flyback. On the secondary D3 hands that power to the choke, and the choke feeds the load continuously.",
-      d: ["M 40 40 H 210 V 275 H 40", "M 234 110 V 80 H 640 V 250 H 234 V 174"] },
+      d: ["M 40 40 H 210 V 275 H 40", "M 234 110 V 80 H 640 V 250 H 234 V 174"],
+      rides: ["iQ", "iD3"] },
     { on: [0,0,1,1,0,1], t: "Core reset", f: (D) => [D, Math.min(2 * D, 0.98)], n: "The switches open and the magnetising current has nowhere to go but through the two clamp diodes, which return it to the input — the core is being wound back to where it started. That reset takes as long as the on-time did, which is exactly why the duty of a forward converter has to stay below 0.5: run longer and the core never finishes resetting, and it walks into saturation a little further every cycle.",
       d: ["M 210 174 H 175 V 40 H 40", "M 40 275 H 140 V 110 H 210",
-          "M 400 250 V 80 H 640 V 250 H 400"] },
+          "M 400 250 V 80 H 640 V 250 H 400"],
+      rides: ["iDb", "iDa", "iD4"] },
     { on: [0,0,0,0,0,1], t: "Idle", f: (D) => [Math.min(2 * D, 0.98), 1], n: "The core is fully reset and the primary is doing nothing at all. The output does not notice: the choke is still pushing current through D4 into the load, which is what makes this output quiet compared with a flyback's.",
       d: ["M 400 250 V 80 H 640 V 250 H 400"],
+      rides: ["iD4"],
       dim: ["M 40 40 H 210 V 275 H 40"] },
   ]},
 

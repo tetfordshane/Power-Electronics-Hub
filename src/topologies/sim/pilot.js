@@ -283,6 +283,105 @@ export const flyback = (spec, res) => {
 
 
 
+/* ------------------------------------------------ two-switch forward ----- */
+/* The other thing a transformer can do. A flyback stores energy in its core
+   and hands it over afterwards; a forward passes it straight across while the
+   switch is on, and an output choke — a buck's choke, behind a transformer —
+   does the storing. Everything below follows from that one difference: the
+   secondary is IN PHASE, there is a freewheel diode because the output must be
+   fed during the off-time by something, and the core has to be emptied by a
+   route of its own because nothing else empties it.
+
+   That route is the two clamp diodes, and they are the reason this netlist has
+   a magnetising inductance at all. D_a and D_b conduct for exactly as long as
+   the magnetising current takes to fall back to zero, which is an interval the
+   figure draws — so the circuit has to have a magnetising current for them to
+   carry. See the design function for where its value comes from. */
+export const forward2 = (spec, res) => {
+  const c = common(spec);
+  const n = Math.max(res.sim.n, 1e-4);
+  return {
+    branches: [
+      { id: "Vin", type: "V", n: ["in", "0"], value: vinOf(spec) },
+      /* Both switches in series with the winding, which is what clamps them:
+         neither can ever see more than the rail, because the clamp diodes
+         reach the same two nodes. */
+      { id: "Q1", type: "SW", n: ["in", "pa"], ron: c.ron, roff: ROFF },
+      { id: "Q2", type: "SW", n: ["pb", "0"], ron: c.ron, roff: ROFF },
+      /* The reset path, and it returns the energy rather than burning it: the
+         magnetising current leaves the far end of the winding, climbs to the
+         input rail through D_b, and comes back to the near end from ground
+         through D_a. The winding then sees −V_in, which is why the reset takes
+         as long as the on-time and why the duty has to stay below a half. */
+      { id: "Da", type: "D", n: ["0", "pa"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "Db", type: "D", n: ["pb", "in"], ron: RON_D, roff: ROFF, vf: c.vf },
+      /* No switch-node capacitance, and this is the one topology so far where
+         leaving it out is right rather than lazy.
+
+         C_oss is in the other netlists because a complementary pair has a dead
+         time, and an inductor facing an open circuit across it produces
+         whatever voltage the off-state resistance implies. Nothing here is
+         complementary: both switches close together and open together, and the
+         instant they open the clamp diodes are already the magnetising
+         current's path. No interval leaves a winding with nowhere to go.
+
+         Adding one anyway is not free. A capacitor between an ideal switch and
+         a 390 V rail is charged through the channel in R_DS·C_oss — which at
+         the idealised corner is 10⁻¹⁸ s, five orders of magnitude below the
+         finest step the solver takes after an edge. The charge involved is
+         femtocoulombs and the trapezoidal rule spreads it into amps, which
+         reads as three quarters of a kilowatt arriving from nowhere. That is
+         a measurement artefact rather than a converter, and the way not to
+         measure it is not to build a time constant nothing can see. */
+      { id: "Lm", type: "L", n: ["pa", "pb"], value: res.sim.Lm },
+      /* In phase — the whole difference from a flyback. The primary is driven
+         and the secondary delivers at the same instant, through the ratio. */
+      { id: "XF1", type: "XF", n: ["pa", "pb", "sec", "sgnd"], ratio: 1 / n, phase: "aiding" },
+      { id: "D3", type: "D", n: ["sec", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "D4", type: "D", n: ["sgnd", "sw"], ron: RON_D, roff: ROFF, vf: c.vf },
+      { id: "L1", type: "L", n: ["sw", "out"], value: res.sim.L, esr: c.dcr,
+        ...satOf(spec, peakOf(res)) },
+      { id: "C1", type: "C", n: ["out", "sgnd"], value: res.sim.C, esr: c.esr },
+      { id: "Rload", type: "R", n: ["out", "sgnd"], value: loadR(spec, res) },
+    ],
+    /* A real barrier, declared. Nothing on the secondary side touches the
+       primary's ground, so its potential is fixed by the leakage and the
+       Y-capacitance a real supply has — one 1 GΩ tie stands for both. */
+    isolated: ["sgnd"],
+    gates: { kind: "combine", parts: [{ kind: "pwm1", sw: "Q1" }, { kind: "pwm1", sw: "Q2" }] },
+    seed: { L1: spec.iout, C1: spec.vout },
+    probes: {
+      iL: { kind: "branch", id: "L1" },
+      vsw: { kind: "node", id: "pa" },
+      vout: { kind: "node", id: "out" },
+      /* Not drawn. It is what lets check-sim ask whether the power going in
+         matches the power coming out — the question that catches a circuit
+         which converges beautifully to the wrong answer. Named outside the
+         /^i[QD]/ family on purpose, so it never joins the conduction sum. */
+      iin: { kind: "branch", id: "Vin" },
+      iQ: { kind: "branch", id: "Q1" },
+      iD3: { kind: "branch", id: "D3" },
+      iD4: { kind: "branch", id: "D4" },
+      iDa: { kind: "branch", id: "Da" },
+      iDb: { kind: "branch", id: "Db" },
+      iC: { kind: "branch", id: "C1" },
+    },
+    /* The output rectifier and the freewheel diode are the two alternatives
+       the choke current takes, so their magnitudes add to it exactly. The
+       primary is deliberately not in this sum: it conducts at the same instant
+       as D3 and carries a different current, and adding the two would report a
+       quantity that flows nowhere. Each drawn path names its own probe
+       instead — see `rides` in flow.js. */
+    flow: ["iD3", "iD4"],
+    /* Which rectifier's timing stands behind the phase claim. D4 conducts in
+       whatever interval is left over however the transformer is wound, so it
+       is no evidence at all; D3 conducts only while the primary is driven, and
+       only if the secondary is in phase. */
+    rectifier: "iD3",
+    plot: "iL",
+  };
+};
+
 /* ------------------------------------------- the coupled-capacitor family */
 /* SEPIC, Ćuk and Zeta are the same five parts in three arrangements, and the
    arrangement is the whole lesson: where the series capacitor sits decides
@@ -557,6 +656,6 @@ export const fsbb = (spec, res) => {
 };
 
 export const SIM = {
-  buck, syncbuck, boost, buckboost, flyback, cuk, sepic, zeta,
+  buck, syncbuck, boost, buckboost, flyback, forward2, cuk, sepic, zeta,
   multiphase, fsbb,
 };

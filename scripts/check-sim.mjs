@@ -174,22 +174,46 @@ for (const id of Object.keys(SIM)) {
          A transformer's phase is expressed only as the ORDER of two node
          names, and getting it wrong yields a different converter that still
          works. So the claim is checked against the currents: an anti-phase
-         secondary rectifies during the switch's OFF time, an in-phase one
-         during its ON time. */
+         secondary rectifies during the primary's OFF time, an in-phase one
+         while the primary is being driven.
+
+         This needs a period with two distinguishable halves, and only a
+         single-ended converter has one — the primary is driven for D and idle
+         for the rest, and a secondary wired the wrong way round rectifies in
+         the other interval. A bipolar drive has no such asymmetry: a
+         push-pull's two half-cycles are mirror images, so reversing its whole
+         secondary maps the circuit onto itself and there is no error left to
+         detect. What can still go wrong on those — one winding of a composed
+         centre tap disagreeing with its neighbours — is caught structurally,
+         in netlist.validate(), where the claim is written.
+
+         `rectifier` names the probe whose timing is the evidence. It defaults
+         to `iD`, which is what a converter with one rectifier calls it; a
+         forward converter has two and only the forward one is evidence, since
+         the freewheel diode conducts in whichever interval is left over
+         whichever way the transformer is wound. */
       const circuit = SIM[id](rawI, resI);
       const xf = (circuit.branches || []).filter((b) => b.type === "XF");
-      const swId = circuit.gates && circuit.gates.sw;
-      if (xf.length && swId && runI.views.iD && runI.condAt) {
-        const share = onShare(runI, swId, "iD");
-        if (Number.isFinite(share)) {
-          const want = xf[0].phase;
-          if (want === "opposing" && share > 0.15) {
-            fail(id, `[ideal] XF declares phase "opposing" but ${(share * 100).toFixed(0)} % of the `
-              + "rectifier's charge flows while the switch is ON — that is a forward converter");
-          }
-          if (want === "aiding" && share < 0.85) {
-            fail(id, `[ideal] XF declares phase "aiding" but only ${(share * 100).toFixed(0)} % of the `
-              + "rectifier's charge flows while the switch is ON");
+      const rect = circuit.rectifier || "iD";
+      const drive = (circuit.branches || []).filter((b) => b.type === "SW").map((b) => b.id);
+      if (xf.length && drive.length && runI.views[rect] && runI.condAt) {
+        const win = driveWindow(runI, drive);
+        if (!win.single) {
+          notes.push(`${id} drives its primary in ${win.runs} separate intervals, so the `
+            + "period has no idle half to rectify in — its phase is held by the composition "
+            + "check rather than by conduction timing");
+        } else {
+          const share = onShare(runI, drive, rect);
+          if (Number.isFinite(share)) {
+            const want = xf[0].phase;
+            if (want === "opposing" && share > 0.15) {
+              fail(id, `[ideal] XF declares phase "opposing" but ${(share * 100).toFixed(0)} % of `
+                + `${rect}'s charge flows while the primary is driven — that is a forward converter`);
+            }
+            if (want === "aiding" && share < 0.85) {
+              fail(id, `[ideal] XF declares phase "aiding" but only ${(share * 100).toFixed(0)} % `
+                + `of ${rect}'s charge flows while the primary is driven`);
+            }
           }
         }
       }
@@ -204,9 +228,9 @@ function loadOhms(topo, spec, res) {
   return NaN;
 }
 
-/* The fraction of a probe's absolute charge that flows while a named switch
-   is conducting. */
-function onShare(run, swId, probe) {
+/* The fraction of a probe's absolute charge that flows while any of the named
+   commanded switches is conducting. */
+function onShare(run, swIds, probe) {
   const tr = run.traces[probe], us = run.u_grid;
   if (!tr || !us || !run.condAt) return NaN;
   let on = 0, all = 0;
@@ -219,9 +243,27 @@ function onShare(run, swId, probe) {
     const mag = Math.abs(tr[k]) * du;
     all += mag;
     const c = run.condAt[k];
-    if (c && c[swId]) on += mag;
+    if (c && swIds.some((s) => c[s])) on += mag;
   }
   return all > 0 ? on / all : NaN;
+}
+
+/* How the commanded switches divide the period: one driven interval, or
+   several. A single-ended converter gives one run of "something is on"; a
+   bridge or a push-pull gives two, half a period apart, and a leg held
+   permanently closed gives one that covers everything. Only the first case
+   leaves an idle interval for a miswound secondary to rectify in. */
+function driveWindow(run, swIds) {
+  const us = run.u_grid, cs = run.condAt;
+  const on = us.map((_, k) => swIds.some((s) => cs[k] && cs[k][s]));
+  let runs = 0;
+  for (let k = 0; k < on.length; k++) if (on[k] && !on[k - 1]) runs++;
+  /* The period wraps, so a run that starts at u = 0 continues one that ended
+     at u = 1 rather than being a second interval. */
+  if (runs > 1 && on[0] && on[on.length - 1]) runs--;
+  let width = 0;
+  for (let k = 1; k < us.length; k++) if (on[k]) width += us[k] - us[k - 1];
+  return { runs, width, single: runs === 1 && width < 0.95 };
 }
 
 const simCount = Object.keys(SIM).length;

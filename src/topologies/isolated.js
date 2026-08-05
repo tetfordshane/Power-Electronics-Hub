@@ -246,7 +246,26 @@ const TB = [
     const Pq = 2 * Iprms * Iprms * s.rds * 1e-3;
     const Pdo = s.vf * Io;
     const Psw = 2 * 0.5 * s.vinNom * Ipri * s.tsw * 1e-9 * fs;
+    /* The magnetising inductance, which nothing above needs.
+
+       A forward converter's design does not pin L_m and does not have to:
+       D < 0.5 resets the core whatever it is, because the clamp returns the
+       same volt-seconds it took and the ramp back down takes as long as the
+       ramp up did at any inductance. The table above therefore quotes the
+       reflected current alone and says so.
+
+       A circuit is not allowed that silence — the clamp diodes are a drawn
+       interval, and what flows through them IS the magnetising current. So one
+       is chosen here, at the ratio a core would normally be gapped for: peak
+       magnetising current a tenth of the reflected load. It is published to
+       the simulator only, because a reader sizing a transformer picks this
+       from a core and a gap rather than reading it off a page that was told
+       neither. */
+    const Lm = s.vinNom * Dn / (fs * 0.1 * Ipri);
     return {
+      /* The components the circuit is built from, in SI — so the running
+         converter and the numbers printed beside it cannot be two converters. */
+      sim: { L, C: Co, n, Lm },
       hi: [["turns ratio N_s:N_p", f3(n)], ["output L", eng(L, "H")], ["D at V_in nom", f3(Dn)]],
       /* D_a and D_b are the clamp diodes that return the magnetising
          volt-seconds; the output rectifiers are D3 and D4. */

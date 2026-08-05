@@ -195,7 +195,59 @@ export function validate(branches) {
     }
     if (b.type === "R" && !(b.value > 0)) throw new Error(`branch ${b.id}: resistance must be positive`);
   }
+  compositions(branches);
   return branches;
+}
+
+/* Transformers with more than two windings, composed rather than stamped.
+
+   A centre tap is two windings sharing a core, and a push-pull has four. The
+   element here couples exactly two, so the way to say "four windings" is
+   several XF branches that all name the SAME winding as their primary: each
+   one relates one other winding to that reference, and the ampere-turns come
+   out right because each secondary carries −r·i_p of its own primary current
+   and those primary currents add in the reference winding. That is composition
+   with the least-exercised stamp in mna.js left alone, which is worth a lot.
+
+   What composition can get wrong, and stamping cannot, is agreement. Three
+   branches describing one core have to describe the SAME core: the same
+   reference winding, written the same way round, wound the same way. One half
+   of a centre tap listed with its terminals swapped is a winding that bucks
+   its neighbour instead of continuing it — the two halves cancel, the rectifier
+   that should be idle conducts alongside the one that should not, and the
+   converter still runs and still regulates, to roughly twice the voltage. So
+   the group is checked here, where the claim is written, rather than being
+   left to be noticed downstream as a number that looks a bit high. */
+function compositions(branches) {
+  const groups = new Map();
+  for (const b of branches) {
+    if (b.type !== "XF") continue;
+    const k = [...b.n.slice(0, 2)].sort().join(" ");
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(b);
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const [first] = g;
+    for (const b of g.slice(1)) {
+      if (b.n[0] !== first.n[0] || b.n[1] !== first.n[1]) {
+        throw new Error(`branch ${b.id}: shares a winding with ${first.id} but names its `
+          + `terminals the other way round (${b.n[0]}, ${b.n[1]} against ${first.n[0]}, `
+          + `${first.n[1]}). One winding is one direction — write it the same way in both, `
+          + "and swap the secondary if that is what was meant.");
+      }
+      if (b.phase !== first.phase) {
+        throw new Error(`branch ${b.id}: declares phase "${b.phase}" where ${first.id}, on the `
+          + `same winding, declares "${first.phase}". Windings on one core are wound one way `
+          + "or the other relative to it; a centre tap's two halves are both continuations of "
+          + "the same turn direction and share a phase.");
+      }
+      if (b.n[2] === first.n[2] && b.n[3] === first.n[3]) {
+        throw new Error(`branch ${b.id}: couples the same pair of nodes as ${first.id}, so it `
+          + "is a second copy of one winding rather than a second winding.");
+      }
+    }
+  }
 }
 
 /* An index of everything the compiler and the solver need to agree about:
